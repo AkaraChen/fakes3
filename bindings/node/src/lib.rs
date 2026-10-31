@@ -38,7 +38,7 @@ pub struct StartOptions {
     /// which is 75% of the container's or machine's memory.
     pub memory_limit: Option<Either<f64, String>>,
     /// Settings new buckets start with: `"legacy"` (ACLs enabled, Block Public Access off, no
-    /// default encryption) or `"aws"` (ACLs disabled, Block Public Access on, SSE-S3: what AWS
+    /// default encryption) or `"aws"` (ACLs disabled, Block Public Access on, SSE-S3, SSE-C blocked: what AWS
     /// applies to new buckets today). Default `"legacy"`.
     pub bucket_defaults: Option<String>,
     /// Record S3 requests for `server.requests`. Default `true`.

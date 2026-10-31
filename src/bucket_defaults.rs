@@ -8,7 +8,7 @@
 //! * [`BucketDefaults::Aws`]: what AWS documents for new buckets today. Object Ownership is
 //!   `BucketOwnerEnforced` (ACLs disabled, since April 2023) and all four Block Public Access
 //!   settings are on (April 2023); new objects are encrypted with SSE-S3 (January 2023, see
-//!   [`BucketDefaults::default_encryption`]).
+//!   [`BucketDefaults::default_encryption`]) and SSE-C is blocked (April 2026).
 //!
 //! The mode only decides the state of a bucket at creation. Afterwards the bucket's own
 //! documents rule, so snapshots, restores and resets never consult it.
@@ -16,7 +16,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use s3s::dto::ServerSideEncryption;
+use s3s::dto::{BlockedEncryptionTypes, EncryptionType, ServerSideEncryption};
 
 use crate::bucket_config::{BucketConfig, Ownership, PublicAccessBlock};
 use crate::objext::EncryptionRule;
@@ -51,15 +51,25 @@ impl BucketDefaults {
     }
 
     /// The default encryption configuration of a new bucket, and what DeleteBucketEncryption
-    /// goes back to: in `aws` mode SSE-S3, which AWS applies to every bucket and no longer lets
-    /// anyone remove. GetBucketEncryption then reports `AES256`, and PUT, GET and HEAD carry
-    /// `x-amz-server-side-encryption: AES256`; in `legacy` mode there is none.
+    /// goes back to. In `aws` mode:
+    ///
+    /// * SSE-S3, which AWS applies to every bucket and no longer lets anyone remove (January
+    ///   2023): GetBucketEncryption reports `AES256`, and PUT, GET and HEAD carry
+    ///   `x-amz-server-side-encryption: AES256`;
+    /// * SSE-C blocked (April 2026): writes that ask for it fail with 403 `AccessDenied` until
+    ///   PutBucketEncryption sets `BlockedEncryptionTypes` to `NONE`.
+    ///
+    /// <https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-s3-c-encryption-setting-faq.html>
+    ///
+    /// In `legacy` mode there is none.
     pub(crate) fn default_encryption(self) -> Option<EncryptionRule> {
         (self == Self::Aws).then(|| EncryptionRule {
             algorithm: ServerSideEncryption::from_static(ServerSideEncryption::AES256),
             kms_key_id: None,
             bucket_key: Some(false),
-            blocked: None,
+            blocked: Some(BlockedEncryptionTypes {
+                encryption_type: Some(vec![EncryptionType::from_static(EncryptionType::SSE_C)]),
+            }),
         })
     }
 }

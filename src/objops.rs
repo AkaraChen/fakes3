@@ -239,9 +239,13 @@ impl FakeS3 {
             return Err(s3_error!(MalformedXML));
         }
         let rule = rules.remove(0);
+        // A rule that only sets BlockedEncryptionTypes (how SSE-C is blocked or unblocked) keeps SSE-S3.
         let by_default = rule
             .apply_server_side_encryption_by_default
-            .ok_or_else(|| s3_error!(MalformedXML))?;
+            .unwrap_or_else(|| ServerSideEncryptionByDefault {
+                sse_algorithm: ServerSideEncryption::from_static(ServerSideEncryption::AES256),
+                kms_master_key_id: None,
+            });
         let algorithm = by_default.sse_algorithm;
         let kms = match algorithm.as_str() {
             ServerSideEncryption::AES256 => false,

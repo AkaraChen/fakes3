@@ -54,7 +54,7 @@ struct Opt {
 
     /// Settings new buckets start with: `legacy` (ACLs enabled, Block Public Access off, no default
     /// encryption) or `aws` (what AWS applies to new buckets today: ACLs disabled, Block Public
-    /// Access on, SSE-S3). Only affects buckets created afterwards.
+    /// Access on, SSE-S3, SSE-C blocked). Only affects buckets created afterwards.
     #[arg(long, default_value = "legacy", env = "FAKES3_BUCKET_DEFAULTS", value_name = "legacy|aws")]
     bucket_defaults: fakes3::BucketDefaults,
 }

@@ -268,6 +268,7 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认**保留旧的�
 | Object Ownership | 未配置，ACL 可用；`GetBucketOwnershipControls` 返回 `OwnershipControlsNotFoundError` | `BucketOwnerEnforced`，ACL 被禁用；`GetBucketOwnershipControls` 返回 `BucketOwnerEnforced` |
 | Block Public Access | 未配置；`GetPublicAccessBlock` 返回 `NoSuchPublicAccessBlockConfiguration` | 四项全开（`BlockPublicAcls`、`IgnorePublicAcls`、`BlockPublicPolicy`、`RestrictPublicBuckets` 均为 `true`） |
 | 默认加密（SSE-S3） | 无：`GetBucketEncryption` 返回 `ServerSideEncryptionConfigurationNotFoundError`，PUT / GET / HEAD 不带 `x-amz-server-side-encryption`（显式要求 SSE 时照常） | `GetBucketEncryption` 返回 `AES256`，新对象的 PUT / GET / HEAD 带 `x-amz-server-side-encryption: AES256`；`DeleteBucketEncryption` 之后回到 SSE-S3 |
+| 默认禁用 SSE-C | 允许 | 禁用（2026 年 4 月起）：`GetBucketEncryption` 带 `BlockedEncryptionTypes` = `SSE-C`；要求 SSE-C 的 `PutObject`、`CopyObject`、分段上传返回 403 `AccessDenied`，已有的 SSE-C 对象仍可带 key 读取 |
 
 `aws` 模式下具体的行为都有 AWS 文档依据（文档只写明了显式设置 `BucketOwnerEnforced` 时 `CreateBucket` 的错误码；没带 `x-amz-object-ownership` 的默认情况沿用同一个错误码）：
 
@@ -285,9 +286,11 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认**保留旧的�
 默认值只在创建 bucket 的那一刻生效。已有的 bucket、快照和 `restore` 都保持各自当前的设置，`reset` 之后新建的 bucket 按当前模式重新开始。
 当前模式可以在 `fakes3 ctl status` / `GET /_fakes3` 里看到（`bucket_defaults`）。
 
-**没有实现的部分。** `aws` 模式只包含上面有文档依据的默认值，没有按日期划分的“兼容版本”，因为 AWS 没有发布精确的行为变更记录。
-AWS 在 2026 年 4 月还把新 bucket 的 SSE-C 默认禁用了（`BlockedEncryptionTypes`，见 [Default SSE-C setting FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-s3-c-encryption-setting-faq.html)），
-这一项目前没有实现。
+- 要在 `aws` 模式的 bucket 里用 SSE-C，先 `PutBucketEncryption`，在规则里写 `BlockedEncryptionTypes` = `NONE`（只有这一项的规则也可以，默认加密保持 SSE-S3）；
+  写 `SSE-C` 则再次禁用。没有写 `BlockedEncryptionTypes` 的 `PutBucketEncryption` 按字面处理，即不禁用任何类型（文档没有说明省略时的行为）。
+  `DeleteBucketEncryption` 回到默认配置，也就是重新禁用 SSE-C。表单上传（POST policy）目前不处理 SSE 字段，所以没有对应的检查。
+
+`aws` 模式只包含上面有文档依据的默认值，没有按日期划分的“兼容版本”，因为 AWS 没有发布精确的行为变更记录。
 
 来源：
 
@@ -300,6 +303,9 @@ AWS 在 2026 年 4 月还把新 bucket 的 SSE-C 默认禁用了（`BlockedEncry
   “To set an ACL on a bucket as part of a CreateBucket request, you must explicitly set S3 Object Ownership for the bucket to a different value than the default”
 - [Default encryption FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-encryption-faq.html)、[GetBucketEncryption](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html)：
   2023-01-05 起所有新对象默认 SSE-S3，响应头 `x-amz-server-side-encryption`
+- [Default SSE-C setting for new buckets FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-s3-c-encryption-setting-faq.html)、
+  [Blocking or unblocking SSE-C](https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html)、
+  [BlockedEncryptionTypes](https://docs.aws.amazon.com/AmazonS3/latest/API/API_BlockedEncryptionTypes.html)：2026 年 4 月起新的通用 bucket 默认禁用 SSE-C
 
 ## 支持的功能
 

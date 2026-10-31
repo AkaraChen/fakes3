@@ -311,3 +311,89 @@ async fn default_encryption_is_sse_s3_in_aws_mode_only() {
         "ServerSideEncryptionConfigurationNotFoundError"
     );
 }
+
+const SSE_C_KEY: &str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="; // "0123456789abcdef0123456789abcdef"
+const SSE_C_MD5: &str = "hRasmdxgYDKV3nvbahU1MA==";
+
+fn sse_c(r: common::Req<'_>) -> common::Req<'_> {
+    r.header("x-amz-server-side-encryption-customer-algorithm", "AES256")
+        .header("x-amz-server-side-encryption-customer-key", SSE_C_KEY)
+        .header("x-amz-server-side-encryption-customer-key-md5", SSE_C_MD5)
+}
+
+fn blocked(types: &str) -> String {
+    format!(
+        "<ServerSideEncryptionConfiguration><Rule><BlockedEncryptionTypes><EncryptionType>{types}</EncryptionType></BlockedEncryptionTypes></Rule></ServerSideEncryptionConfiguration>"
+    )
+}
+
+#[tokio::test]
+async fn aws_blocks_sse_c_until_the_bucket_unblocks_it() {
+    let (_s, a) = start(BucketDefaults::Aws).await;
+    make_bucket(a, "bkt").await;
+    send(a, req("PUT", "/bkt/plain").body(b"p")).await;
+
+    // GetBucketEncryption shows the block next to the SSE-S3 default.
+    let r = get_sub(a, "bkt", "encryption").await;
+    assert!(
+        r.body.contains("<SSEAlgorithm>AES256</SSEAlgorithm>")
+            && r.body
+                .contains("<BlockedEncryptionTypes><EncryptionType>SSE-C</EncryptionType></BlockedEncryptionTypes>"),
+        "{}",
+        r.body
+    );
+
+    // PutObject, CopyObject and multipart uploads that ask for SSE-C are refused with a 403.
+    let denied = |r: Resp, what: &str| assert_eq!((r.status, r.code()), (403, "AccessDenied"), "{what}: {}", r.body);
+    denied(send(a, sse_c(req("PUT", "/bkt/c").body(b"secret"))).await, "put");
+    denied(
+        send(a, sse_c(req("PUT", "/bkt/copy").header("x-amz-copy-source", "/bkt/plain"))).await,
+        "copy",
+    );
+    denied(send(a, sse_c(req("POST", "/bkt/mp").query("uploads"))).await, "multipart");
+    assert_eq!(send(a, req("HEAD", "/bkt/c")).await.status, 404);
+    // Everything else is untouched, including SSE-KMS.
+    assert_eq!(send(a, req("PUT", "/bkt/ok").body(b"x")).await.status, 200);
+    let r = send(
+        a,
+        req("PUT", "/bkt/kms").header("x-amz-server-side-encryption", "aws:kms").body(b"x"),
+    )
+    .await;
+    assert_eq!(r.status, 200, "{}", r.body);
+
+    // NONE unblocks it, in a rule that sets nothing else; the SSE-S3 default stays.
+    assert_eq!(put_sub(a, "bkt", "encryption", &blocked("NONE")).await.status, 200);
+    let r = get_sub(a, "bkt", "encryption").await;
+    assert!(
+        r.body.contains("<SSEAlgorithm>AES256</SSEAlgorithm>") && r.body.contains("<EncryptionType>NONE</EncryptionType>"),
+        "{}",
+        r.body
+    );
+    let r = send(a, sse_c(req("PUT", "/bkt/c").body(b"secret"))).await;
+    assert_eq!(r.status, 200, "{}", r.body);
+
+    // Blocking again refuses new writes but existing SSE-C objects stay readable with their key.
+    assert_eq!(put_sub(a, "bkt", "encryption", &blocked("SSE-C")).await.status, 200);
+    denied(send(a, sse_c(req("PUT", "/bkt/c2").body(b"secret"))).await, "put after reblock");
+    let r = send(a, sse_c(req("GET", "/bkt/c"))).await;
+    assert_eq!((r.status, r.body.as_str()), (200, "secret"));
+    assert_eq!(send(a, sse_c(req("HEAD", "/bkt/c"))).await.status, 200);
+
+    // The block is part of the default configuration, so deleting the configuration restores it.
+    put_sub(a, "bkt", "encryption", &blocked("NONE")).await;
+    assert_eq!(send(a, req("DELETE", "/bkt").query("encryption")).await.status, 204);
+    denied(send(a, sse_c(req("PUT", "/bkt/c3").body(b"secret"))).await, "put after delete");
+}
+
+#[tokio::test]
+async fn legacy_allows_sse_c() {
+    let (_s, a) = start(BucketDefaults::Legacy).await;
+    make_bucket(a, "bkt").await;
+    let r = send(a, sse_c(req("PUT", "/bkt/c").body(b"secret"))).await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert_eq!(send(a, sse_c(req("GET", "/bkt/c"))).await.body, "secret");
+    // It can still be blocked explicitly.
+    assert_eq!(put_sub(a, "bkt", "encryption", &blocked("SSE-C")).await.status, 200);
+    let r = send(a, sse_c(req("PUT", "/bkt/c2").body(b"secret"))).await;
+    assert_eq!((r.status, r.code()), (403, "AccessDenied"), "{}", r.body);
+}
