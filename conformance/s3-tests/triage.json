@@ -1,31 +1,6 @@
 {
  "groups": [
   {
-   "id": "create-existing-bucket",
-   "category": "bug",
-   "title": "CreateBucket on a bucket the caller already owns returns 409",
-   "why": "fakes3 answers 409 `BucketAlreadyOwnedByYou`. AWS (us-east-1, the only region fakes3 pretends to be) answers 200 and keeps the bucket (legacy behaviour documented under CreateBucket errors). `test_bucket_create_exists` only passes if no error is raised at all (its own `e.status` would raise AttributeError); the other three create the same bucket twice through boto3's resource API. LocalStack passes `recreate_not_overriding` and `create_exists`. The same call breaks the S3 Select test `test_json_column_sum_min_max`, which creates its bucket twice.",
-   "tests": [
-    "test_bucket_create_exists",
-    "test_bucket_recreate_not_overriding",
-    "test_bucket_list_return_data_versioning",
-    "test_versioning_concurrent_multi_object_delete",
-    "test_json_column_sum_min_max"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "list-delimiter-echo",
-   "category": "bug",
-   "title": "ListObjects echoes an empty `Delimiter`",
-   "why": "`assert not 'Delimiter' in response` fails: with `delimiter=` (empty) the response carries `<Delimiter></Delimiter>`; AWS omits it. MinIO and LocalStack pass.",
-   "tests": [
-    "test_bucket_list_delimiter_empty",
-    "test_bucket_listv2_delimiter_empty"
-   ],
-   "cost": "cheap"
-  },
-  {
    "id": "list-delimiter-prefix-truncation",
    "category": "bug",
    "title": "ListObjects with delimiter + prefix + max-keys reports the wrong IsTruncated / paging",
@@ -39,57 +14,12 @@
    "cost": "medium"
   },
   {
-   "id": "list-encoding-space",
-   "category": "bug",
-   "title": "`encoding-type=url` encodes a space as `+` instead of `%20`",
-   "why": "Common prefix `quux ab/` comes back as `quux+ab/`; boto3 only decodes `%XX`, so the test (and LocalStack, which passes) expect `quux%20ab/`.",
-   "tests": [
-    "test_bucket_list_encoding_basic",
-    "test_bucket_listv2_encoding_basic"
-   ],
-   "cost": "cheap"
-  },
-  {
    "id": "list-prefix-newline",
    "category": "bug",
    "title": "ListObjects `Prefix` echo of a control character is URL-encoded in the wrong place",
    "why": "Prefix `\\n` comes back as `%0A` after boto3 decoding (`assert '%0A' == '\\n'`), i.e. the value is encoded although the request did not ask for `encoding-type=url`, or encoded twice. Fails on MinIO and LocalStack too, so the exact AWS behaviour is unconfirmed.",
    "tests": [
     "test_bucket_list_prefix_unreadable"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "list-marker-owner",
-   "category": "bug",
-   "title": "ListObjects v1 omits `<Marker/>` and `<Owner>`; v2 FetchOwner ignored",
-   "why": "`KeyError: 'Marker'` (empty marker must be echoed), `KeyError: 'Owner'` (v1 returns Owner per key by default) and `assert 'Owner' in objs_list[0]` with `fetch-owner=true`. MinIO and LocalStack pass the `Marker` and `fetchowner` cases.",
-   "tests": [
-    "test_bucket_list_marker_none",
-    "test_bucket_list_return_data",
-    "test_bucket_listv2_fetchowner_notempty"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "delete-objects-limit",
-   "category": "bug",
-   "title": "DeleteObjects accepts more than 1000 keys",
-   "why": "AWS answers 400 `MalformedXML`; fakes3 deletes all 1001 (`ClientError not raised`). MinIO passes.",
-   "tests": [
-    "test_multi_object_delete_key_limit",
-    "test_multi_objectv2_delete_key_limit"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "content-md5-validation",
-   "category": "bug",
-   "title": "Content-MD5 validation: empty value accepted, malformed value reported as BadDigest",
-   "why": "Empty `Content-MD5:` is accepted (AWS: 400 `InvalidDigest`); a value that is not 16 base64-decoded bytes gives `BadDigest` (AWS: `InvalidDigest`). `BadDigest` is for a well-formed digest that does not match the body.",
-   "tests": [
-    "test_object_create_bad_md5_empty",
-    "test_object_create_bad_md5_invalid_short"
    ],
    "cost": "cheap"
   },
@@ -108,146 +38,16 @@
    "cost": "medium"
   },
   {
-   "id": "lifecycle-validation",
-   "category": "bug",
-   "title": "Lifecycle: rule without ID is returned without one",
-   "why": "AWS generates a rule ID when none is given (`assert 'ID' in lc_rule`); fakes3 returns the rule without one. MinIO passes. (Rejecting a non-ISO-8601 `Transitions[].Date`, `test_lifecycle_transition_set_invalid_date`, was fixed on main by the archive-tiers merge during this work.)",
-   "tests": [
-    "test_lifecycle_get_no_id"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "policy-notprincipal",
-   "category": "bug",
-   "title": "Bucket policy: `Effect: Allow` with `NotPrincipal` is accepted",
-   "why": "AWS rejects it with 400 `MalformedPolicy` (NotPrincipal is only valid with Deny). MinIO passes.",
-   "tests": [
-    "test_bucket_policy_allow_notprincipal"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "object-lock-edges",
-   "category": "bug",
-   "title": "Object Lock: GOVERNANCE\u2192COMPLIANCE change without bypass allowed; invalid default retention reports InvalidArgument",
-   "why": "`put_object_retention` changing the mode of a GOVERNANCE-locked object without `x-amz-bypass-governance-retention` must be 403 `AccessDenied`; `Days`/`Years` <= 0 in a bucket default must be `InvalidRetentionPeriod`, fakes3 says `InvalidArgument`.",
-   "tests": [
-    "test_object_lock_changing_mode_from_governance_without_bypass",
-    "test_object_lock_put_obj_lock_invalid_days",
-    "test_object_lock_put_obj_lock_invalid_years"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "sse-headers-on-read",
-   "category": "bug",
-   "title": "SSE request headers on GET/HEAD are ignored",
-   "why": "`x-amz-server-side-encryption(-aws-kms-key-id)` on GetObject/HeadObject must be 400 (AWS: only valid on writes). fakes3 serves the object (`ClientError not raised`). MinIO passes the GET case.",
-   "tests": [
-    "test_sse_kms_read_declare",
-    "test_sse_s3_default_method_head"
-   ],
-   "cost": "cheap"
-  },
-  {
    "id": "sse-c-part-key",
    "category": "bug",
-   "title": "SSE-C: UploadPart with a key that differs from CreateMultipartUpload returns 403, AWS returns 400",
-   "why": "`assert 403 == 400` in `test_encryption_sse_c_multipart_invalid_chunks_1` (MinIO and LocalStack pass) and in the three `test_copy_part_enc[\u2026-sse-c-\u2026]` cases that upload a part with the source's SSE-C key.",
+   "title": "SSE-C: CompleteMultipartUpload without the customer key succeeds, the test expects 400",
+   "why": "After the UploadPart check (fixed: a part with another key is now 400 `InvalidRequest`) the three `test_copy_part_enc[…-sse-c-…]` cases still stop at their last step: `CompleteMultipartUpload` on an SSE-C upload without `x-amz-server-side-encryption-customer-*` headers must fail with 400. The CompleteMultipartUpload reference says those headers are 'required only when the object was created using a checksum algorithm', and fakes3 (like S3 today) gives every object one by default, but whether S3 refuses the call when an SDK leaves them out is unconfirmed, and enforcing it would break clients that do not repeat the key on Complete. Not changed.",
    "tests": [
-    "test_encryption_sse_c_multipart_invalid_chunks_1",
     "test_copy_part_enc[sse-c-sse-c-*",
     "test_copy_part_enc[sse-kms-sse-c-*",
     "test_copy_part_enc[sse-s3-sse-c-*"
    ],
-   "cost": "cheap"
-  },
-  {
-   "id": "get-part-checksum-type",
-   "category": "bug",
-   "title": "GetObject `?partNumber=N` response lacks `x-amz-checksum-type`",
-   "why": "`KeyError: 'ChecksumType'` at `client.get_object(..., PartNumber=1)` for all five algorithms; HeadObject and GetObjectAttributes already report it.",
-   "tests": [
-    "test_multipart_use_cksum_helper_crc32",
-    "test_multipart_use_cksum_helper_crc32c",
-    "test_multipart_use_cksum_helper_crc64nvme",
-    "test_multipart_use_cksum_helper_sha1",
-    "test_multipart_use_cksum_helper_sha256"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "complete-bad-checksum",
-   "category": "bug",
-   "title": "CompleteMultipartUpload accepts a malformed request-level checksum",
-   "why": "`ChecksumSHA256='bad'` on CompleteMultipartUpload must be 400 `BadDigest` (also when a part's checksum is omitted); fakes3 completes the upload.",
-   "tests": [
-    "test_multipart_checksum_sha256"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "request-id",
-   "category": "bug",
-   "title": "Responses carry an empty request id",
-   "why": "`ResponseMetadata.RequestId` is `''` and the error body has no `<RequestId>` element (`'NoneType' object has no attribute 'text'`). AWS (and MinIO, LocalStack) always send `x-amz-request-id` and `<RequestId>`, and clients log it.",
-   "tests": [
-    "test_object_requestid_matches_header_on_error"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "default-content-type",
-   "category": "bug",
-   "title": "GetObject without a stored Content-Type omits the header",
-   "why": "`KeyError: 'ContentType'`: AWS answers `binary/octet-stream` for objects uploaded without one (MinIO passes).",
-   "tests": [
-    "test_object_acl_full_control_verify_attributes"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "put-version-id",
-   "category": "bug",
-   "title": "PutObject returns `x-amz-version-id` for unversioned / suspended buckets",
-   "why": "`assert not 'VersionId' in response`: the header must only appear when versioning is Enabled (fakes3 returns a VersionId). MinIO and LocalStack pass the single-part case.",
-   "tests": [
-    "test_versioning_bucket_atomic_upload_return_version_id",
-    "test_versioning_bucket_multipart_upload_return_version_id"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "versioning-mfa-disabled",
-   "category": "bug",
-   "title": "PutBucketVersioning with `MFADelete: Disabled` is rejected",
-   "why": "403 `AccessDenied: Mfa Authentication must be used`. A `Disabled` value (what boto3 sends when asked to keep MFA off) must not require the `x-amz-mfa` header; only changing MFADelete to Enabled / toggling it does. MinIO and LocalStack pass.",
-   "tests": [
-    "test_versioning_obj_create_read_remove",
-    "test_versioning_obj_create_read_remove_head"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "excess-tags-500",
-   "category": "bug",
-   "title": "PutObjectTagging with 11 tags returns 500",
-   "why": "`assert 500 == 400`: must be 400 `InvalidTag`; a 500 means an unhandled error path.",
-   "tests": [
-    "test_put_excess_tags"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "tagging-header-order",
-   "category": "bug",
-   "title": "`x-amz-tagging` tags are returned in header order, AWS returns them sorted by key",
-   "why": "`foo=bar&bar` \u2192 fakes3 `[foo, bar]`, expected `[bar, foo]`. MinIO passes.",
-   "tests": [
-    "test_put_obj_with_tags"
-   ],
-   "cost": "cheap"
+   "cost": "unconfirmed"
   },
   {
    "id": "cors-wildcard-origin",
@@ -263,7 +63,7 @@
    "id": "post-policy-extras",
    "category": "bug",
    "title": "POST policy uploads: invalid expiration format accepted, redirect Location not URL-encoded, `tagging` form field ignored, checksum fields rejected",
-   "why": "`test_post_object_invalid_date_format` gets 204 instead of 400; `success_action_redirect` Location ends in `etag=\"\u2026\"` while AWS encodes the quotes as `%22`; the `tagging` form field is not applied (`assert [] == [{'Key': '0', \u2026}]`); `x-amz-checksum-*` form fields give 403 instead of 204.",
+   "why": "`test_post_object_invalid_date_format` gets 204 instead of 400; `success_action_redirect` Location ends in `etag=\"…\"` while AWS encodes the quotes as `%22`; the `tagging` form field is not applied (`assert [] == [{'Key': '0', …}]`); `x-amz-checksum-*` form fields give 403 instead of 204.",
    "tests": [
     "test_post_object_invalid_date_format",
     "test_post_object_success_redirect_action",
@@ -275,12 +75,12 @@
   {
    "id": "invalid-utf8-key",
    "category": "bug",
-   "title": "GET of a key that is not valid UTF-8 after percent-decoding returns 404",
-   "why": "`Key='\\xae\\x8a-'` must be 400 with message `Couldn't parse the specified URI.` (`fails_on_rgw`, i.e. AWS behaviour); fakes3 answers 404.",
+   "title": "GET of a key with C1 control characters (valid UTF-8) returns 404, the test expects 400",
+   "why": "`Key='\\xae\\x8a-'` is sent as the valid UTF-8 `%C2%AE%C2%8A-`; the test (`fails_on_rgw`, so AWS-valid) wants 400 `Couldn't parse the specified URI.` A key that is not UTF-8 after percent-decoding (`%AE%8A-`) already gets exactly that from s3s (400 `InvalidURI`), so only the C1-control case is open and the rule AWS applies is not documented. Not changed.",
    "tests": [
     "test_object_read_unreadable"
    ],
-   "cost": "cheap"
+   "cost": "unconfirmed"
   },
   {
    "id": "content-encoding-format",
@@ -324,16 +124,6 @@
     "test_put_bucket_logging_policy_wildcard"
    ],
    "cost": "large"
-  },
-  {
-   "id": "expected-bucket-owner",
-   "category": "unimplemented",
-   "title": "`x-amz-expected-bucket-owner` is not enforced",
-   "why": "A wrong ExpectedBucketOwner must be 403 `AccessDenied`; fakes3 ignores the header (`ClientError not raised`).",
-   "tests": [
-    "test_expected_bucket_owner"
-   ],
-   "cost": "cheap"
   },
   {
    "id": "list-buckets-pagination",
@@ -577,7 +367,7 @@
   {
    "id": "unicode-metadata",
    "category": "test-defect",
-   "title": "Non-ASCII user metadata expected to round-trip verbatim; AWS returns RFC 2047 `=?UTF-8?B?\u2026?=`",
+   "title": "Non-ASCII user metadata expected to round-trip verbatim; AWS returns RFC 2047 `=?UTF-8?B?…?=`",
    "why": "`'=?UTF-8?B?SGVsbG8gV29ybGTDqQ==?=' == 'Hello World\\xe9'`. fakes3 deliberately encodes like AWS (via `s3s-rfc2047`); boto3 does not decode.",
    "tests": [
     "test_object_set_get_unicode_metadata"
