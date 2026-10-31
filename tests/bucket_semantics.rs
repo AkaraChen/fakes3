@@ -1068,26 +1068,18 @@ async fn list_buckets_paginates() {
 }
 
 #[tokio::test]
-async fn get_object_torrent() {
+async fn get_object_torrent_is_retired() {
     let (_s, a) = start().await;
     make_bucket(a, "bkt").await;
-    let r = send(a, req("GET", "/bkt/missing").query("torrent")).await;
-    assert_eq!((r.status, r.code()), (404, "NoSuchKey"), "{}", r.body);
+    put(a, "/bkt/Avatar.mpg", &[b'A'; 4096]).await;
+    // BitTorrent is retired on S3: a missing key and an existing one both answer NoSuchKey.
+    for key in ["missing", "Avatar.mpg"] {
+        let r = send(a, req("GET", &format!("/bkt/{key}")).query("torrent")).await;
+        assert_eq!((r.status, r.code()), (404, "NoSuchKey"), "{key}: {}", r.body);
+    }
     assert_eq!(send(a, req("GET", "/nope/k").query("torrent")).await.code(), "NoSuchBucket");
-
-    let data = vec![b'A'; 300 * 1024];
-    put(a, "/bkt/dir/Avatar.mpg", &data).await;
-    let r = send(a, req("GET", "/bkt/dir/Avatar.mpg").query("torrent")).await;
-    assert_eq!(r.status, 200, "{}", r.body);
-    assert_eq!(r.header("content-type"), Some("application/x-bittorrent"));
-    assert_eq!(r.header("content-disposition"), Some("attachment; filename=Avatar.mpg.torrent;"));
-    // Bencoded single-file metainfo: two 256 KiB pieces (one full, one partial) of 20-byte SHA-1s.
-    assert!(r.body.starts_with("d8:announce"), "{:?}", r.body);
-    assert!(
-        r.body
-            .contains("6:lengthi307200e4:name10:Avatar.mpg12:piece lengthi262144e6:pieces40:")
-    );
-    assert!(r.body.ends_with("ee"));
+    // The object itself is untouched.
+    assert_eq!(send(a, req("GET", "/bkt/Avatar.mpg")).await.status, 200);
 }
 
 #[tokio::test]

@@ -159,7 +159,6 @@ algorithms! {
 
 const CRC32: usize = 0;
 const CRC32C: usize = 1;
-const SHA1: usize = 2;
 const CRC64NVME: usize = 4;
 
 /// Index into `ALGS` for an algorithm name; SDKs differ in case (`crc32c` vs `CRC32C`).
@@ -788,55 +787,6 @@ fn enc_prefixes(p: &mut Option<Vec<CommonPrefix>>) {
     }
 }
 
-/// Bencoded single-file metainfo: tracker, name, length and the SHA-1 of every 256 KiB piece.
-fn torrent(key: &str, o: &StoreObject) -> Vec<u8> {
-    const PIECE: u64 = 256 * 1024;
-    let mut pieces = Vec::new();
-    let fresh = || {
-        let mut h = ChecksumHasher::default();
-        enable(&mut h, SHA1);
-        h
-    };
-    let (mut hasher, mut filled) = (fresh(), 0u64);
-    let mut flush = |h: &mut ChecksumHasher| {
-        let digest = std::mem::take(h).finalize().checksum_sha1.unwrap_or_default();
-        pieces.extend(base64_simd::STANDARD.decode_to_vec(digest).unwrap_or_default());
-    };
-    for seg in o.data.slice(0..o.data.size) {
-        let mut seg: &[u8] = &seg;
-        while !seg.is_empty() {
-            let take = (PIECE - filled).min(seg.len() as u64) as usize;
-            hasher.update(&seg[..take]);
-            seg = &seg[take..];
-            filled += take as u64;
-            if filled == PIECE {
-                flush(&mut hasher);
-                hasher = fresh();
-                filled = 0;
-            }
-        }
-    }
-    if filled > 0 {
-        flush(&mut hasher);
-    }
-    let name = key.rsplit('/').next().unwrap_or(key);
-    let mut out = Vec::with_capacity(pieces.len() + name.len() + 128);
-    const TRACKER: &str = "http://s3.amazonaws.com:6969/announce";
-    out.extend_from_slice(format!("d8:announce{}:{TRACKER}4:infod", TRACKER.len()).as_bytes());
-    out.extend_from_slice(
-        format!(
-            "6:lengthi{}e4:name{}:{name}12:piece lengthi{PIECE}e6:pieces{}:",
-            o.data.size,
-            name.len(),
-            pieces.len()
-        )
-        .as_bytes(),
-    );
-    out.extend_from_slice(&pieces);
-    out.extend_from_slice(b"ee");
-    out
-}
-
 fn multipart_etag(md5s: &[[u8; 16]]) -> String {
     format!("{}-{}", hex::encode(digest::md5(md5s)), md5s.len())
 }
@@ -958,26 +908,11 @@ impl S3 for FakeS3 {
         }))
     }
 
-    /// The BitTorrent metainfo of an object, which S3 builds on the fly (GetObjectTorrent). S3 has
-    /// retired BitTorrent for new buckets, but the API reference still documents the call: READ
-    /// access to the object, a `.torrent` attachment of type `application/x-bittorrent`.
+    /// S3 retired BitTorrent (new use ended in 2021) and answers `?torrent` with 404 NoSuchKey; the
+    /// bucket and the key are checked first, so a missing bucket is still NoSuchBucket.
     async fn get_object_torrent(&self, req: S3Request<GetObjectTorrentInput>) -> S3Result<S3Response<GetObjectTorrentOutput>> {
-        let (v, _) = self.version(&req.input.bucket, &req.input.key, None)?;
-        let o = obj(&v);
-        let metainfo = torrent(&req.input.key, o);
-        let mut resp = S3Response::new(GetObjectTorrentOutput {
-            body: Some(StreamingBlob::from_bytes(Bytes::from(metainfo))),
-            ..Default::default()
-        });
-        resp.headers.insert(
-            http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static("application/x-bittorrent"),
-        );
-        let name = req.input.key.rsplit('/').next().unwrap_or(&req.input.key);
-        if let Ok(v) = http::HeaderValue::from_str(&format!("attachment; filename={name}.torrent;")) {
-            resp.headers.insert(http::header::CONTENT_DISPOSITION, v);
-        }
-        Ok(resp)
+        self.version(&req.input.bucket, &req.input.key, None)?;
+        Err(s3_error!(NoSuchKey, "The specified key does not exist."))
     }
 
     async fn put_bucket_versioning(&self, req: S3Request<PutBucketVersioningInput>) -> S3Result<S3Response<PutBucketVersioningOutput>> {
