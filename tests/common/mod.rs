@@ -50,6 +50,8 @@ pub struct Req<'a> {
     pub body: &'a [u8],
     pub signed: bool,
     pub host: Option<String>,
+    /// The access key and secret the request is signed with.
+    pub credentials: (&'a str, &'a str),
 }
 
 pub fn req<'a>(method: &'a str, path: &'a str) -> Req<'a> {
@@ -61,6 +63,7 @@ pub fn req<'a>(method: &'a str, path: &'a str) -> Req<'a> {
         body: b"",
         signed: true,
         host: None,
+        credentials: (ACCESS, SECRET),
     }
 }
 
@@ -85,6 +88,11 @@ impl<'a> Req<'a> {
     /// carries a signature nobody can verify.
     pub fn unverified(self) -> Self {
         self.anon().header("authorization", UNVERIFIED_AUTH)
+    }
+    /// Signed as another account (the access key picks the identity; with `auth` the secret must match).
+    pub fn signed_by(mut self, access: &'a str, secret: &'a str) -> Self {
+        self.credentials = (access, secret);
+        self
     }
     pub fn host(mut self, h: &str) -> Self {
         self.host = Some(h.to_owned());
@@ -115,7 +123,11 @@ pub fn amz_date(t: SystemTime) -> String {
 }
 
 pub fn signing_key(date: &str) -> Vec<u8> {
-    let k = hmac(format!("AWS4{SECRET}").as_bytes(), &date.as_bytes()[..8]);
+    signing_key_for(SECRET, date)
+}
+
+pub fn signing_key_for(secret: &str, date: &str) -> Vec<u8> {
+    let k = hmac(format!("AWS4{secret}").as_bytes(), &date.as_bytes()[..8]);
     let k = hmac(&k, REGION.as_bytes());
     let k = hmac(&k, b"s3");
     hmac(&k, b"aws4_request")
@@ -161,11 +173,12 @@ pub async fn send(addr: SocketAddr, r: Req<'_>) -> Resp {
             "AWS4-HMAC-SHA256\n{date}\n{scope}\n{}",
             hex::encode(Sha256::digest(canonical.as_bytes()))
         );
-        let sig = sign_string(&date, &sts);
+        let sig = hex::encode(hmac(&signing_key_for(r.credentials.1, &date), sts.as_bytes()));
         headers.push((
             "authorization".into(),
             format!(
-                "AWS4-HMAC-SHA256 Credential={ACCESS}/{scope}, SignedHeaders={}, Signature={sig}",
+                "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={}, Signature={sig}",
+                r.credentials.0,
                 signed_names.join(";")
             ),
         ));

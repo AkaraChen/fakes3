@@ -166,6 +166,7 @@ fn to_filter(f: Option<RequestFilter>) -> Result<fakes3::RequestFilter> {
 
 fn record(r: fakes3::RequestRecord) -> RequestRecord {
     let (bucket, key) = r.bucket_key();
+    let request_id = r.request_id();
     RequestRecord {
         seq: r.seq as f64,
         time: r.time.into(),
@@ -178,7 +179,7 @@ fn record(r: fakes3::RequestRecord) -> RequestRecord {
         latency_us: r.latency.as_micros() as f64,
         bytes_in: r.bytes_in as f64,
         bytes_out: r.bytes_out as f64,
-        request_id: r.request_id(),
+        request_id,
         access_key: r.access_key,
     }
 }

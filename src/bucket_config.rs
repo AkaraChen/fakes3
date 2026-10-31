@@ -55,7 +55,8 @@ pub struct PublicAccessBlock {
 }
 
 pub struct BucketConfig {
-    pub acl: RwLock<Acl>,
+    /// `None` is the default `private` ACL (full control for the bucket owner).
+    pub acl: RwLock<Option<Acl>>,
     pub ownership: RwLock<Option<Ownership>>,
     pub public_access_block: RwLock<Option<PublicAccessBlock>>,
     pub policy: RwLock<Option<Arc<Policy>>>,
@@ -75,7 +76,7 @@ pub struct BucketConfig {
 impl Default for BucketConfig {
     fn default() -> Self {
         Self {
-            acl: RwLock::new(Acl::private()),
+            acl: RwLock::new(None),
             ownership: RwLock::new(None),
             public_access_block: RwLock::new(None),
             policy: RwLock::new(None),
@@ -94,7 +95,7 @@ impl Default for BucketConfig {
 /// small and mostly shared (`Arc`), so copying them is cheap.
 #[derive(Clone)]
 pub struct ConfigSnapshot {
-    acl: Acl,
+    acl: Option<Acl>,
     ownership: Option<Ownership>,
     public_access_block: Option<PublicAccessBlock>,
     policy: Option<Arc<Policy>>,

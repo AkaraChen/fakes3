@@ -22,6 +22,7 @@ use crate::memory::MemoryTracker;
 use crate::reqlog::{RequestFilter, RequestLog, RequestRecord, StatusFilter};
 use crate::snapshot::{Counts, StoreSnapshot};
 use crate::store::Store;
+use crate::users::Users;
 
 pub const PREFIX: &str = "/_fakes3";
 
@@ -37,6 +38,7 @@ pub struct Control {
     pub(crate) bucket_defaults: BucketDefaults,
     /// Whether request signatures are verified (`Config::auth`).
     auth: bool,
+    pub(crate) users: Arc<Users>,
     snapshots: Mutex<BTreeMap<String, SnapshotEntry>>,
     next_snapshot: AtomicU64,
 }
@@ -100,6 +102,23 @@ impl From<clock::OutOfRange> for ControlError {
 }
 
 impl Control {
+    /// The accounts, without their secrets.
+    fn users_json(&self) -> Value {
+        Value::Array(
+            self.users
+                .iter()
+                .map(|(_, u)| {
+                    json!({
+                        "name": u.name,
+                        "access_key": u.access_key,
+                        "account_id": u.account_id,
+                        "canonical_id": u.canonical_id,
+                    })
+                })
+                .collect(),
+        )
+    }
+
     pub(crate) fn new(
         store: Arc<Store>,
         clock: Arc<Clock>,
@@ -107,6 +126,7 @@ impl Control {
         log: RequestLog,
         bucket_defaults: BucketDefaults,
         auth: bool,
+        users: Arc<Users>,
     ) -> Self {
         Self {
             store,
@@ -115,6 +135,7 @@ impl Control {
             log,
             bucket_defaults,
             auth,
+            users,
             snapshots: Mutex::default(),
             next_snapshot: AtomicU64::new(1),
         }
@@ -405,6 +426,7 @@ impl Control {
                         "memory": memory_json(self.memory.stats()),
                         "bucket_defaults": self.bucket_defaults.as_str(),
                         "auth": if self.auth { "strict" } else { "any-credentials" },
+                        "users": self.users_json(),
                         "snapshots": self.snapshots.lock().len(),
                         "request_log": log_config_json(&self.log),
                     }),
