@@ -41,4 +41,5 @@ panic = "abort"
 aws-sdk-s3 = { version = "1.157.0", features = ["behavior-version-latest"] }
 base64-simd = "0.8"
 hmac = "0.13.0"
+sha1 = "0.11"
 sha2 = "0.11.1"

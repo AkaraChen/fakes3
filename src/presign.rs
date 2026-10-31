@@ -28,7 +28,7 @@ pub fn is_expired(query: &str, now: SystemTime) -> bool {
     v2_expires.is_some_and(|secs| now > UNIX_EPOCH + Duration::from_secs(secs))
 }
 
-fn parse_amz_date(s: &str) -> Option<SystemTime> {
+pub(crate) fn parse_amz_date(s: &str) -> Option<SystemTime> {
     if s.len() != 16 || !s.is_ascii() {
         return None;
     }
