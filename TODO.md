@@ -1,16 +1,17 @@
 # TODO
 
-## 测试控制面（`/_fakes3/*`，后续计划）
+## 测试控制面（`/_fakes3/*`，见 [docs/control-plane.md](docs/control-plane.md)）
 
-- [ ] `POST /_fakes3/reset`：清空所有 bucket / object / upload，微秒级完成
-- [ ] `POST /_fakes3/snapshot` → `{id}`；`POST /_fakes3/restore/{id}`：O(1) 快照和回滚
-  - 前提：元数据换成持久化数据结构（`im::OrdMap`），Blob 本身已经不可变且有引用计数
-- [ ] `POST /_fakes3/clock`：冻结、推进或设置虚拟时间
-  - 驱动 presigned URL 过期、lifecycle 过期、Object Lock retention 到期、Glacier restore 完成
+- [x] `POST /_fakes3/reset`：清空所有 bucket / object / upload，同时清空请求日志和时钟
+- [x] 快照：`POST /_fakes3/snapshots`、`POST /_fakes3/snapshots/{name}/restore`（索引复制方案，选型和实测数据见文档）
+- [x] `/_fakes3/clock`：冻结、推进或设置虚拟时间；预签名 URL 过期跟随虚拟时钟
+  - s3s 不允许注入时间，SigV4 日期偏差检查仍然用主机时间（见文档）
+  - 以后的 lifecycle 过期、Object Lock retention 到期、Glacier restore 完成应当读 `Clock::now`
 - [ ] `POST /_fakes3/faults`：按操作、bucket/key 前缀或概率注入故障
   - 503 SlowDown、500 InternalError、固定或随机延迟、body 截断、连接重置
-- [ ] `GET /_fakes3/requests`：请求日志，用于断言调用次数和顺序
-- [ ] 各语言客户端封装（Rust 进程内库模式、testcontainers 模块、pytest fixture、Go helper、JUnit extension）
+- [x] `GET /_fakes3/requests`：请求日志，用于断言调用次数和顺序
+- [x] 命令行 `fakes3 ctl` 和 Rust 进程内的 `Server` 方法（不做各语言的客户端封装）
+- [ ] testcontainers 模块、pytest fixture 之类的框架集成（基于 `fakes3 ctl` 或 HTTP API）
 
 ## S3 语义完整度
 
