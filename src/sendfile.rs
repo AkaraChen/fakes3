@@ -35,6 +35,8 @@ static REGIONS: RwLock<BTreeMap<usize, (usize, RawFd)>> = RwLock::new(BTreeMap::
 /// Cleared process-wide if the kernel (or a seccomp filter) turns out not to support `sendfile` on sockets.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
+static CHUNK: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
 /// Bytes sent with `sendfile` so far, for tests.
 static SENT: AtomicU64 = AtomicU64::new(0);
 
@@ -208,7 +210,14 @@ impl Write for Io {
         if i > 0 {
             return self.poll_send_more(cx, &bufs[..i]);
         }
-        match ready!(self.poll_sendfile(cx, fd, off, bufs[0].len())) {
+        let max = *CHUNK.get_or_init(|| {
+            std::env::var("FAKES3_SENDFILE_CHUNK")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .filter(|&n: &usize| n > 0)
+                .unwrap_or(usize::MAX)
+        });
+        match ready!(self.poll_sendfile(cx, fd, off, bufs[0].len().min(max))) {
             // No sendfile for this socket or kernel: stop trying and copy instead.
             Err(e)
                 if matches!(
