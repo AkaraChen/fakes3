@@ -32,6 +32,11 @@ struct Opt {
     /// Copy large response bodies through the socket instead of using sendfile(2).
     #[arg(long)]
     no_sendfile: bool,
+    /// Most object data fakes3 will hold; a write beyond it fails with HTTP 507 instead of the
+    /// process being OOM-killed. A size like `512MiB` or `2GiB`, `unlimited`, or `auto` (75% of the
+    /// container's or machine's memory).
+    #[arg(long, default_value = "auto", env = "FAKES3_MEMORY_LIMIT")]
+    memory_limit: fakes3::MemoryLimit,
 }
 
 fn main() -> std::io::Result<()> {
@@ -39,7 +44,7 @@ fn main() -> std::io::Result<()> {
     // Each large object keeps its memfd open so it can be sent with sendfile.
     fakes3::raise_fd_limit();
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()))
         .init();
     let config = fakes3::Config {
         host: opt.host,
@@ -49,6 +54,7 @@ fn main() -> std::io::Result<()> {
         auth: !opt.no_auth,
         inline_threshold: opt.inline_threshold,
         sendfile: !opt.no_sendfile,
+        memory_limit: opt.memory_limit,
     };
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
         let server = fakes3::Server::start(config).await?;
