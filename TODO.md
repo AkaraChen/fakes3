@@ -15,8 +15,9 @@
 ## S3 语义完整度
 
 - [x] 版本控制：VersionId、删除标记、null version、Suspended、ListObjectVersions
-- [ ] 版本控制补全：删除标记响应头以外的边角（MFA delete、ListObjectVersions 与 AWS 的逐字节差分）
-- [ ] Object Lock：retention、legal hold、governance bypass
+- [x] 版本控制补全：MFA Delete、版本号格式校验、ListObjectVersions 的 marker/max-keys 边角；
+      仍有差异：`<Version>` 和 `<DeleteMarker>` 在 XML 里是分开成组的（s3s 的限制），AWS 是按 key 交错的
+- [x] Object Lock：retention、legal hold、governance bypass、默认保留期，到期按服务端时钟判断
 - [x] 分段上传对象的 composite 校验和（CRC32 / CRC32C / SHA1 / SHA256）
 - [x] 分段上传的 FULL_OBJECT 校验和（CRC32 / CRC32C / CRC64NVME，用 crc-fast 合并各 part 的 CRC）
 - [x] 未指定算法时默认计算 CRC64NVME（与 2024 年 12 月之后的 S3 一致）
@@ -26,12 +27,13 @@
 - [x] 条件请求：If-Match / If-None-Match / If-Modified-Since / If-Unmodified-Since，CopySource 的条件头
 - [x] 对象和 bucket 的 Tagging
 - [ ] ACL、Bucket Policy 求值、CORS 预检、Lifecycle、Website、Notification
-- [ ] SSE-C（校验 key MD5）、SSE-S3/KMS header 回显
+- [x] SSE-C（校验 key MD5）、SSE-S3/KMS header 回显、Put/Get/DeleteBucketEncryption 及默认加密
 - [ ] POST policy 表单上传
 - [ ] virtual-host 寻址的默认域名配置
 - [x] ListMultipartUploads
-- [ ] GetObjectAttributes
-- [ ] 回显 `storage_class`、`x-amz-website-redirect-location` 等剩余元数据
+- [x] GetObjectAttributes
+- [x] 回显 `storage_class`、`x-amz-website-redirect-location` 等剩余元数据
+- [ ] Glacier / Deep Archive 对象的 `InvalidObjectState` 和 RestoreObject（目前这两类对象仍可直接读取）
 
 ## 性能
 

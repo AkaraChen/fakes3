@@ -15,6 +15,8 @@ use std::time::SystemTime;
 use bytes::{Bytes, BytesMut};
 use parking_lot::RwLock;
 
+use crate::objext::{BucketCfg, ObjectExt};
+
 #[derive(Clone, Default)]
 pub struct ObjectData {
     pub segments: Arc<[Bytes]>,
@@ -75,6 +77,8 @@ pub struct Object {
     /// Sizes of the parts a multipart object was assembled from, for `?partNumber=` reads.
     pub part_sizes: Option<Arc<[u64]>>,
     pub tags: Vec<(String, String)>,
+    /// Storage class, encryption, Object Lock...; `None` for a plain object.
+    pub ext: Option<Arc<ObjectExt>>,
 }
 
 /// One entry in a key's version chain. `obj == None` is a delete marker.
@@ -122,6 +126,7 @@ pub struct Part {
 pub struct Upload {
     pub meta: ObjectMeta,
     pub tags: Vec<(String, String)>,
+    pub ext: Option<ObjectExt>,
     pub initiated: SystemTime,
     pub checksum_algorithm: Option<s3s::dto::ChecksumAlgorithm>,
     /// Effective checksum type (explicit, or the default for the algorithm).
@@ -135,6 +140,7 @@ pub struct Bucket {
     pub tags: RwLock<Option<Vec<(String, String)>>>,
     pub objects: RwLock<BTreeMap<String, Entry>>,
     pub uploads: RwLock<BTreeMap<(String, String), Upload>>,
+    pub cfg: BucketCfg,
 }
 
 #[derive(Default)]
@@ -156,6 +162,7 @@ impl Bucket {
             tags: RwLock::default(),
             objects: RwLock::default(),
             uploads: RwLock::default(),
+            cfg: BucketCfg::default(),
         }
     }
 }

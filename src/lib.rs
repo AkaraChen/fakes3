@@ -14,6 +14,8 @@
 
 mod clock;
 mod digest;
+mod objext;
+mod objops;
 mod s3impl;
 mod store;
 

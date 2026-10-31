@@ -59,14 +59,17 @@ s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 - 对象：PUT、GET、HEAD、DELETE、DeleteObjects、CopyObject（支持替换元数据和标签）
 - 列举：ListObjectsV2、ListObjects（v1）、ListObjectVersions、ListMultipartUploads，支持 prefix、delimiter、分页、`encoding-type=url`
 - 分段上传：Create、UploadPart、UploadPartCopy、ListParts、Complete、Abort；GET/HEAD 支持 `?partNumber=`
-- 版本控制：Enabled / Suspended、删除标记、null version、按 VersionId 读取和删除
+- 版本控制：Enabled / Suspended、删除标记、null version、按 VersionId 读取和删除、MFA Delete 头校验
+- Object Lock：保留期（GOVERNANCE / COMPLIANCE）、Legal Hold、bucket 默认保留期、`x-amz-bypass-governance-retention`，到期时间按服务端时钟判断
+- 加密：SSE-C（校验算法和 key MD5，GET/HEAD/Copy 必须带同一个 key）、SSE-S3 / SSE-KMS 头回显、bucket 默认加密；数据本身不加密
+- 对象属性：GetObjectAttributes、storage class 和 `x-amz-website-redirect-location` 的写入与回显
 - 条件请求：If-Match、If-None-Match（包括条件写入）、If-Modified-Since、If-Unmodified-Since、CopySource 的条件头
 - 校验和：CRC32、CRC32C、CRC64NVME、SHA1、SHA256 等，支持 header 和 aws-chunked trailer 两种方式；
   分段上传支持 COMPOSITE 和 FULL_OBJECT；没指定算法时默认计算 CRC64NVME，和现在的 AWS S3 一致
 - 认证：SigV4（包括 presigned URL 和带 trailer 的流式上传）、SigV2
 - 对象标签、Range 读取、Content-MD5 校验
 
-还没做的功能见 [TODO.md](TODO.md)，主要是 Object Lock、ACL/Policy、CORS、Lifecycle、SSE，以及测试控制面
+还没做的功能见 [TODO.md](TODO.md)，主要是 ACL/Policy、CORS、Lifecycle，以及测试控制面
 （reset、快照、虚拟时钟、故障注入）。
 
 ## 兼容性
