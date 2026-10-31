@@ -51,6 +51,12 @@ struct Opt {
     /// container's or machine's memory).
     #[arg(long, default_value = "auto", env = "FAKES3_MEMORY_LIMIT")]
     memory_limit: fakes3::MemoryLimit,
+
+    /// Settings new buckets start with: `legacy` (ACLs enabled, Block Public Access off, no default
+    /// encryption) or `aws` (what AWS applies to new buckets today: ACLs disabled, Block Public
+    /// Access on, SSE-S3, SSE-C blocked). Only affects buckets created afterwards.
+    #[arg(long, default_value = "legacy", env = "FAKES3_BUCKET_DEFAULTS", value_name = "legacy|aws")]
+    bucket_defaults: fakes3::BucketDefaults,
 }
 
 #[derive(clap::Subcommand)]
@@ -81,6 +87,7 @@ fn main() -> std::io::Result<std::process::ExitCode> {
         request_log: !opt.no_request_log,
         request_log_capacity: opt.request_log_capacity,
         memory_limit: opt.memory_limit,
+        bucket_defaults: opt.bucket_defaults,
     };
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
         let server = fakes3::Server::start(config).await?;

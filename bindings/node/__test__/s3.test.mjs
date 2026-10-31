@@ -9,6 +9,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   ListBucketsCommand,
+  GetPublicAccessBlockCommand,
 } from '@aws-sdk/client-s3'
 
 const { start } = createRequire(import.meta.url)('../index.js')
@@ -136,6 +137,30 @@ test('memoryLimit caps object data and memory() reports it', async () => {
     s3.destroy()
   } finally {
     await server.stop()
+  }
+})
+
+test('bucketDefaults: "aws" blocks public access on new buckets; garbage is rejected', async () => {
+  const aws = await start({ bucketDefaults: 'aws' })
+  const legacy = await start()
+  try {
+    const a = client(aws)
+    await a.send(new CreateBucketCommand({ Bucket: 'bucket' }))
+    const { PublicAccessBlockConfiguration: pab } = await a.send(new GetPublicAccessBlockCommand({ Bucket: 'bucket' }))
+    assert.deepEqual(pab, {
+      BlockPublicAcls: true,
+      IgnorePublicAcls: true,
+      BlockPublicPolicy: true,
+      RestrictPublicBuckets: true,
+    })
+    const l = client(legacy)
+    await l.send(new CreateBucketCommand({ Bucket: 'bucket' }))
+    await assert.rejects(l.send(new GetPublicAccessBlockCommand({ Bucket: 'bucket' })), { name: 'NoSuchPublicAccessBlockConfiguration' })
+    a.destroy()
+    l.destroy()
+    await assert.rejects(start({ bucketDefaults: '2023' }), /invalid bucketDefaults/)
+  } finally {
+    await Promise.all([aws.stop(), legacy.stop()])
   }
 })
 
