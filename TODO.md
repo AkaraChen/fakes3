@@ -35,7 +35,7 @@
 
 ## 性能
 
-- [ ] 明文 HTTP 下大对象 GET 走 `sendfile`/`splice`（需要绕过 s3s 的 body 抽象）
+- [x] 评估明文 HTTP 下大对象 GET 走 `sendfile`：服务端 CPU 减半，但端到端吞吐没有提升，单流还慢约 37%，结论不做，见 [bench/SENDFILE.md](bench/SENDFILE.md)（实现在分支 `exp/sendfile-impl`）
 - [x] MD5 优化：换成 OpenSSL 的汇编实现（通过底层 `MD5_*` 接口调用，不链接 EVP，二进制体积不变），
       大于 inline 阈值的请求体把 MD5 放到独立线程，与接收、校验和、写 memfd 流水线并行
 - [ ] 多个并发流共享 SIMD 的多路 MD5（类似 MinIO 的 md5-simd），提升多并发大对象写入的总吞吐
