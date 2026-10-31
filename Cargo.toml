@@ -15,9 +15,9 @@ hex = "0.4.3"
 http = "1"
 hyper = "1"
 hyper-util = { version = "0.1.21", features = ["server-auto", "tokio", "server-graceful"] }
-md-5 = "0.11.0"
 memmap2 = "0.9.12"
 mimalloc = "0.1.52"
+openssl-sys = { version = "0.9.117", features = ["vendored"] }
 parking_lot = "0.13.0"
 rustix = { version = "1.1.6", features = ["fs"] }
 s3s = "0.17"

@@ -6,7 +6,7 @@
 #   docker run --rm -p 9000:9000 fakes3
 
 FROM rust:1-alpine AS build
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache musl-dev perl make linux-headers
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src

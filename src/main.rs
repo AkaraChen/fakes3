@@ -1,3 +1,4 @@
+mod digest;
 mod s3impl;
 mod store;
 

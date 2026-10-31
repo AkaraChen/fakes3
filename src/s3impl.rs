@@ -6,11 +6,11 @@ use std::time::SystemTime;
 
 use bytes::Bytes;
 use futures::StreamExt;
-use md5::{Digest, Md5};
 use s3s::checksum::ChecksumHasher;
 use s3s::dto::*;
 use s3s::{S3, S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 
+use crate::digest;
 use crate::store::{
     BlobWriter, Bucket as StoreBucket, Entry, Object as StoreObject, ObjectData, ObjectMeta, Part, Store, Upload, Version, Versioning,
 };
@@ -171,12 +171,13 @@ async fn ingest(
     trailers: Option<s3s::TrailingHeaders>,
 ) -> S3Result<Ingested> {
     let mut hasher = hasher_for(&expected, algorithm)?;
-    let mut md5 = Md5::new();
+    // Large bodies hash MD5 on another thread, overlapping with the work below.
+    let mut md5 = digest::Streaming::new(content_length.is_some_and(|n| n as usize >= threshold));
     let mut w = BlobWriter::new(threshold, content_length.map(|n| n as u64)).map_err(io_err)?;
     if let Some(mut body) = body {
         while let Some(chunk) = body.next().await {
             let chunk = chunk.map_err(|e| s3_error!(IncompleteBody, "{e}"))?;
-            md5.update(&chunk);
+            md5.update(&chunk).await;
             hasher.update(&chunk);
             w.write(&chunk).map_err(io_err)?;
         }
@@ -187,7 +188,7 @@ async fn ingest(
     {
         return Err(s3_error!(IncompleteBody));
     }
-    let md5: [u8; 16] = md5.finalize().into();
+    let md5 = md5.finish().await;
 
     if let Some(cm) = content_md5 {
         let want = base64_simd::STANDARD.decode_to_vec(cm).map_err(|_| s3_error!(InvalidDigest))?;
@@ -214,13 +215,11 @@ async fn ingest(
 
 /// MD5 and checksums of data that is already stored (UploadPartCopy sources).
 fn digest_segments(segments: &[Bytes], algorithm: Option<&ChecksumAlgorithm>) -> S3Result<([u8; 16], Checksum)> {
-    let mut md5 = Md5::new();
     let mut hasher = hasher_for(&Checksum::default(), algorithm)?;
     for s in segments {
-        md5.update(s);
         hasher.update(s);
     }
-    Ok((md5.finalize().into(), hasher.finalize()))
+    Ok((digest::md5(segments), hasher.finalize()))
 }
 
 fn check_conditions(
@@ -605,7 +604,9 @@ fn list(objects: &BTreeMap<String, Entry>, prefix: &str, delimiter: Option<&str>
 /// `encoding-type=url` escaping: form-style (space becomes `+`), but `/` stays literal like
 /// S3 and MinIO leave it; some clients (minio-dotnet) don't decode common prefixes.
 fn url_encode(s: &str) -> String {
-    form_urlencoded::byte_serialize(s.as_bytes()).collect::<String>().replace("%2F", "/")
+    form_urlencoded::byte_serialize(s.as_bytes())
+        .collect::<String>()
+        .replace("%2F", "/")
 }
 
 fn wants_url(e: &Option<EncodingType>) -> bool {
@@ -625,11 +626,7 @@ fn enc_prefixes(p: &mut Option<Vec<CommonPrefix>>) {
 }
 
 fn multipart_etag(md5s: &[[u8; 16]]) -> String {
-    let mut h = Md5::new();
-    for m in md5s {
-        h.update(m);
-    }
-    format!("{}-{}", hex::encode(h.finalize()), md5s.len())
+    format!("{}-{}", hex::encode(digest::md5(md5s)), md5s.len())
 }
 
 fn owner() -> Owner {
