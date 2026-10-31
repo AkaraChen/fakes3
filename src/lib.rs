@@ -313,7 +313,8 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                     .contains_key(http::header::ORIGIN)
                     .then(|| cors::RequestInfo::of(&req, &sh.domains));
                 let head = req.method() == http::Method::HEAD;
-                let post = req.method() == http::Method::POST;
+                let mut req = req.map(s3s::Body::from);
+                let signed_form = req.method() == http::Method::POST && s3s_compat::signed_form(&mut req).await;
                 // s3s judges presigned-URL expiry by the host clock; honor a moved server clock first.
                 let expired = control.clock.is_virtual() && req.uri().query().is_some_and(|q| presign::is_expired(q, control.clock.now()));
                 let mut resp = if expired {
@@ -325,7 +326,6 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 } else if sh.auth {
                     call_verified(&sh.s3, req).await?
                 } else {
-                    let mut req = req.map(s3s::Body::from);
                     if let (Some(key), Some(p)) = (noauth::accept_any(&mut req).and_then(|s| s.access_key.clone()), logged.as_mut()) {
                         p.set_access_key(key);
                     }
@@ -335,7 +335,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 if head && resp.status() == http::StatusCode::OK && resp.headers().contains_key(http::header::CONTENT_RANGE) {
                     *resp.status_mut() = http::StatusCode::PARTIAL_CONTENT;
                 }
-                if post && resp.status() == http::StatusCode::BAD_REQUEST {
+                if signed_form && resp.status() == http::StatusCode::BAD_REQUEST {
                     s3s_compat::policy_violation(&mut resp);
                 }
                 if let Some(archive::StatusOverride(status)) = resp.extensions().get().copied() {
@@ -377,10 +377,7 @@ impl hyper::service::Service<http::Request<hyper::body::Incoming>> for ServiceFn
 
 /// Calls s3s with signature verification on, after repairing what it gets wrong (see
 /// [`sigv2`] and [`s3s_compat`]). A request that is neither SigV2 nor unsized goes straight in.
-async fn call_verified(
-    s3: &s3s::service::S3Service,
-    mut req: http::Request<hyper::body::Incoming>,
-) -> Result<s3s::HttpResponse, s3s::HttpError> {
+async fn call_verified(s3: &s3s::service::S3Service, mut req: http::Request<s3s::Body>) -> Result<s3s::HttpResponse, s3s::HttpError> {
     if let Some(kind) = sigv2::kind(&req) {
         if kind == sigv2::Kind::Header
             && let Some(refused) = sigv2::bad_date(req.headers(), std::time::SystemTime::now())
@@ -399,7 +396,7 @@ async fn call_verified(
             };
         }
     }
-    hyper::service::Service::call(s3, req).await
+    s3.call(req).await
 }
 
 /// Folds repeated headers into one comma-separated value, which is how HTTP defines their

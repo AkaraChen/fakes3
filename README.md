@@ -444,6 +444,8 @@ fakes3 ctl requests list --op PutObject       # 请求日志：按 bucket、操�
 
 fakes3 剩下的 8 个失败全部是 SDK 自身的 bug（minio-dotnet 有 6 个，minio-java 和 obstore 处理不了 `a//b` 这种 key），换哪个服务都会失败。
 
+fakes3 在 s3s 之上绕开了几处和 AWS 不一致的行为（SigV2 的日期和 bucket 级签名、POST policy 的错误码等），见 [docs/s3s-workarounds.md](docs/s3s-workarounds.md)。
+
 覆盖的 SDK：
 - Python：boto3、minio-py、s3fs、obstore
 - JavaScript：AWS SDK v3、AWS SDK v2、minio-js、Bun.S3Client

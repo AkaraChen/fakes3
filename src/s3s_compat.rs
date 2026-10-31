@@ -3,7 +3,7 @@
 //! * POST policy conditions. s3s refuses a form that breaks a policy condition with 400
 //!   `InvalidPolicyDocument`; S3 answers 403 `AccessDenied: Invalid according to Policy`. A
 //!   malformed policy stays 400 `InvalidPolicyDocument`, as in S3. [`policy_violation`] rewrites
-//!   the error response, so only failed POSTs pay for it.
+//!   the error response of a signed form, which [`signed_form`] finds out.
 //! * SigV4 with a `Date` header. S3 takes the request time from `x-amz-date` or else `Date` (what
 //!   botocore sends when a `Date` is set); s3s insists on `x-amz-date` (`missing header:
 //!   x-amz-date`). [`date_to_amz_date`] adds the `x-amz-date` that `Date` stands for. The signature
@@ -76,7 +76,7 @@ pub fn is_unsized(headers: &http::HeaderMap) -> bool {
 
 /// Reads `req`'s body and sets `Content-Length` to its size. A body over [`MAX_UNSIZED`] is
 /// refused as before: 411 `MissingContentLength`.
-pub async fn with_length(req: http::Request<hyper::body::Incoming>) -> Result<http::Request<s3s::Body>, s3s::HttpResponse> {
+pub async fn with_length(req: http::Request<s3s::Body>) -> Result<http::Request<s3s::Body>, s3s::HttpResponse> {
     let (mut parts, body) = req.into_parts();
     let refuse = || {
         s3s::S3Error::with_message(s3s::S3ErrorCode::MissingContentLength, "missing header: content-length")
@@ -86,6 +86,39 @@ pub async fn with_length(req: http::Request<hyper::body::Incoming>) -> Result<ht
     let body = Limited::new(body, MAX_UNSIZED).collect().await.map_err(|_| refuse())?.to_bytes();
     parts.headers.insert(http::header::CONTENT_LENGTH, body.len().into());
     Ok(http::Request::from_parts(parts, s3s::Body::from(body)))
+}
+
+/// Largest POST form read to look for its signature field.
+const MAX_FORM: u64 = 8 << 20;
+
+/// Whether `req`, a POST, is a `multipart/form-data` form of at most [`MAX_FORM`] bytes that has a
+/// signature field. s3s treats a form without one as anonymous and still judges its policy, where
+/// S3 refuses it for the missing signature (400), so only signed forms get [`policy_violation`].
+/// Reads the form and puts it back.
+pub async fn signed_form(req: &mut http::Request<s3s::Body>) -> bool {
+    let headers = req.headers();
+    let form = headers
+        .get(http::header::CONTENT_TYPE)
+        .is_some_and(|v| v.as_bytes().starts_with(b"multipart/form-data"));
+    let small = headers
+        .get(http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .is_some_and(|n| n <= MAX_FORM);
+    if !(form && small) {
+        return false;
+    }
+    let Ok(body) = std::mem::take(req.body_mut()).collect().await.map(|b| b.to_bytes()) else {
+        return false;
+    };
+    // The fields come before the file.
+    let fields = body
+        .windows(9)
+        .position(|w| w == b"filename=")
+        .map_or(&body[..], |end| &body[..end]);
+    let signed = fields.windows(10).any(|w| w.eq_ignore_ascii_case(b"signature\""));
+    *req.body_mut() = s3s::Body::from(body);
+    signed
 }
 
 #[cfg(test)]

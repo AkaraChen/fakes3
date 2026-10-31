@@ -92,10 +92,7 @@ pub fn is_bucket_level<B>(req: &http::Request<B>) -> bool {
 }
 
 /// Calls `s3`, and repeats the call for `/bucket/` if the signature did not match for `/bucket`.
-pub async fn call_retrying(
-    s3: &s3s::service::S3Service,
-    req: http::Request<hyper::body::Incoming>,
-) -> Result<s3s::HttpResponse, s3s::HttpError> {
+pub async fn call_retrying(s3: &s3s::service::S3Service, req: http::Request<s3s::Body>) -> Result<s3s::HttpResponse, s3s::HttpError> {
     let (parts, body) = req.into_parts();
     let len = parts
         .headers
@@ -103,13 +100,9 @@ pub async fn call_retrying(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<u64>().ok());
     if !len.map_or(body.is_end_stream(), |n| n <= MAX_REPLAY) {
-        return s3.call(http::Request::from_parts(parts, s3s::Body::from(body))).await;
+        return s3.call(http::Request::from_parts(parts, body)).await;
     }
-    let body = body
-        .collect()
-        .await
-        .map_err(|e| s3s::HttpError::from_std_error(Box::new(e)))?
-        .to_bytes();
+    let body = body.collect().await.map_err(s3s::HttpError::from_std_error)?.to_bytes();
     let again = slashed(&parts, body.clone());
     let head = parts.method == http::Method::HEAD;
     let resp = s3.call(http::Request::from_parts(parts, s3s::Body::from(body))).await?;

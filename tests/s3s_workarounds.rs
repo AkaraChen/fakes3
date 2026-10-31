@@ -164,6 +164,10 @@ fn multipart(boundary: &str, fields: &[(&str, &str)], file: &[u8]) -> Vec<u8> {
 /// POSTs a SigV2-signed form whose policy has `conditions` (JSON array items) and whose fields are
 /// `key` and `acl`.
 async fn post_form(addr: SocketAddr, conditions: &str) -> Resp {
+    post_form_signed(addr, conditions, true).await
+}
+
+async fn post_form_signed(addr: SocketAddr, conditions: &str, signed: bool) -> Resp {
     let expires = common::amz_date(SystemTime::now() + Duration::from_secs(600));
     let expires = format!(
         "{}-{}-{}T{}:{}:{}Z",
@@ -177,17 +181,16 @@ async fn post_form(addr: SocketAddr, conditions: &str) -> Resp {
     let policy = format!(r#"{{"expiration":"{expires}","conditions":[{conditions}]}}"#);
     let policy = base64_simd::STANDARD.encode_to_string(policy.as_bytes());
     let signature = v2_signature(&policy);
-    let body = multipart(
-        "XBOUNDARYX",
-        &[
-            ("key", "foo.txt"),
-            ("acl", "private"),
-            ("AWSAccessKeyId", "fakes3"),
-            ("policy", &policy),
-            ("signature", &signature),
-        ],
-        b"bar",
-    );
+    let mut fields = vec![
+        ("key", "foo.txt"),
+        ("acl", "private"),
+        ("AWSAccessKeyId", "fakes3"),
+        ("policy", policy.as_str()),
+    ];
+    if signed {
+        fields.push(("signature", signature.as_str()));
+    }
+    let body = multipart("XBOUNDARYX", &fields, b"bar");
     send(
         addr,
         req("POST", "/bkt")
@@ -225,6 +228,10 @@ async fn post_policy_violations_are_access_denied() {
             assert_eq!((r.status, r.code()), (403, "AccessDenied"), "auth={auth} {what}: {}", r.body);
             assert!(r.body.contains("<RequestId>"), "{}", r.body);
         }
+
+        // A form without a signature is refused for that (s3s judges its policy first, still 400).
+        let r = post_form_signed(a, r#"{"bucket":"bkt"},["starts-with","$key","bar"],{"acl":"private"}"#, false).await;
+        assert_eq!(r.status, 400, "auth={auth}: {}", r.body);
 
         // A size range is not a policy violation, and a policy nobody can read is still malformed.
         let r = post_form(a, &format!(r#"{ok},["content-length-range",0,1]"#)).await;
