@@ -611,8 +611,8 @@ struct Listing {
 /// skipped without being copied or counted (a prefix only appears once a visible key under it
 /// is reached). Each visible key is passed to `emit`, which returns how many result slots it
 /// consumed.
-fn walk<V, F>(
-    objects: &Index,
+fn walk<'a, V, F>(
+    objects: &'a Index,
     prefix: &str,
     delimiter: Option<&str>,
     after: Option<&str>,
@@ -622,21 +622,26 @@ fn walk<V, F>(
 ) -> (Vec<CommonPrefix>, bool, Option<String>)
 where
     V: Fn(&Entry) -> bool,
-    F: FnMut(&str, &Entry) -> usize,
+    F: FnMut(&'a str, &'a Entry) -> usize,
 {
     if max_keys == 0 {
         return (Vec::new(), false, None);
     }
     let mut prefixes = Vec::new();
     let mut used = 0usize;
-    let mut next = None;
-    let mut cursor: Bound<String> = match after {
-        Some(a) if a >= prefix => Bound::Excluded(a.to_owned()),
-        _ => Bound::Included(prefix.to_owned()),
+    // Borrowed from the index: copied only when the listing is cut short.
+    let mut next: Option<&str> = None;
+    let first = match after {
+        Some(a) if a >= prefix => Bound::Excluded(a),
+        _ => Bound::Included(prefix),
     };
+    // Where to resume once a common prefix is folded: after every key under it.
+    let mut skip = String::new();
+    let mut folded = false;
     let delimiter = delimiter.filter(|d| !d.is_empty());
     'outer: loop {
-        for (key, entry) in objects.range((cursor.clone(), Bound::Unbounded)) {
+        let from = if folded { Bound::Excluded(skip.as_str()) } else { first };
+        for (key, entry) in objects.range::<str, _>((from, Bound::Unbounded)) {
             if !key.starts_with(prefix) {
                 break 'outer;
             }
@@ -644,7 +649,7 @@ where
                 continue;
             }
             if used >= max_keys {
-                return (prefixes, true, next);
+                return (prefixes, true, next.map(str::to_owned));
             }
             if let Some(pos) = delimiter.and_then(|d| key[prefix.len()..].find(d).map(|p| p + d.len())) {
                 let cp = &key[..prefix.len() + pos];
@@ -652,17 +657,17 @@ where
                     prefix: Some(cp.to_owned()),
                 });
                 used += 1;
-                next = Some(cp.to_owned());
-                // Resume after every key under this common prefix.
-                let mut skip = cp.to_owned();
+                next = Some(cp);
+                skip.clear();
+                skip.push_str(cp);
                 skip.push(char::MAX);
-                cursor = Bound::Excluded(skip);
+                folded = true;
                 continue 'outer;
             }
             let n = emit(key, entry);
             if n > 0 {
                 used += n;
-                next = Some(key.clone());
+                next = Some(key);
             }
         }
         break;
@@ -671,7 +676,8 @@ where
 }
 
 fn list(objects: &Index, prefix: &str, delimiter: Option<&str>, after: Option<&str>, max_keys: usize) -> Listing {
-    let mut contents = Vec::new();
+    // Growing a 1000-entry page by doubling copies it about once more.
+    let mut contents = Vec::with_capacity(max_keys.min(objects.len()));
     // Keys whose latest version is a delete marker are invisible to plain listings.
     let visible = |e: &Entry| e.current().is_some();
     let (prefixes, truncated, next) = walk(objects, prefix, delimiter, after, max_keys, visible, |key, entry| {
@@ -1588,7 +1594,7 @@ impl S3 for FakeS3 {
         let mut versions = Vec::new();
         let mut markers = Vec::new();
         let mut emitted = 0usize;
-        let mut next_version: Option<(String, String)> = None;
+        let mut next_version: Option<(&str, &str)> = None;
         let mut truncated_mid_key = false;
 
         // A version-id marker resumes inside its key; otherwise the key marker is exclusive.
@@ -1649,17 +1655,19 @@ impl S3 for FakeS3 {
                     }
                     emitted += 1;
                     n += 1;
-                    next_version = Some((key.to_owned(), v.id.clone()));
+                    next_version = Some((key, v.id.as_str()));
                 }
                 n
             },
         );
         if truncated_mid_key {
             truncated = true;
-            next_key = next_version.as_ref().map(|(k, _)| k.clone());
+            next_key = next_version.map(|(k, _)| k.to_owned());
         }
         let next_version_id = if truncated {
-            next_version.filter(|(k, _)| Some(k) == next_key.as_ref()).map(|(_, v)| v)
+            next_version
+                .filter(|(k, _)| Some(*k) == next_key.as_deref())
+                .map(|(_, v)| v.to_owned())
         } else {
             None
         };
