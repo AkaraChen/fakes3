@@ -64,6 +64,6 @@
 
 ## 一致性验证
 
-- [ ] 接入 ceph/s3-tests，作为进度基线
+- [x] 接入 ceph/s3-tests，作为进度基线（`conformance/s3-tests/run.sh`、`.github/workflows/s3-tests.yml`，分类后的基线和待办见 [conformance/S3-TESTS.md](conformance/S3-TESTS.md)）
 - [ ] 接入 MinIO mint
 - [ ] 对真实 AWS S3 做差分测试（录制和回放）

@@ -44,7 +44,8 @@ launch() {
   case $name in
     fakes3)
       # The image from ./Dockerfile (bench/setup.sh builds it as fakes3:local).
-      run fakes3 "${FAKES3_IMAGE:-fakes3:local}" --host 127.0.0.1 --port "$p" --access-key "$AK" --secret-key "$SK" ;;
+      # shellcheck disable=SC2086 # FAKES3_RUN_ARGS is a list of extra `docker run` options, e.g. "-e FAKES3_BUCKET_DEFAULTS=aws"
+      run fakes3 ${FAKES3_RUN_ARGS:-} "${FAKES3_IMAGE:-fakes3:local}" --host 127.0.0.1 --port "$p" --access-key "$AK" --secret-key "$SK" ;;
     minio)
       run minio --tmpfs /data -e MINIO_ROOT_USER="$AK" -e MINIO_ROOT_PASSWORD="$SK" \
         -e MINIO_BROWSER=off cgr.dev/chainguard/minio:latest server /data --address "127.0.0.1:$p" ;;
