@@ -60,6 +60,7 @@ def main():
         "",
         "所有实现都跑在 Docker 里：host 网络、数据目录放在容器内的 tmpfs、使用相同的凭证；每项测量都用一个新启动的容器。",
         "内存取自容器 cgroup（`memory.current` / `memory.peak`，包含 tmpfs 页），CPU 取自 cgroup 的 `cpu.stat`。",
+        "fakes3 使用仓库里 Dockerfile 构建的镜像（Alpine + 静态链接的 musl 二进制）。"
         "竞品版本：MinIO 用 Chainguard 从源码构建的最新版（官方镜像已下架）；LocalStack 4.14（最后一个免登录的社区版）；"
         "moto、S3Mock、JuiceFS 用当时的最新镜像（JuiceFS gateway 的元数据用 SQLite，数据用本地文件，两者都在 tmpfs 上）。",
         "",

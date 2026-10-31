@@ -148,7 +148,7 @@ def docker_baseline(n):
     out = []
     for _ in range(n):
         t0 = time.monotonic()
-        sh("docker", "run", "-d", "--rm", "--name", f"{PREFIX}-baseline", "--network", "host", "ubuntu:26.04", "sleep", "30")
+        sh("docker", "run", "-d", "--rm", "--name", f"{PREFIX}-baseline", "--network", "host", "alpine:3", "sleep", "30")
         out.append(time.monotonic() - t0)
         sh("docker", "rm", "-f", f"{PREFIX}-baseline", check=False)
     return out

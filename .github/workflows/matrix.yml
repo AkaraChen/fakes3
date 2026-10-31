@@ -32,8 +32,15 @@ jobs:
       - name: Unit tests
         run: cargo test --release --locked
 
-      - name: Build fakes3
-        run: cargo build --release --locked
+      - uses: docker/setup-buildx-action@v3
+      - name: Build fakes3 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: fakes3:local
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - uses: actions/setup-go@v5
         with:

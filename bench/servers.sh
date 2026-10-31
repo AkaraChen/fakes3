@@ -43,8 +43,8 @@ launch() {
   stop "$name" 2>/dev/null || true
   case $name in
     fakes3)
-      run fakes3 -v "$ROOT/target/release/fakes3:/usr/local/bin/fakes3:ro" ubuntu:26.04 \
-        fakes3 --host 127.0.0.1 --port "$p" --access-key "$AK" --secret-key "$SK" ;;
+      # The image from ./Dockerfile (bench/setup.sh builds it as fakes3:local).
+      run fakes3 "${FAKES3_IMAGE:-fakes3:local}" --host 127.0.0.1 --port "$p" --access-key "$AK" --secret-key "$SK" ;;
     minio)
       run minio --tmpfs /data -e MINIO_ROOT_USER="$AK" -e MINIO_ROOT_PASSWORD="$SK" \
         -e MINIO_BROWSER=off cgr.dev/chainguard/minio:latest server /data --address "127.0.0.1:$p" ;;
@@ -85,6 +85,6 @@ case ${1:-} in
   stop) stop "$2" ;;
   port) port "$2" ;;
   list) printf '%s\n' "${SERVERS[@]}" ;;
-  images) grep -oE '(ubuntu|cgr\.dev/chainguard/minio|localstack/localstack|motoserver/moto|adobe/s3mock|juicedata/mount):[A-Za-z0-9._-]+' "$0" | sort -u ;;
+  images) grep -oE '(alpine|cgr\.dev/chainguard/minio|localstack/localstack|motoserver/moto|adobe/s3mock|juicedata/mount):[A-Za-z0-9._-]+' "$0" | sort -u ;;
   *) echo "usage: $0 start|launch|stop|port <server> | list | images" >&2; exit 2 ;;
 esac

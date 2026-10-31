@@ -16,11 +16,11 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[derive(Parser)]
 #[command(version, about = "An in-memory S3 server for tests")]
 struct Opt {
-    #[arg(long, default_value = "127.0.0.1")]
+    #[arg(long, default_value = "127.0.0.1", env = "FAKES3_HOST")]
     host: String,
 
     /// Port to listen on; 0 picks a free port. The bound address is printed to stdout.
-    #[arg(long, default_value_t = 9000)]
+    #[arg(long, default_value_t = 9000, env = "FAKES3_PORT")]
     port: u16,
 
     #[arg(long, default_value = "fakes3", env = "FAKES3_ACCESS_KEY")]

@@ -41,7 +41,19 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
 
+      - uses: docker/setup-buildx-action@v3
+      - name: Build fakes3 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: fakes3:local
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Prepare binaries and images
+        env:
+          FAKES3_IMAGE_PREBUILT: "1"
         run: bench/setup.sh
 
       - name: Run benchmarks
