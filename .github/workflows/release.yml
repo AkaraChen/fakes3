@@ -10,7 +10,6 @@ name: release
 on:
   push:
     tags: ["v*"]
-    branches: [feat/distribution] # TEMPORARY: dry runs before this workflow reaches main
   workflow_dispatch:
     inputs:
       publish:
