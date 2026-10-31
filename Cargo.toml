@@ -30,3 +30,6 @@ uuid = { version = "1.29.0", features = ["v4"] }
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+
+[dev-dependencies]
+aws-sdk-s3 = { version = "1.157.0", features = ["behavior-version-latest"] }

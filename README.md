@@ -8,14 +8,13 @@
 
 ## 快速开始
 
-用 Docker：
+用 Docker（镜像说明见[下面](#docker-镜像ghcr)）：
 
 ```bash
-docker build -t fakes3 .
-docker run --rm -p 9000:9000 fakes3
+docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 ```
 
-镜像基于 Alpine，里面只有一个静态链接的 musl 二进制，压缩后约 7 MB。
+在测试代码里直接内嵌：[Rust](#rust-库模式)、[Node.js](#nodejs-绑定)。
 
 或者直接编译运行：
 
@@ -41,6 +40,165 @@ s3 = boto3.client(
 s3.create_bucket(Bucket="demo")
 s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 ```
+
+## Docker 镜像（GHCR）
+
+```bash
+docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3:latest
+```
+
+- 平台：`linux/amd64` 和 `linux/arm64`，同一个 tag 自动选择；镜像基于 Alpine，里面只有一个静态链接的 musl 二进制，压缩后约 7 MB。
+- tag：`latest`、完整版本（`0.1.0`）、`主版本.次版本`（`0.1`），以及提交的短 sha（`sha-abc1234`）。
+- 镜像里默认监听 `0.0.0.0:9000`，配置项见下面的[配置](#配置)，用环境变量（`FAKES3_*`）或命令行参数都可以。
+  启动完成后在 stdout 打印一行 `http://0.0.0.0:9000`，可以作为就绪信号。
+- 不想用 Docker 的话，每个 [release](https://github.com/AkaraChen/fakes3/releases) 里也有静态链接的
+  `fakes3-x86_64-unknown-linux-musl.tar.gz` 和 `fakes3-aarch64-unknown-linux-musl.tar.gz`（附 sha256）。
+- 自己构建：`docker build -t fakes3 .`
+
+发布由 [release workflow](.github/workflows/release.yml) 完成：推送 `v*` tag 时构建两个架构（各用原生 runner）、
+推送镜像并把二进制挂到 GitHub release；手动触发时 `publish` 默认是 `false`，只构建和冒烟测试，不推送任何东西。
+
+### 在 Testcontainers 里使用
+
+不需要专门的 Testcontainers 模块：通用容器（generic container）加一个等待策略就够了。
+暴露 9000 端口，等 stdout 里出现 `http://`（或者等端口监听），然后用映射出来的主机和端口作为 endpoint。
+客户端用 path-style 寻址，默认凭证 `fakes3` / `fakes3secret`。
+
+Python（[testcontainers-python](https://github.com/testcontainers/testcontainers-python)）：
+
+```python
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.waiting_utils import wait_for_logs
+
+with DockerContainer("ghcr.io/akarachen/fakes3:latest").with_exposed_ports(9000) as c:
+    wait_for_logs(c, "http://")
+    endpoint = f"http://{c.get_container_host_ip()}:{c.get_exposed_port(9000)}"
+    # boto3.client("s3", endpoint_url=endpoint, ...)
+```
+
+Node.js / TypeScript（[testcontainers-node](https://github.com/testcontainers/testcontainers-node)）：
+
+```ts
+import { GenericContainer, Wait } from "testcontainers";
+
+const container = await new GenericContainer("ghcr.io/akarachen/fakes3:latest")
+  .withExposedPorts(9000)
+  .withWaitStrategy(Wait.forLogMessage("http://"))
+  .start();
+const endpoint = `http://${container.getHost()}:${container.getMappedPort(9000)}`;
+// ...
+await container.stop();
+```
+
+Java（[Testcontainers for Java](https://java.testcontainers.org/)）：
+
+```java
+GenericContainer<?> s3 = new GenericContainer<>("ghcr.io/akarachen/fakes3:latest")
+    .withExposedPorts(9000)
+    .waitingFor(Wait.forLogMessage(".*http://.*\\n", 1));
+s3.start();
+String endpoint = "http://" + s3.getHost() + ":" + s3.getMappedPort(9000);
+```
+
+Go（[testcontainers-go](https://golang.testcontainers.org/)）：
+
+```go
+c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+    ContainerRequest: testcontainers.ContainerRequest{
+        Image:        "ghcr.io/akarachen/fakes3:latest",
+        ExposedPorts: []string{"9000/tcp"},
+        WaitingFor:   wait.ForLog("http://"),
+    },
+    Started: true,
+})
+host, _ := c.Host(ctx)
+port, _ := c.MappedPort(ctx, "9000")
+endpoint := fmt.Sprintf("http://%s:%s", host, port.Port())
+```
+
+其他语言（.NET、Rust、Ruby……）同理。容器启动只要几毫秒，所以可以每个测试类甚至每个测试起一个新的，不必共享。
+
+## Rust 库模式
+
+`fakes3` 同时是一个库：测试里直接在进程内启动服务，不需要 Docker，也不需要子进程。
+目前没有发布到 crates.io，用 git 依赖：
+
+```toml
+[dev-dependencies]
+fakes3 = { git = "https://github.com/AkaraChen/fakes3" }
+```
+
+异步测试：
+
+```rust
+let server = fakes3::Server::start(fakes3::Config::default()).await?;
+let endpoint = server.endpoint(); // "http://127.0.0.1:<随机端口>"
+// 用 endpoint 和 Config 里的凭证创建 S3 客户端，开启 path-style
+server.shutdown().await;
+```
+
+同步测试用 `Server::start_blocking`：服务跑在自己的后台 Tokio runtime 上，句柄 drop 时自动停止
+（可以在任何地方 drop，包括 async 代码里）：
+
+```rust
+let server = fakes3::Server::start_blocking(fakes3::Config::default())?;
+let endpoint = server.endpoint();
+// server 离开作用域时停止
+```
+
+- `Config::default()` 监听 `127.0.0.1` 的随机端口，所以并行的测试不会冲突；每个 `Server` 有独立的数据和虚拟时钟。
+- `Server::addr()` / `endpoint()` 返回实际绑定的地址；`shutdown()` 关闭监听并等待，端口随即可以复用。
+  已建立的连接会继续服务到客户端断开。
+- 完整例子：[examples/aws_sdk.rs](examples/aws_sdk.rs)（`cargo run --example aws_sdk`）、
+  [examples/blocking.rs](examples/blocking.rs)，用 `aws-sdk-s3` 的集成测试在 [tests/aws_sdk.rs](tests/aws_sdk.rs)。
+- 限制：只能在 Linux 上编译（大对象用 `memfd`）；编译时会从源码构建 OpenSSL，需要 `perl` 和 `make`。
+
+## Node.js 绑定
+
+[bindings/node/](bindings/node/) 是一个 [napi-rs](https://napi.rs) 插件，在 Node 进程里直接运行服务（不起子进程、不需要 Docker），
+包名 `fakes3`（**尚未发布到 npm**，名字见 [bindings/node/package.json](bindings/node/package.json)）。
+
+```ts
+import { start } from "fakes3";
+import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
+
+const server = await start(); // 默认监听 127.0.0.1 的随机端口
+const s3 = new S3Client({
+  endpoint: server.endpoint,
+  region: "us-east-1",
+  forcePathStyle: true,
+  credentials: { accessKeyId: server.accessKey, secretAccessKey: server.secretKey },
+});
+await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
+// ...
+await server.stop();
+```
+
+`start(options?)` 返回 `Promise<FakeS3Server>`，所有选项都可省略：
+
+| 选项 | 默认值 | 说明 |
+|---|---|---|
+| `host` | `127.0.0.1` | 监听地址 |
+| `port` | `0` | 监听端口，`0` 表示随机端口 |
+| `accessKey` / `secretKey` | `fakes3` / `fakes3secret` | 访问凭证 |
+| `noAuth` | `false` | 接受未签名的请求（SDK 发出的已签名请求在这个模式下目前会被拒绝，见 [TODO.md](TODO.md)） |
+| `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
+
+`FakeS3Server` 有只读属性 `endpoint`、`host`、`port`、`accessKey`、`secretKey`，以及 `stop(): Promise<void>`（可重复调用，调用后端口立即释放）。
+类型声明由 `napi build` 生成。
+
+预编译产物覆盖 Linux 的 x64 / arm64，glibc 和 musl（Alpine）都有，通过 `optionalDependencies` 里的
+`fakes3-linux-x64-gnu` 等平台包分发；macOS 和 Windows 暂不支持（服务端依赖 Linux 的 `memfd`）。
+自己编译：
+
+```bash
+cd bindings/node
+npm ci && npm run build   # 需要 Rust 工具链、perl 和 make
+npm test                  # 用 @aws-sdk/client-s3 跑一遍
+```
+
+CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并各自跑一遍测试；
+发布到 npm 只在推送 `v*` tag 或手动触发且 `publish: true` 时发生，其余情况只做 `npm publish --dry-run`。
 
 ## 配置
 
