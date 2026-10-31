@@ -4,6 +4,7 @@
 
 - **Pinned commit:** [`5b3987116eca0b4b8fa57d6b10f3db57bab196b6`](https://github.com/ceph/s3-tests/commit/5b3987116eca0b4b8fa57d6b10f3db57bab196b6) (master, 2026-10-12), 1053 collected test cases: `test_s3.py` 838 (760 functions, parametrized cases counted separately), `test_headers.py` 48, `test_iam.py` 90, `test_sts.py` 36, `test_s3select.py` 34, `test_sns.py` 5, `test_s3control.py` 1, `test_utils.py` 1.
 - **Measured:** fakes3 on branch `fix/s3-tests-cheap` (the "cheap fixes" below, merged with `main` after `--auth` became opt-in; the harness starts fakes3 with `--auth`), run [41206032373](https://github.com/AkaraChen/fakes3/actions/runs/41206032373); `main` at the same point, run [41206038045](https://github.com/AkaraChen/fakes3/actions/runs/41206038045), reproduces the earlier baseline exactly (475/816, run [41198487135](https://github.com/AkaraChen/fakes3/actions/runs/41198487135)). MinIO (`cgr.dev/chainguard/minio:latest`) and LocalStack 4.14 are references from that earlier run, run the same way. The numbers will move; the CI run is the source of truth, this file is a snapshot.
+- **S3 Select:** the fakes3 and fakes3-aws rows, the `test_s3select.py` row and the failure categories below were re-measured on `feat/s3-select` (run [41215597794](https://github.com/AkaraChen/fakes3/actions/runs/41215597794)) against `main` on the same harness (run [41214917154](https://github.com/AkaraChen/fakes3/actions/runs/41214917154): 569/1053, 513/816): 577/1053 and 521/816, 9 tests newly pass (`test_count_operation`, `test_column_sum_min_max`, `test_csv_definition`, `test_generate_projection`, `test_generate_where_clause`, `test_progress_expressions`, `test_lowerupper_expressions`, `test_alias_cyclic_refernce`, `test_json_nullif_expressions`), 1 newly fails (`test_csv_parser`, explained in the S3 Select groups below), the other 1043 are unchanged, for fakes3 and fakes3-aws alike. The MinIO and LocalStack columns are still from the earlier run.
 - **Baseline definition:** the headline numbers exclude the 237 tests s3-tests itself marks `fails_on_aws` (they pass on RGW and fail on AWS, so they say nothing about AWS compatibility); they are still run and listed separately. `fails_on_rgw` / `fails_on_dbstore` / `fails_on_dho` tests are AWS-valid and stay in.
 
 ## How to run
@@ -45,8 +46,8 @@ python3 conformance/s3-tests/report.py conformance/s3-tests/results --src confor
 
 | server | pass | fail | error | skip | total | pass rate | pass rate excl. skips | runtime |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
-| fakes3 | 513 | 232 | 0 | 71 | 816 | 62.9% | 68.9% | 2m18s |
-| fakes3-aws | 417 | 328 | 0 | 71 | 816 | 51.1% | 56.0% | 2m45s |
+| fakes3 | 521 | 224 | 0 | 71 | 816 | 63.8% | 69.9% | 2m28s |
+| fakes3-aws | 425 | 320 | 0 | 71 | 816 | 52.1% | 57.0% | 2m13s |
 | localstack | 404 | 341 | 0 | 71 | 816 | 49.5% | 54.2% | 3m50s |
 | minio | 358 | 387 | 0 | 71 | 816 | 43.9% | 48.1% | 3m45s |
 
@@ -54,8 +55,8 @@ python3 conformance/s3-tests/report.py conformance/s3-tests/results --src confor
 
 | server | pass | fail | error | skip | total | pass rate | pass rate excl. skips | runtime |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
-| fakes3 | 569 | 321 | 0 | 163 | 1053 | 54.0% | 63.9% | 2m18s |
-| fakes3-aws | 457 | 433 | 0 | 163 | 1053 | 43.4% | 51.3% | 2m45s |
+| fakes3 | 577 | 313 | 0 | 163 | 1053 | 54.8% | 64.8% | 2m28s |
+| fakes3-aws | 465 | 425 | 0 | 163 | 1053 | 44.2% | 52.2% | 2m13s |
 | localstack | 450 | 440 | 0 | 163 | 1053 | 42.7% | 50.6% | 3m50s |
 | minio | 386 | 504 | 0 | 163 | 1053 | 36.7% | 43.4% | 3m45s |
 
@@ -67,7 +68,7 @@ python3 conformance/s3-tests/report.py conformance/s3-tests/results --src confor
 | test_iam.py | 0/88 | 0/88 | 0/88 | 2/88 |
 | test_s3.py | 467/603 | 372/603 | 355/603 | 313/603 |
 | test_s3control.py | 0/1 | 0/1 | 0/1 | 0/1 |
-| test_s3select.py | 22/34 | 22/34 | 22/34 | 19/34 |
+| test_s3select.py | 30/34 | 30/34 | 22/34 | 19/34 |
 | test_sns.py | 0/5 | 0/5 | 0/5 | 0/5 |
 | test_sts.py | 0/36 | 0/36 | 0/36 | 0/36 |
 | test_utils.py | 1/1 | 1/1 | 1/1 | 1/1 |
@@ -77,10 +78,10 @@ python3 conformance/s3-tests/report.py conformance/s3-tests/results --src confor
 | category | failing tests | groups |
 |---|--:|--:|
 | Real fakes3 bug (wrong status / code / header / body vs AWS) | 22 | 10 |
-| Unimplemented feature | 20 | 5 |
+| Unimplemented feature | 8 | 4 |
 | Needs several users / tenants / IAM / STS (the servers know one credential) | 99 | 3 |
 | s3s limitation (verified in the s3s source) | 25 | 5 |
-| Test is not AWS-compatible / RGW-specific / ineffective with boto3 (not marked by s3-tests) | 66 | 14 |
+| Test is not AWS-compatible / RGW-specific / ineffective with boto3 (not marked by s3-tests) | 70 | 17 |
 | Marked `fails_on_aws` by s3-tests itself (excluded from the baseline) | 89 | 1 |
 
 ### Real fakes3 bug (wrong status / code / header / body vs AWS): 22 tests
@@ -145,17 +146,7 @@ Tests: `test_object_content_encoding_aws_chunked`
 
 Tests: `test_object_read_unreadable`
 
-### Unimplemented feature: 20 tests
-
-#### s3select (12)
-
-S3 Select: `SelectObjectContent` is implemented only in part (NotImplemented for several query shapes); the remaining shapes below fail on the engine's output.
-
-- 8 × `ClientError NotImplemented on SelectObjectContent` — `test_column_sum_min_max`, `test_count_json_operation`, `test_count_operation`, … (8)
-- 1 × `assert -N >= N` — `test_alias_cyclic_refernce`
-- 1 × `AssertionError: assert 'An error occ...plemented yet' == 'abNcd$$'` — `test_lowerupper_expressions`
-- 1 × `ValueError: too many values to unpack (expected N)` — `test_progress_expressions`
-- 1 × `AssertionError: assert -N >= N` — `test_schema_definition`
+### Unimplemented feature: 8 tests
 
 #### PutBucketLogging / bucket logging (NotImplemented) (5)
 
@@ -243,7 +234,7 @@ Tests: `test_object_create_amz_date_and_no_date`, `test_object_create_date_and_a
 
 Tests: `test_object_write_with_chunked_transfer_encoding`
 
-### Test is not AWS-compatible / RGW-specific / ineffective with boto3 (not marked by s3-tests): 66 tests
+### Test is not AWS-compatible / RGW-specific / ineffective with boto3 (not marked by s3-tests): 70 tests
 
 #### SSE-KMS tests expect the key id echoed verbatim; AWS (and fakes3) return the key ARN (22)
 
@@ -329,6 +320,24 @@ Tests: `test_object_set_get_unicode_metadata`
 
 Tests: `test_sse_kms_no_key`
 
+#### S3 Select with JSON output: the tests int() the whole result, AWS answers `{"_1":N}` (2)
+
+`ValueError: invalid literal for int() with base 10: '{"_1":1}'`. `run_s3select_json` asks for JSON output and the tests parse the result as a bare number, which is what Ceph's engine writes for an aggregate; AWS writes one JSON object per record keyed `_1`, `_2`, …, which is what fakes3 returns. The queries themselves run (`count(0) from s3object[*].root`, `min(_1.c1)`).
+
+Tests: `test_count_json_operation`, `test_json_column_sum_min_max`
+
+#### S3 Select: the CSV test expects an empty field to be written as `null` (1)
+
+`assert '' != ''` for `select _1 from s3object` on a row that starts with an empty field. Ceph's engine writes NULL as `null`; AWS reads an empty CSV field as an empty string and writes it back as an empty field (a NULL in CSV output is empty too), which is what fakes3 does. The test passed before only because SelectObjectContent answered NotImplemented, a non-empty string: the one test that went from passing to failing with S3 Select.
+
+Tests: `test_csv_parser`
+
+#### S3 Select: the test looks for Ceph's own error text (`ProcessingTimeError`, `multiple definition of column`) (1)
+
+`assert -1 >= 0` on `find('alias {c11} or column not exist in schema')`: the test searches the error for Ceph's wording and code. fakes3 answers a column that the header lacks with 400 `MissingHeaders`, the S3 code for it.
+
+Tests: `test_schema_definition`
+
 ### Marked `fails_on_aws` by s3-tests itself (excluded from the baseline): 89 tests
 
 - 31 × `ClientError NotImplemented on PutBucketLogging` — `test_bucket_logging_bucket_acl_required`, `test_bucket_logging_bucket_auth_type`, `test_bucket_logging_copy_objects`, … (31)
@@ -387,15 +396,15 @@ Tests: `test_sse_kms_no_key`
 
 ## Prioritised backlog
 
-Numbers are failing AWS-applicable tests on fakes3 with the default (`legacy`) bucket defaults; today 513 of 816 pass (62.9%).
+Numbers are failing AWS-applicable tests on fakes3 with the default (`legacy`) bucket defaults; today 521 of 816 pass (63.8%) with S3 Select (`feat/s3-select`), 513 on `main`.
 
 1. **Cheap fakes3 fixes: done on `fix/s3-tests-cheap`, +38 tests (475 → 513/816, 58.2% → 62.9%; 0 newly failing; fakes3-aws 382 → 417).** Request ids on every response, error body and request-log record; `CreateBucket` on an owned bucket → 200; `GetObject ?partNumber` part checksum + `x-amz-checksum-type`; SSE-C `UploadPart` with another key → 400 `InvalidRequest`; ListObjects `<Marker/>`, `Owner` (v1, v2 with `fetch-owner`), no empty `Delimiter`, `%20` for spaces under `encoding-type=url`; Object Lock mode change needs the bypass, `InvalidRetentionPeriod`; `DeleteObjects` > 1000 keys → `MalformedXML`; `Content-MD5` empty / not 16 bytes → `InvalidDigest`; generated lifecycle rule ID; SSE headers on GET/HEAD → 400; `x-amz-version-id` only for Enabled versioning; `MFADelete: Disabled` without token; default `Content-Type`; 11 tags → `InvalidTag`; header tags sorted; NotPrincipal+Allow → `MalformedPolicy`; request-level checksum on Complete → `BadDigest`; `x-amz-expected-bucket-owner` → 403.
-   Not done from the original list (46 tests): the three `test_copy_part_enc[…-sse-c-…]` cases (they stop at `CompleteMultipartUpload` without the SSE-C key, not at UploadPart: unconfirmed AWS behaviour, see the group above), `test_object_read_unreadable` (the non-UTF-8 key case already gave 400; the test sends valid UTF-8 C1 controls), and `test_json_column_sum_min_max` (its bucket is now created twice fine, then it hits `SelectObjectContent` NotImplemented).
+   Not done from the original list (46 tests): the three `test_copy_part_enc[…-sse-c-…]` cases (they stop at `CompleteMultipartUpload` without the SSE-C key, not at UploadPart: unconfirmed AWS behaviour, see the group above), `test_object_read_unreadable` (the non-UTF-8 key case already gave 400; the test sends valid UTF-8 C1 controls), and `test_json_column_sum_min_max` (its bucket is now created twice fine; it now fails on the JSON output shape, see the S3 Select groups).
 2. **Second identity support in fakes3 (unlocks the 36 "multi-user" tests plus whatever they hide).** Add repeatable credentials (e.g. `--user name:access:secret[:canonical-id]`, tenants as a naming rule) and point `[s3 alt]` / `[s3 tenant]` at them. Those 36 tests are the bulk of S3 access-control semantics (bucket / object ACL grants between users, policy principals, `test_access_*`, ownership, cross-user copy and multipart owner fields); today they cannot tell us anything. Re-triage afterwards: a few will turn into real bugs.
 3. **Medium fixes, 15 tests:** `GetBucketPolicyStatus` computed from ACL/policy when no policy exists (5), delimiter + prefix + max-keys pagination (4), POST-policy extras: expiration format, redirect `%22`, `tagging` field, checksum fields (4), CORS wildcard origins (1), `ListBuckets` `MaxBuckets`/`ContinuationToken` (1).
 4. **s3s-bound, 25 tests; needs upstream patches or a fakes3 pre-processing layer.** (a) SigV2 on bucket-level requests (8): botocore signs `/bucket/`, s3s signs the wire path `/bucket`; this breaks every SigV2 bucket call from boto3, so it is the one with real user impact; the fix belongs in `s3s` (use `/bucket/` as the canonical resource of a bucket-level path-style request). (b) SigV2 date errors map to 400 instead of 403 (10). (c) POST policy violations give 400 `InvalidPolicyDocument`, AWS 403 (4). (d) `Transfer-Encoding: chunked` PutObject (1) and RFC 1123 `x-amz-date` (2).
-5. **Unimplemented features:** bucket logging (5 tests + 31 `fails_on_aws` ones that test RGW's extension; large, probably not worth it for a test double), `GetObjectTorrent` (1, AWS deprecated it), S3 Select edge shapes (12 failing of 34; the engine exists), SNS / S3 Control (6, other services), IAM / STS (63, other services — recommend leaving out of scope and filtering `-k 'not iam and not sts'`).
-6. **Keep out of the target:** the 66 test-defect tests (ineffective header manipulation, py3 sort bug, RGW-only expectations) and the 89 marked ones. Do not "fix" fakes3 for them; most contradict AWS. A `-k`/`--deselect` list derived from `triage.json` could make the CI run green-or-explained; not done here.
+5. **Unimplemented features:** bucket logging (5 tests + 31 `fails_on_aws` ones that test RGW's extension; large, probably not worth it for a test double), `GetObjectTorrent` (1, AWS deprecated it), SNS / S3 Control (6, other services), IAM / STS (63, other services — recommend leaving out of scope and filtering `-k 'not iam and not sts'`).
+6. **Keep out of the target:** the 70 test-defect tests (ineffective header manipulation, py3 sort bug, RGW-only expectations) and the 89 marked ones. Do not "fix" fakes3 for them; most contradict AWS. A `-k`/`--deselect` list derived from `triage.json` could make the CI run green-or-explained; not done here.
 
 ### Not run / could not get working
 

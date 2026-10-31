@@ -2247,6 +2247,10 @@ impl S3 for FakeS3 {
         self.do_delete_bucket_encryption(req).await
     }
 
+    async fn select_object_content(&self, req: S3Request<SelectObjectContentInput>) -> S3Result<S3Response<SelectObjectContentOutput>> {
+        self.do_select_object_content(req).await
+    }
+
     async fn get_object_attributes(&self, req: S3Request<GetObjectAttributesInput>) -> S3Result<S3Response<GetObjectAttributesOutput>> {
         self.do_get_object_attributes(req).await
     }
