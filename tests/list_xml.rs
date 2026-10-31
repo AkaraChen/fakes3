@@ -16,6 +16,9 @@ use fakes3::{Config, Server};
 mod common;
 use common::{Resp, req, send};
 
+/// The fast-path counters are process-wide: tests that read them one at a time.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 struct Rng(u64);
 
 impl Rng {
@@ -181,6 +184,8 @@ enum Auth {
     Signed,
     Anon,
     Unverified,
+    /// Signed with this access key and secret: another account when the server has several.
+    SignedBy(&'static str, &'static str),
 }
 
 #[derive(Debug)]
@@ -214,8 +219,13 @@ struct Side {
 
 impl Side {
     async fn start(fast_list: bool) -> Self {
+        Self::start_with(fast_list, Vec::new()).await
+    }
+
+    async fn start_with(fast_list: bool, users: Vec<fakes3::UserConfig>) -> Self {
         let server = Server::start(Config {
             fast_list,
+            users,
             request_log: false,
             ..Config::default()
         })
@@ -291,6 +301,7 @@ impl Side {
             Auth::Signed => r,
             Auth::Anon => r.anon(),
             Auth::Unverified => r.unverified(),
+            Auth::SignedBy(access, secret) => r.signed_by(access, secret),
         };
         let mut resp = send(self.addr, r).await;
         for (k, v) in &mut resp.headers {
@@ -775,6 +786,7 @@ struct Stats {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn fast_and_dto_list_responses_are_identical() {
+    let _serial = ONE_AT_A_TIME.lock().await;
     let seed = env_num("FAKES3_LIST_SEED", 0x11_5EED);
     let scale = env_num("FAKES3_LIST_SCALE", 1) as usize;
     let (fast_before, fallback_before) = fakes3::list_fast_path_counters();
@@ -858,4 +870,94 @@ async fn fast_and_dto_list_responses_are_identical() {
         "{fast} fast renders for {} successful lists",
         p.ok_lists
     );
+}
+
+/// Per-object owners: the direct renderer writes each owner from the account table, the s3s path
+/// serializes a DTO per key; they must agree for objects, versions and delete markers written by
+/// several accounts, with names that need escaping.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn fast_and_dto_list_responses_are_identical_with_several_owners() {
+    let _serial = ONE_AT_A_TIME.lock().await;
+    const ALT: (&str, &str) = ("ALTKEY", "ALTSECRET");
+    const ODD: (&str, &str) = ("ODDKEY", "ODDSECRET");
+    let users = || -> Vec<fakes3::UserConfig> {
+        vec![
+            "alt:ALTKEY:ALTSECRET:222222222222:56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234"
+                .parse()
+                .unwrap(),
+            "o<d&d:ODDKEY:ODDSECRET".parse().unwrap(),
+        ]
+    };
+    let seed = env_num("FAKES3_LIST_SEED", 0x11_5EED);
+    let mut p = Pair {
+        fast: Side::start_with(true, users()).await,
+        slow: Side::start_with(false, users()).await,
+        rng: Rng(seed),
+        seed,
+        compared: 0,
+        nonempty: 0,
+        ok_lists: 0,
+        failed_lists: 0,
+        features: Vec::new(),
+    };
+    let as_user = |who: Option<(&'static str, &'static str)>, method: &'static str, path: String, query: &str, body: &[u8]| {
+        let mut o = op(method, path);
+        o.query = query.to_owned();
+        o.body = body.to_vec();
+        if let Some((a, s)) = who {
+            o.auth = Auth::SignedBy(a, s);
+        }
+        o
+    };
+    let writers = [None, Some(ALT), Some(ODD)];
+    for bucket in ["owners", "owners-ver"] {
+        p.both(&as_user(None, "PUT", format!("/{bucket}"), "", b"")).await;
+        let mut o = as_user(None, "PUT", format!("/{bucket}"), "acl", b"");
+        o.headers.push(("x-amz-acl".into(), "public-read-write".into()));
+        p.both(&o).await;
+        if bucket == "owners-ver" {
+            p.both(&as_user(None, "PUT", format!("/{bucket}"), "versioning", VERSIONING.as_bytes()))
+                .await;
+        }
+        for i in 0..40 {
+            let key = format!("{}/k{i:02}", ["a", "b&c", "日本"][i % 3]);
+            let who = *p.rng.pick(&writers);
+            p.both(&as_user(who, "PUT", format!("/{bucket}/{}", pct(&key, true)), "", b"x"))
+                .await;
+            if bucket == "owners-ver" && p.rng.one_in(3) {
+                let who = *p.rng.pick(&writers);
+                p.both(&as_user(who, "PUT", format!("/{bucket}/{}", pct(&key, true)), "", b"y"))
+                    .await;
+            }
+            if p.rng.one_in(4) {
+                let who = *p.rng.pick(&writers);
+                p.both(&as_user(who, "DELETE", format!("/{bucket}/{}", pct(&key, true)), "", b""))
+                    .await;
+            }
+        }
+        let mut owners_seen = [false; 3];
+        for who in writers {
+            for (query, name) in [
+                ("", "v1"),
+                ("list-type=2&fetch-owner=true", "v2"),
+                ("list-type=2", "v2 without owners"),
+                ("versions", "versions"),
+                ("max-keys=7", "v1 paged"),
+                ("list-type=2&fetch-owner=true&max-keys=5&delimiter=%2F", "v2 folded"),
+                ("versions&max-keys=6", "versions paged"),
+                ("encoding-type=url", "v1 url"),
+            ] {
+                let r = p.both(&as_user(who, "GET", format!("/{bucket}"), query, b"")).await;
+                assert_eq!(r.status, 200, "{name}: {}", r.body);
+                for (seen, needle) in
+                    owners_seen
+                        .iter_mut()
+                        .zip(["<DisplayName>fakes3<", "<DisplayName>alt<", "<DisplayName>o&lt;d&amp;d<"])
+                {
+                    *seen |= r.body.contains(needle);
+                }
+            }
+        }
+        assert_eq!(owners_seen, [true; 3], "{bucket}: every account owns something that was listed");
+    }
 }

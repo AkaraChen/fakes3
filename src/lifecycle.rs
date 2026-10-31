@@ -27,6 +27,7 @@ use s3s::{S3Result, s3_error};
 
 use crate::bucket_config::BucketConfig;
 use crate::store::{Bucket, Entry, Object, Version, Versioning, new_version_id};
+use crate::users::UserId;
 
 const DAY: i64 = 86_400;
 
@@ -453,7 +454,7 @@ pub fn sweep(lc: &Lifecycle, bucket: &Bucket, now: SystemTime) {
         let mut objects = bucket.objects.write();
         let mut emptied = Vec::new();
         for (key, entry) in objects.iter_mut() {
-            sweep_entry(lc, key, entry, mode, now_secs);
+            sweep_entry(lc, key, entry, mode, now_secs, bucket.owner);
             if entry.versions.is_empty() {
                 emptied.push(key.clone());
             }
@@ -491,7 +492,7 @@ fn moved(obj: &Object, candidates: impl Iterator<Item = (&'static str, i64)>) ->
     Some(out)
 }
 
-fn sweep_entry(lc: &Lifecycle, key: &str, entry: &mut Entry, mode: Versioning, now: i64) {
+fn sweep_entry(lc: &Lifecycle, key: &str, entry: &mut Entry, mode: Versioning, now: i64, bucket_owner: UserId) {
     // The current version first moves down the storage class waterfall (what was due before it
     // expired), then expires.
     let expires_at = entry.current().and_then(|obj| {
@@ -510,6 +511,7 @@ fn sweep_entry(lc: &Lifecycle, key: &str, entry: &mut Entry, mode: Versioning, n
             id: latest.id.clone(),
             obj: Some(moved),
             last_modified: latest.last_modified,
+            owner: latest.owner,
         });
     }
 
@@ -532,6 +534,8 @@ fn sweep_entry(lc: &Lifecycle, key: &str, entry: &mut Entry, mode: Versioning, n
                     obj: None,
                     // The marker appears when the rule fires, not when we got around to it.
                     last_modified: UNIX_EPOCH + Duration::from_secs(at.max(0) as u64),
+                    // Nobody asked for it: the bucket owner's rule did.
+                    owner: bucket_owner,
                 }));
             }
         }
@@ -577,6 +581,7 @@ fn sweep_entry(lc: &Lifecycle, key: &str, entry: &mut Entry, mode: Versioning, n
                     id: v.id.clone(),
                     obj: Some(moved),
                     last_modified: v.last_modified,
+                    owner: v.owner,
                 });
             }
         }
@@ -642,6 +647,7 @@ mod tests {
             id: id.into(),
             obj,
             last_modified: at,
+            owner: UserId::DEFAULT,
         })
     }
 
@@ -665,9 +671,9 @@ mod tests {
         let mut e = Entry::default();
         e.versions
             .push(version("null", Some(object(at(0) + Duration::from_secs(10))), at(0)));
-        sweep_entry(&l, "k", &mut e, Versioning::Unversioned, DAY);
+        sweep_entry(&l, "k", &mut e, Versioning::Unversioned, DAY, UserId::DEFAULT);
         assert_eq!(e.versions.len(), 1);
-        sweep_entry(&l, "k", &mut e, Versioning::Unversioned, 2 * DAY);
+        sweep_entry(&l, "k", &mut e, Versioning::Unversioned, 2 * DAY, UserId::DEFAULT);
         assert!(e.versions.is_empty());
     }
 
@@ -694,14 +700,14 @@ mod tests {
         .unwrap();
         let mut e = Entry::default();
         e.versions.push(version("v1", Some(object(at(0))), at(0)));
-        sweep_entry(&l, "k", &mut e, Versioning::Enabled, DAY);
+        sweep_entry(&l, "k", &mut e, Versioning::Enabled, DAY, UserId::DEFAULT);
         assert_eq!(e.versions.len(), 2);
         assert!(e.versions[1].obj.is_none());
         // Not yet noncurrent for a full day.
-        sweep_entry(&l, "k", &mut e, Versioning::Enabled, DAY);
+        sweep_entry(&l, "k", &mut e, Versioning::Enabled, DAY, UserId::DEFAULT);
         assert_eq!(e.versions.len(), 2);
         // Well past both deadlines: the old version goes, then the lone marker goes with it.
-        sweep_entry(&l, "k", &mut e, Versioning::Enabled, 5 * DAY);
+        sweep_entry(&l, "k", &mut e, Versioning::Enabled, 5 * DAY, UserId::DEFAULT);
         assert!(e.versions.is_empty());
     }
 
@@ -718,7 +724,7 @@ mod tests {
         for i in 0..5 {
             e.versions.push(version(&format!("v{i}"), Some(object(at(i))), at(i)));
         }
-        sweep_entry(&l, "k", &mut e, Versioning::Enabled, 100 * DAY);
+        sweep_entry(&l, "k", &mut e, Versioning::Enabled, 100 * DAY, UserId::DEFAULT);
         let ids: Vec<_> = e.versions.iter().map(|v| v.id.clone()).collect();
         assert_eq!(ids, ["v2", "v3", "v4"], "current plus the 2 newest noncurrent stay");
     }
@@ -738,9 +744,9 @@ mod tests {
         .unwrap();
         let mut keep = Entry::default();
         keep.versions.push(version("null", Some(object(at(0))), at(0)));
-        sweep_entry(&l, "data/x", &mut keep, Versioning::Unversioned, 10 * DAY);
+        sweep_entry(&l, "data/x", &mut keep, Versioning::Unversioned, 10 * DAY, UserId::DEFAULT);
         assert_eq!(keep.versions.len(), 1);
-        sweep_entry(&l, "logs/x", &mut keep, Versioning::Unversioned, 10 * DAY);
+        sweep_entry(&l, "logs/x", &mut keep, Versioning::Unversioned, 10 * DAY, UserId::DEFAULT);
         assert!(keep.versions.is_empty());
     }
 

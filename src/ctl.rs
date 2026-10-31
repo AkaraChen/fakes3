@@ -253,6 +253,15 @@ fn print_human(command: &Command, v: &Value) {
             );
             println!("new buckets    {} defaults", text(v, "bucket_defaults"));
             println!("auth           {}", text(v, "auth"));
+            for u in v["users"].as_array().into_iter().flatten() {
+                println!(
+                    "user           {} (access key {}, account {}, canonical id {})",
+                    text(u, "name"),
+                    text(u, "access_key"),
+                    text(u, "account_id"),
+                    text(u, "canonical_id")
+                );
+            }
             println!("snapshots      {}", v["snapshots"]);
             print_log_config(&v["request_log"]);
         }

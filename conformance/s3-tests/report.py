@@ -164,7 +164,7 @@ def pct(passed, total):
 
 
 AUTO_WHY = {
-    "multi-user": "The test's call graph reaches `get_alt_*`, `get_tenant_*` or `get_iam_*` (found by static analysis of the s3-tests source). The runner maps every identity to the one credential the servers know, so a second user is the bucket owner and the expected `AccessDenied` / owner mismatch cannot happen. Individual failures were not inspected one by one: a real bug can hide behind the missing second identity.",
+    "multi-user": "The test's call graph reaches `get_alt_*`, `get_tenant_*` or `get_iam_*` (found by static analysis of the s3-tests source) and nobody has triaged why it fails. On fakes3 `alt` and `tenant` are separate accounts (run.sh); on the other servers every user is the one credential they know, so the expected `AccessDenied` / owner mismatch cannot happen.",
     "iam": "IAM API calls (`PutUserPolicy`, `CreateUser`, …) go to a server that has no IAM service.",
     "sts": "STS (`AssumeRole`, `GetSessionToken`, `GetCallerIdentity`, web identity) needs an STS service and, for web identity, an external Keycloak configured in `[webidentity]`.",
     "s3select": "S3 Select: `SelectObjectContent` runs a subset of the SQL dialect over CSV and JSON (see docs/select.md); whatever is listed here fails on a shape it does not run or on output that differs from what the test expects.",
@@ -174,7 +174,7 @@ AUTO_WHY = {
 CATEGORIES = [
     ("bug", "Real fakes3 bug (wrong status / code / header / body vs AWS)"),
     ("unimplemented", "Unimplemented feature"),
-    ("identity", "Needs several users / tenants / IAM / STS (the servers know one credential)"),
+    ("identity", "Needs several users / tenants / IAM / STS"),
     ("s3s", "s3s limitation (verified in the s3s source)"),
     ("test-defect", "Test is not AWS-compatible / RGW-specific / ineffective with boto3 (not marked by s3-tests)"),
     ("marked-not-aws", "Marked `fails_on_aws` by s3-tests itself (excluded from the baseline)"),

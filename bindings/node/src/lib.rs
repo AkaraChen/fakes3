@@ -25,9 +25,14 @@ pub struct StartOptions {
     pub access_key: Option<String>,
     /// Secret key clients must sign with when `auth` is on. Default `fakes3secret`.
     pub secret_key: Option<String>,
-    /// Verify request signatures against `accessKey` / `secretKey`. By default (`false`) a request
-    /// signed with any access key and secret is accepted and acts as the bucket owner, while an
-    /// unsigned request is anonymous and subject to ACLs, bucket policies and Block Public Access.
+    /// More accounts besides the one `accessKey` / `secretKey` belongs to (named `fakes3`, which
+    /// owns everything the others do not). Each owns the buckets and objects it creates, so ACL
+    /// grants, bucket policy principals and object ownership work across them.
+    pub users: Option<Vec<UserOption>>,
+    /// Verify request signatures against the accounts' credentials. By default (`false`) a request
+    /// signed with any access key and secret is accepted and acts as the account its access key
+    /// belongs to (`fakes3` if none does), while an unsigned request is anonymous and subject to
+    /// ACLs, bucket policies and Block Public Access.
     pub auth: Option<bool>,
     /// Objects and parts at or above this many bytes are stored in a memfd instead of on the heap.
     /// Default 1 MiB.
@@ -47,6 +52,29 @@ pub struct StartOptions {
     pub request_log: Option<bool>,
     /// How many requests the log keeps; the oldest are dropped first. Default 10000.
     pub request_log_capacity: Option<u32>,
+}
+
+/// An account to run requests as, for [`StartOptions::users`].
+#[napi(object)]
+pub struct UserOption {
+    /// Shown as the DisplayName of the owner; also the user name in `arn:aws:iam::<account>:user/<name>`.
+    pub name: String,
+    pub access_key: String,
+    pub secret_key: String,
+    /// Twelve digits. Default `000000000001`, `000000000002`, ... in order.
+    pub account_id: Option<String>,
+    /// What ACLs call the account. Default: 64 hexadecimal digits derived from the account id.
+    pub canonical_id: Option<String>,
+}
+
+/// An account of the server, as configured or with the ids it was given.
+#[napi(object)]
+pub struct UserInfo {
+    pub name: String,
+    pub access_key: String,
+    pub secret_key: String,
+    pub account_id: String,
+    pub canonical_id: String,
 }
 
 /// A reading of the server's memory accounting.
@@ -99,6 +127,23 @@ impl FakeS3Server {
     #[napi(getter)]
     pub fn secret_key(&self) -> String {
         self.secret_key.clone()
+    }
+
+    /// The accounts, the default one first.
+    #[napi(getter)]
+    pub fn users(&self) -> Result<Vec<UserInfo>> {
+        with_server(&self.server, |s| {
+            s.users()
+                .iter()
+                .map(|(_, u)| UserInfo {
+                    name: u.name.clone(),
+                    access_key: u.access_key.clone(),
+                    secret_key: u.secret_key().to_owned(),
+                    account_id: u.account_id.clone(),
+                    canonical_id: u.canonical_id.clone(),
+                })
+                .collect()
+        })
     }
 
     /// The server's clock: freeze it, move it, or let it run.
@@ -250,6 +295,7 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         port: None,
         access_key: None,
         secret_key: None,
+        users: None,
         auth: None,
         inline_threshold: None,
         domains: None,
@@ -263,6 +309,18 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         port: options.port.unwrap_or(defaults.port),
         access_key: options.access_key.unwrap_or(defaults.access_key),
         secret_key: options.secret_key.unwrap_or(defaults.secret_key),
+        users: options
+            .users
+            .into_iter()
+            .flatten()
+            .map(|u| fakes3::UserConfig {
+                name: u.name,
+                access_key: u.access_key,
+                secret_key: u.secret_key,
+                account_id: u.account_id,
+                canonical_id: u.canonical_id,
+            })
+            .collect(),
         auth: options.auth.unwrap_or(defaults.auth),
         inline_threshold: options.inline_threshold.map_or(defaults.inline_threshold, |n| n as usize),
         domains: options.domains.unwrap_or(defaults.domains),

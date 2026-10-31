@@ -1,9 +1,10 @@
 //! Bucket policies: validation on PUT and evaluation per request.
 //!
 //! Documents are parsed with `s3s-policy`'s model (it has no evaluator, so the matching lives
-//! here). A request is evaluated against one bucket policy as AWS does within an account:
-//! an explicit Deny always wins, an Allow only matters for requests that would otherwise have no
-//! permission (anonymous ones, since the single signed-in identity is the account root).
+//! here). A request is evaluated against one bucket policy: an explicit Deny always wins, an Allow
+//! only matters for requests that would otherwise have no permission (anonymous ones and other
+//! accounts' — an account's own root is allowed anyway). Principals are matched against the
+//! requester's identity ([`crate::users`]).
 
 use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,9 +15,8 @@ use s3s::{S3Error, S3ErrorCode, S3Result};
 use s3s_policy::model::{self as m, ActionRule, Effect, Principal, PrincipalRule, ResourceRule};
 
 use crate::bucket_config::custom_error;
+use crate::users::User;
 
-/// The account every signed request belongs to.
-pub const ACCOUNT_ID: &str = "000000000000";
 const MAX_POLICY_BYTES: usize = 20 * 1024;
 
 pub struct Policy {
@@ -26,6 +26,9 @@ pub struct Policy {
     pub public: bool,
     /// Whether a condition refers to the client address, so the server must record peer addresses.
     pub uses_source_ip: bool,
+    /// Whether a condition refers to the tags the object already has (`s3:ExistingObjectTag/<key>`),
+    /// so evaluating the policy needs the object.
+    pub uses_object_tags: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -36,14 +39,27 @@ pub enum Verdict {
 }
 
 /// What a policy condition can ask about the request.
+#[derive(Clone, Copy)]
 pub struct Context<'a> {
     pub headers: &'a HeaderMap,
     pub query: &'a str,
     pub now: SystemTime,
-    pub signed: bool,
-    /// The signature was in the query string rather than a header. Only meaningful when `signed`.
+    /// Who sent the request; `None` is anonymous.
+    pub user: Option<&'a User>,
+    /// The signature was in the query string rather than a header. Only meaningful for a signed request.
     pub presigned: bool,
     pub peer: Option<IpAddr>,
+    /// `s3:prefix` when the request is not a listing: the key whose absence is being judged by
+    /// the right to list (RGW answers that way, S3 does not document it).
+    pub prefix: Option<&'a str>,
+    /// The tags of the object the request is about, when the policy asks (`uses_object_tags`).
+    pub existing_tags: Option<&'a [(String, String)]>,
+}
+
+impl Context<'_> {
+    pub fn signed(&self) -> bool {
+        self.user.is_some()
+    }
 }
 
 fn malformed(msg: &'static str) -> S3Error {
@@ -69,6 +85,7 @@ impl Policy {
             doc,
             public: false,
             uses_source_ip: false,
+            uses_object_tags: false,
         };
         p.public = p.doc.statement.as_slice().iter().any(statement_is_public);
         p.uses_source_ip = p.doc.statement.as_slice().iter().any(|s| {
@@ -76,6 +93,12 @@ impl Policy {
                 .iter()
                 .flat_map(|c| c.0.values())
                 .any(|kv| kv.0.keys().any(|k| k.eq_ignore_ascii_case("aws:SourceIp")))
+        });
+        p.uses_object_tags = p.doc.statement.as_slice().iter().any(|s| {
+            s.condition
+                .iter()
+                .flat_map(|c| c.0.values())
+                .any(|kv| kv.0.keys().any(|k| k.to_ascii_lowercase().starts_with("s3:existingobjecttag/")))
         });
         Ok(p)
     }
@@ -97,7 +120,7 @@ impl Policy {
 }
 
 fn statement_applies(st: &m::Statement, action: &str, resource: &str, ctx: &Context<'_>) -> bool {
-    principal_matches(st.principal.as_ref(), ctx.signed)
+    principal_matches(st.principal.as_ref(), ctx.user)
         && match &st.action {
             ActionRule::Action(a) => list_matches(a.as_slice(), action, true),
             ActionRule::NotAction(a) => !list_matches(a.as_slice(), action, true),
@@ -138,14 +161,7 @@ pub fn wildcard(pattern: &str, text: &str, case_insensitive: bool) -> bool {
     p[pi..].iter().all(|b| *b == b'*')
 }
 
-fn is_account_principal(s: &str) -> bool {
-    s == ACCOUNT_ID
-        || s.strip_prefix("arn:aws:iam::")
-            .and_then(|r| r.strip_prefix(ACCOUNT_ID))
-            .is_some_and(|r| r.starts_with(':'))
-}
-
-fn principal_matches(rule: Option<&PrincipalRule>, signed: bool) -> bool {
+fn principal_matches(rule: Option<&PrincipalRule>, user: Option<&User>) -> bool {
     let (p, negate) = match rule {
         Some(PrincipalRule::Principal(p)) => (p, false),
         Some(PrincipalRule::NotPrincipal(p)) => (p, true),
@@ -158,7 +174,7 @@ fn principal_matches(rule: Option<&PrincipalRule>, signed: bool) -> bool {
                 && values
                     .as_slice()
                     .iter()
-                    .any(|v| v == "*" || (signed && (is_account_principal(v) || v == crate::acl::OWNER_ID)))
+                    .any(|v| v == "*" || user.is_some_and(|u| u.is_principal(v)))
         }),
     };
     hit != negate
@@ -358,15 +374,27 @@ impl Context<'_> {
             "aws:sourceip" => self.peer.map(|p| p.to_string()).into_iter().collect(),
             "aws:useragent" => self.header("user-agent"),
             "aws:referer" => self.header("referer"),
-            "aws:principaltype" => vec![if self.signed { "Account" } else { "Anonymous" }.to_owned()],
-            "aws:principalarn" if self.signed => vec![format!("arn:aws:iam::{ACCOUNT_ID}:root")],
-            "aws:userid" | "aws:principalaccount" if self.signed => vec![ACCOUNT_ID.to_owned()],
-            "s3:prefix" => self.query_param("prefix"),
+            "aws:principaltype" => vec![if self.signed() { "Account" } else { "Anonymous" }.to_owned()],
+            "aws:principalarn" => self.user.map(|u| u.arn.clone()).into_iter().collect(),
+            "aws:userid" | "aws:principalaccount" => self.user.map(|u| u.account_id.clone()).into_iter().collect(),
+            "s3:prefix" => match self.prefix {
+                Some(p) => vec![p.to_owned()],
+                None => self.query_param("prefix"),
+            },
             "s3:delimiter" => self.query_param("delimiter"),
             "s3:max-keys" => self.query_param("max-keys"),
             "s3:versionid" => self.query_param("versionId"),
-            "s3:authtype" if self.signed => {
+            "s3:authtype" if self.signed() => {
                 vec![if self.presigned { "REST-QUERY-STRING" } else { "REST-HEADER" }.to_owned()]
+            }
+            k if k.starts_with("s3:existingobjecttag/") => {
+                let want = &k["s3:existingobjecttag/".len()..];
+                self.existing_tags
+                    .into_iter()
+                    .flatten()
+                    .filter(|(k, _)| k.eq_ignore_ascii_case(want))
+                    .map(|(_, v)| v.clone())
+                    .collect()
             }
             "s3:requestobjecttagkeys" => self.request_tags().into_iter().map(|(k, _)| k).collect(),
             k if k.starts_with("s3:requestobjecttag/") => {
@@ -560,16 +588,25 @@ fn statement_is_public(st: &m::Statement) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::users::{UserConfig, UserId, Users};
 
+    fn users() -> &'static Users {
+        let alt: UserConfig = "alt:ALTKEY:ALTSECRET:111122223333:cafe".parse().unwrap();
+        Box::leak(Box::new(Users::new("fakes3", "fakes3secret", &[alt]).unwrap()))
+    }
+
+    /// A request by the default identity, or an anonymous one.
     fn ctx(signed: bool) -> Context<'static> {
         let headers: &'static HeaderMap = Box::leak(Box::default());
         Context {
             headers,
             query: "prefix=logs%2F&max-keys=5",
             now: UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000),
-            signed,
+            user: signed.then(|| users().get(UserId::DEFAULT)),
             presigned: false,
             peer: Some("10.1.2.3".parse().unwrap()),
+            prefix: None,
+            existing_tags: None,
         }
     }
 
@@ -611,6 +648,95 @@ mod tests {
         assert!(!p.public);
         assert_eq!(p.evaluate("s3:ListBucket", "arn:aws:s3:::b", &ctx(true)), Verdict::Deny);
         assert_eq!(p.evaluate("s3:ListBucket", "arn:aws:s3:::b", &ctx(false)), Verdict::NoMatch);
+    }
+
+    #[test]
+    fn principals_pick_the_account() {
+        let deny = |principal: &str| {
+            parse(&format!(
+                r#"{{"Statement":{{"Effect":"Deny","Principal":{principal},"Action":"s3:*","Resource":["arn:aws:s3:::b","arn:aws:s3:::b/*"]}}}}"#
+            ))
+            .unwrap()
+        };
+        let verdict = |p: &Policy, c: &Context<'_>| p.evaluate("s3:ListBucket", "arn:aws:s3:::b", c);
+        let mine = ctx(true);
+        let alt = Context {
+            user: Some(users().get(users().resolve(Some("ALTKEY")))),
+            ..ctx(true)
+        };
+        let alt_root = deny(r#"{"AWS":"arn:aws:iam::111122223333:root"}"#);
+        assert_eq!(
+            (verdict(&alt_root, &alt), verdict(&alt_root, &mine)),
+            (Verdict::Deny, Verdict::NoMatch)
+        );
+        let alt_user = deny(r#"{"AWS":["arn:aws:iam::111122223333:user/alt"]}"#);
+        assert_eq!(
+            (verdict(&alt_user, &alt), verdict(&alt_user, &mine)),
+            (Verdict::Deny, Verdict::NoMatch)
+        );
+        let someone_else = deny(r#"{"AWS":"arn:aws:iam::111122223333:user/bob"}"#);
+        assert_eq!(verdict(&someone_else, &alt), Verdict::NoMatch);
+        let canonical = deny(r#"{"CanonicalUser":"cafe"}"#);
+        assert_eq!(
+            (verdict(&canonical, &alt), verdict(&canonical, &mine)),
+            (Verdict::Deny, Verdict::NoMatch)
+        );
+        // The default identity is still written the old ways.
+        for p in [
+            r#"{"AWS":"fakes3"}"#,
+            r#"{"AWS":"000000000000"}"#,
+            r#"{"AWS":"arn:aws:iam::000000000000:root"}"#,
+        ] {
+            assert_eq!(verdict(&deny(p), &mine), Verdict::Deny, "{p}");
+            assert_eq!(verdict(&deny(p), &alt), Verdict::NoMatch, "{p}");
+        }
+        // NotPrincipal flips it, and an anonymous request is nobody.
+        let not_alt = parse(
+            r#"{"Statement":{"Effect":"Deny","NotPrincipal":{"AWS":"arn:aws:iam::111122223333:root"},"Action":"s3:*","Resource":"arn:aws:s3:::b"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            (verdict(&not_alt, &alt), verdict(&not_alt, &mine), verdict(&not_alt, &ctx(false))),
+            (Verdict::NoMatch, Verdict::Deny, Verdict::Deny)
+        );
+        assert_eq!(verdict(&alt_root, &ctx(false)), Verdict::NoMatch);
+    }
+
+    #[test]
+    fn existing_object_tags_are_a_condition_key() {
+        let p = parse(
+            r#"{"Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::b/*",
+              "Condition":{"StringEquals":{"s3:ExistingObjectTag/security":"public"}}}]}"#,
+        )
+        .unwrap();
+        assert!(
+            p.uses_object_tags
+                && !parse(r#"{"Statement":{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::b/*"}}"#)
+                    .unwrap()
+                    .uses_object_tags
+        );
+        let tags = vec![("foo".to_owned(), "bar".to_owned()), ("security".to_owned(), "public".to_owned())];
+        let with = |t: Option<&[(String, String)]>| {
+            let c = Context {
+                existing_tags: t,
+                ..ctx(true)
+            };
+            p.evaluate("s3:GetObject", "arn:aws:s3:::b/k", &c)
+        };
+        assert_eq!(with(Some(&tags)), Verdict::Allow);
+        assert_eq!(with(Some(&tags[..1])), Verdict::NoMatch);
+        assert_eq!(with(None), Verdict::NoMatch);
+    }
+
+    #[test]
+    fn identity_condition_keys() {
+        let c = Context {
+            user: Some(users().get(users().resolve(Some("ALTKEY")))),
+            ..ctx(true)
+        };
+        assert_eq!(c.values("aws:principalarn"), ["arn:aws:iam::111122223333:root"]);
+        assert_eq!(c.values("aws:principalaccount"), ["111122223333"]);
+        assert!(ctx(false).values("aws:principalarn").is_empty());
     }
 
     #[test]

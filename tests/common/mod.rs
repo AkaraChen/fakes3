@@ -55,6 +55,8 @@ pub struct Req<'a> {
     /// Sign with a `Date` header (RFC 1123) instead of `x-amz-date`, as botocore does when a
     /// `Date` is set.
     pub date_header: bool,
+    /// The access key and secret the request is signed with.
+    pub credentials: (&'a str, &'a str),
 }
 
 pub fn req<'a>(method: &'a str, path: &'a str) -> Req<'a> {
@@ -68,6 +70,7 @@ pub fn req<'a>(method: &'a str, path: &'a str) -> Req<'a> {
         host: None,
         chunked: false,
         date_header: false,
+        credentials: (ACCESS, SECRET),
     }
 }
 
@@ -101,6 +104,11 @@ impl<'a> Req<'a> {
         self.chunked = true;
         self
     }
+    /// Signed as another account (the access key picks the identity; with `auth` the secret must match).
+    pub fn signed_by(mut self, access: &'a str, secret: &'a str) -> Self {
+        self.credentials = (access, secret);
+        self
+    }
     pub fn host(mut self, h: &str) -> Self {
         self.host = Some(h.to_owned());
         self
@@ -130,7 +138,11 @@ pub fn amz_date(t: SystemTime) -> String {
 }
 
 pub fn signing_key(date: &str) -> Vec<u8> {
-    let k = hmac(format!("AWS4{SECRET}").as_bytes(), &date.as_bytes()[..8]);
+    signing_key_for(SECRET, date)
+}
+
+pub fn signing_key_for(secret: &str, date: &str) -> Vec<u8> {
+    let k = hmac(format!("AWS4{secret}").as_bytes(), &date.as_bytes()[..8]);
     let k = hmac(&k, REGION.as_bytes());
     let k = hmac(&k, b"s3");
     hmac(&k, b"aws4_request")
@@ -184,11 +196,12 @@ pub async fn send(addr: SocketAddr, r: Req<'_>) -> Resp {
             "AWS4-HMAC-SHA256\n{date}\n{scope}\n{}",
             hex::encode(Sha256::digest(canonical.as_bytes()))
         );
-        let sig = sign_string(&date, &sts);
+        let sig = hex::encode(hmac(&signing_key_for(r.credentials.1, &date), sts.as_bytes()));
         headers.push((
             "authorization".into(),
             format!(
-                "AWS4-HMAC-SHA256 Credential={ACCESS}/{scope}, SignedHeaders={}, Signature={sig}",
+                "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={}, Signature={sig}",
+                r.credentials.0,
                 signed_names.join(";")
             ),
         ));
@@ -285,10 +298,14 @@ pub fn http_date(t: SystemTime) -> String {
     )
 }
 
-/// Base64 HMAC-SHA1 of `data`: a SigV2 signature.
+/// Base64 HMAC-SHA1 of `data` under the default secret: a SigV2 signature.
 pub fn v2_signature(data: &str) -> String {
+    v2_signature_with(SECRET, data)
+}
+
+pub fn v2_signature_with(secret: &str, data: &str) -> String {
     use hmac::{Hmac, KeyInit, Mac};
-    let mut m = Hmac::<sha1::Sha1>::new_from_slice(SECRET.as_bytes()).unwrap();
+    let mut m = Hmac::<sha1::Sha1>::new_from_slice(secret.as_bytes()).unwrap();
     m.update(data.as_bytes());
     base64_simd::STANDARD.encode_to_string(m.finalize().into_bytes())
 }
@@ -297,11 +314,23 @@ pub fn v2_signature(data: &str) -> String {
 /// (`/bkt/`, `/bkt/key?acl`), `date` goes into the Date slot (empty when `x-amz-date` is sent) and
 /// `amz` are the `x-amz-*` headers sent, in any order.
 pub fn v2_authorization(method: &str, content_type: &str, date: &str, amz: &[(&str, &str)], resource: &str) -> String {
+    v2_authorization_as((ACCESS, SECRET), method, content_type, date, amz, resource)
+}
+
+/// [`v2_authorization`] for another account.
+pub fn v2_authorization_as(
+    (access, secret): (&str, &str),
+    method: &str,
+    content_type: &str,
+    date: &str,
+    amz: &[(&str, &str)],
+    resource: &str,
+) -> String {
     let mut amz: Vec<_> = amz.iter().map(|(k, v)| (k.to_ascii_lowercase(), v.trim())).collect();
     amz.sort();
     let amz: String = amz.iter().map(|(k, v)| format!("{k}:{v}\n")).collect();
     format!(
-        "AWS {ACCESS}:{}",
-        v2_signature(&format!("{method}\n\n{content_type}\n{date}\n{amz}{resource}"))
+        "AWS {access}:{}",
+        v2_signature_with(secret, &format!("{method}\n\n{content_type}\n{date}\n{amz}{resource}"))
     )
 }

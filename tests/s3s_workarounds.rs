@@ -9,6 +9,8 @@ use std::time::{Duration, SystemTime};
 use common::{Resp, http_date, req, send, v2_authorization, v2_signature};
 use fakes3::{Config, Server};
 
+const ALT: (&str, &str) = ("ALTKEY", "ALTSECRET");
+
 async fn start(auth: bool) -> Server {
     Server::start(Config { auth, ..Config::default() }).await.unwrap()
 }
@@ -290,5 +292,48 @@ async fn sigv4_takes_the_time_from_date() {
     let r = send(a, req("PUT", "/bkt/dated").date_header().body(b"dated")).await;
     assert_eq!(r.status, 200, "{}", r.body);
     assert_eq!(send(a, req("GET", "/bkt/dated").date_header()).await.body, "dated");
+    server.shutdown().await;
+}
+
+/// Under `--auth` with several accounts, SigV2 bucket-level requests verify against the secret of
+/// the access key they name, with or without the slash, and act as that account.
+#[tokio::test]
+async fn v2_works_per_account() {
+    let server = Server::start(Config {
+        auth: true,
+        users: vec![format!("alt:{}:{}:222222222222", ALT.0, ALT.1).parse().unwrap()],
+        ..Config::default()
+    })
+    .await
+    .unwrap();
+    let a = server.addr();
+    let as_alt = |secret: &'static str, method: &'static str, target: &'static str, resource: &'static str| async move {
+        let (path, query) = target.split_once('?').unwrap_or((target, ""));
+        let date = http_date(SystemTime::now());
+        let auth = common::v2_authorization_as((ALT.0, secret), method, "", &date, &[], resource);
+        send(
+            a,
+            req(method, path)
+                .query(query)
+                .anon()
+                .header("authorization", &auth)
+                .header("date", &date),
+        )
+        .await
+    };
+    let r = as_alt(ALT.1, "PUT", "/alt-bkt", "/alt-bkt/").await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    // The bucket belongs to alt.
+    let r = as_alt(ALT.1, "GET", "/alt-bkt?acl", "/alt-bkt/?acl").await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert!(r.body.contains("<DisplayName>alt</DisplayName>"), "{}", r.body);
+    let r = as_alt(ALT.1, "GET", "/alt-bkt?acl", "/alt-bkt?acl").await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    // Another account's secret does not verify for alt's key.
+    let r = as_alt(common::SECRET, "GET", "/alt-bkt?acl", "/alt-bkt/?acl").await;
+    assert_eq!((r.status, r.code()), (403, "SignatureDoesNotMatch"), "{}", r.body);
+    // The default account is not the owner and sees the bucket as someone else's.
+    let r = v2(a, "GET", "/alt-bkt?acl", "/alt-bkt/?acl", b"").await;
+    assert_eq!((r.status, r.code()), (403, "AccessDenied"), "{}", r.body);
     server.shutdown().await;
 }
