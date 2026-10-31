@@ -79,6 +79,11 @@ pub struct ObjectExt {
     pub legal_hold: Option<bool>,
     /// Per-part checksums of a multipart object, for GetObjectAttributes.
     pub part_checksums: Option<Arc<[Checksum]>>,
+    /// Restore request of an archived object (see `archive.rs`).
+    pub restore: Option<crate::archive::Restore>,
+    /// When a lifecycle transition moved the object into its current class; Intelligent-Tiering
+    /// counts its idle days from here.
+    pub class_since: Option<SystemTime>,
 }
 
 impl ObjectExt {
@@ -98,6 +103,8 @@ impl ObjectExt {
             && self.retention.is_none()
             && self.legal_hold.is_none()
             && self.part_checksums.is_none()
+            && self.restore.is_none()
+            && self.class_since.is_none()
     }
 
     /// SSE-KMS and SSE-C objects get an ETag that is not the content's MD5.

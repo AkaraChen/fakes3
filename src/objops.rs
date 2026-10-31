@@ -14,7 +14,7 @@ use crate::store::{Bucket as StoreBucket, Entry, Object as StoreObject, Version,
 
 impl FakeS3 {
     /// Replaces one object version with an edited copy (versions are shared immutably).
-    fn modify_object(
+    pub(crate) fn modify_object(
         &self,
         b: &StoreBucket,
         key: &str,

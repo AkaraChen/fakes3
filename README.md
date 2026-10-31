@@ -181,7 +181,7 @@ await server.stop();
 | `host` | `127.0.0.1` | 监听地址 |
 | `port` | `0` | 监听端口，`0` 表示随机端口 |
 | `accessKey` / `secretKey` | `fakes3` / `fakes3secret` | 访问凭证 |
-| `noAuth` | `false` | 接受未签名的请求（SDK 发出的已签名请求在这个模式下目前会被拒绝，见 [TODO.md](TODO.md)） |
+| `noAuth` | `false` | 不校验签名：用任意 access key 和 secret 签名的请求都接受，未签名的也接受（见下面“`--no-auth`”） |
 | `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
 | `requestLog` / `requestLogCapacity` | `true` / `10000` | 是否记录 S3 请求（见下面的控制面），以及最多保留多少条 |
 | `domains` | 无 | 虚拟主机寻址的基础域名（`<bucket>.<domain>`），path-style 始终可用 |
@@ -233,11 +233,25 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 | `--port` | `FAKES3_PORT` | `9000` | 监听端口，`0` 表示随机端口 |
 | `--access-key` | `FAKES3_ACCESS_KEY` | `fakes3` | 访问凭证 |
 | `--secret-key` | `FAKES3_SECRET_KEY` | `fakes3secret` | 访问凭证 |
-| `--no-auth` | | 关 | 不校验签名 |
+| `--no-auth` | | 关 | 不校验签名：任意 access key / secret 签的名都接受，未签名的也接受，且不做授权（见下文） |
 | `--domain` | `FAKES3_DOMAIN` | `localhost` | virtual-host 寻址的基础域名，可重复（或逗号分隔）；`<bucket>.<domain>` 选择 bucket，其它主机名仍按 path-style 处理；传空字符串关闭 |
 | `--inline-threshold` | | `1048576` | 达到这个大小的对象或 part 存进 memfd，小于它的放在堆上 |
 | `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | 对象数据占用内存的上限，见下文。可以写 `2GiB`、`512MiB`、`unlimited`、`auto` |
 | `--bucket-defaults` | `FAKES3_BUCKET_DEFAULTS` | `legacy` | 新建 bucket 的初始设置：`legacy` 或 `aws`，见[新建 bucket 的默认值](#新建-bucket-的默认值)。库里对应 `Config::bucket_defaults`（`BucketDefaults::Legacy` / `Aws`） |
+
+**`--no-auth`**（库里是 `Config { auth: false, .. }`，Node 里是 `noAuth`）：LocalStack / moto 式的“任意凭证都可以”。
+SDK 用什么 access key 和 secret 签名都行，签名本身不校验。覆盖 SigV4 的 `Authorization` 头和 presigned URL、SigV2 的头和 presigned URL，
+以及流式上传（`STREAMING-AWS4-HMAC-SHA256-PAYLOAD`、`STREAMING-UNSIGNED-PAYLOAD-TRAILER`、`STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`）；
+未签名的请求照常可用。几点说明：
+
+- **完整性校验仍然生效**：aws-chunked 的分块照常解码，trailer 里的校验和（`x-amz-checksum-*`）仍会和数据比对，不一致返回 400 `BadDigest`；
+  `Content-MD5`、header 里的校验和、`x-amz-decoded-content-length` 也一样。不再检查的是签名本身以及由它派生的东西：
+  时钟偏差、`x-amz-content-sha256` 里的负载哈希、signed headers 列表。
+- **不做授权**：ACL、Bucket Policy、Block Public Access 都不求值，已签名和匿名的请求一视同仁，都有 owner 的权限。
+  需要测访问控制时用默认的认证模式。
+- **presigned URL 的过期**：只在使用虚拟时钟（`/_fakes3/clock`）时判断，真实时钟下不检查。
+- 请求日志的 `access_key` 字段记录请求用的 access key（认证模式下它永远是配置的那一个，所以不记录）。
+- 带签名的 POST 表单上传（表单里有 `x-amz-signature` / `signature` 字段）暂不支持，仍返回 501；不带签名的表单可用。
 
 **内存上限**：fakes3 统计所有对象数据实际占用的内存（堆上的小对象、memfd 里的大对象、尚未 Complete 的分段上传的 part），
 超出上限的写入会被拒绝，而不是让进程被 OOM killer 杀掉。
@@ -324,13 +338,60 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认**保留旧的�
 - 对象标签、Range 读取、Content-MD5 校验
 - 访问控制：Bucket/Object ACL（canned、grant 头、请求体）、OwnershipControls（BucketOwnerEnforced 时 ACL 被禁用）、
   PublicAccessBlock、Bucket Policy（含 Condition，显式 Deny 对已签名请求也生效）；未签名的匿名请求在 policy 或公开 ACL 允许时放行，
-  `--no-auth` 时不做授权
+  `--no-auth` 时不做授权（见“`--no-auth`”）
 - CORS：预检 `OPTIONS` 和实际响应上的 CORS 头
 - Lifecycle：过期（含版本控制下的删除标记、非当前版本、`NewerNoncurrentVersions`）和清理未完成的分段上传，按服务端虚拟时钟在 UTC 日期变化后的第一次访问时执行；
   没有规则的 bucket 零开销
+- 归档存储类：`GLACIER`、`DEEP_ARCHIVE` 和 Intelligent-Tiering 的 Archive Access / Deep Archive Access 层，GET / CopyObject 来源返回 403 `InvalidObjectState`，
+  `RestoreObject` 和 `x-amz-restore` 按服务端虚拟时钟推进；Lifecycle 的 Transition / NoncurrentVersionTransition 会真的改存储类（见[归档存储类](#归档存储类)）
 - Website、Notification 配置的存取（不提供网站端点，不投递事件）；POST policy 表单上传
 
 还没做的功能见 [TODO.md](TODO.md)，主要是 Website 端点，以及测试控制面里的故障注入。
+
+## 归档存储类
+
+用来测试“应用遇到已归档对象时怎么办”。对象带上 `GLACIER`（S3 Glacier Flexible Retrieval）或 `DEEP_ARCHIVE` 存储类写入（或被 Lifecycle 转过去）之后：
+
+- **读被拒绝**：GET（包括 Range、`?partNumber=`）、CopyObject 和 UploadPartCopy 的来源返回 `403 InvalidObjectState`，
+  直到有一份已恢复的副本；HEAD、标签、GetObjectAttributes 照常工作，HEAD 返回真实存储类。
+  `GLACIER_IR`（Instant Retrieval）和 `STANDARD_IA` 等不是归档，可以直接读。
+- **RestoreObject**：`Days`（必填）加 `Tier`（`Expedited` / `Standard` / `Bulk`，可放在 `GlacierJobParameters` 里也可放在顶层，默认 Standard）。
+  新请求返回 `202`，已恢复的对象返回 `200` 并从*现在*起重新计算保留天数，进行中返回 `409 RestoreAlreadyInProgress`
+  （发更快的 tier 算加速，返回 `202`）；对不是归档的对象返回 `403 ObjectAlreadyInActiveTierError`；
+  `Type=SELECT`、`SelectParameters`、`OutputLocation` 返回 `501 NotImplemented`（S3 Select 已不对新客户开放）；
+  Deep Archive 上的 `Expedited` 返回 `400 InvalidArgument`；不模拟 503 `GlacierExpeditedRetrievalNotAvailable`。支持 `?versionId=`。
+- **`x-amz-restore`**（GET / HEAD）：进行中是 `ongoing-request="true"`，完成后是 `ongoing-request="false", expiry-date="Sat, 05 Jan 2030 00:00:00 GMT"`；
+  没有恢复过则没有这个头。恢复出来的副本到期后对象重新变回不可读。ListObjectsV2 带 `x-amz-optional-object-attributes: RestoreStatus` 时返回 `RestoreStatus`
+  （`IsRestoreInProgress` 和 `RestoreExpiryDate`，没恢复过的对象没有）；ListObjectVersions 暂未返回。
+- **完成时间按服务端时钟，取 AWS 文档给出的范围的下界，所以是确定的**（`fakes3 ctl clock advance 3h` 就能让 Standard 恢复完成）：
+
+  | | Expedited | Standard | Bulk |
+  |---|---|---|---|
+  | `GLACIER`、IT Archive Access | 1 分钟 | 3 小时 | 5 小时 |
+  | `DEEP_ARCHIVE`、IT Deep Archive Access | 不支持 | 12 小时 | 48 小时 |
+
+  恢复副本的到期时间 = 完成时间 + `Days`，向上取整到 UTC 午夜（文档例子：10 月 15 日 10:30 恢复 3 天，10 月 19 日 00:00 到期）。
+- **Intelligent-Tiering 的归档层**：`PutBucketIntelligentTieringConfiguration`（及 Get / List / Delete）配置 `ARCHIVE_ACCESS`（≥ 90 天）和
+  `DEEP_ARCHIVE_ACCESS`（≥ 180 天，最长 730 天），可带 Prefix / Tag / And 过滤。`INTELLIGENT_TIERING` 对象从创建（或 Lifecycle 转入、上次恢复完成）起闲置达到天数，
+  就进入对应归档层：读返回 `InvalidObjectState`，HEAD 带 `x-amz-archive-status`。恢复不接受 `Days`（传了也忽略），完成后回到 Frequent Access（没有到期时间），闲置天数重新计数。
+  偏差：fakes3 不记录读取，所以“访问”不会重置闲置天数；错误体里没有 `StorageClass` / `AccessTier` 元素。
+- **Lifecycle 转换**：`Transition`（`Days` / `Date`）和 `NoncurrentVersionTransition`（`NoncurrentDays`、`NewerNoncurrentVersions`）在每天第一次访问 bucket 时的惰性清扫里执行，
+  到期时间同样向上取整到 UTC 午夜。只改存储类，数据、ETag、`Last-Modified` 不变，内存统计不变。遵循 S3 的瀑布模型（只能向下转：
+  STANDARD → STANDARD_IA → INTELLIGENT_TIERING → ONEZONE_IA → GLACIER_IR → GLACIER → DEEP_ARCHIVE），时钟一次拨得很远时直接落到最深的那个到期类；
+  小于 128 KB 的对象默认不转换，除非规则带 `ObjectSizeGreaterThan` / `ObjectSizeLessThan`，或者 `x-amz-transition-default-minimum-object-size: varies_by_storage_class`
+  （此时小对象只能转到 `GLACIER` / `DEEP_ARCHIVE`）。Object Lock 不阻止转换，转换后保留期照旧。
+  转换目标只能是 `STANDARD_IA`、`INTELLIGENT_TIERING`、`ONEZONE_IA`、`GLACIER_IR`、`GLACIER`、`DEEP_ARCHIVE`。
+  没有校验 AWS 对 Days 的大小关系要求（例如转到 IA 至少 30 天、过期天数要大于转换天数）。
+
+AWS 文档：[RestoreObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html)、
+[GetObject 的 InvalidObjectState](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)、
+[CopyObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html)、
+[Working with archived objects](https://docs.aws.amazon.com/AmazonS3/latest/userguide/archived-objects.html)、
+[Archive retrieval options](https://docs.aws.amazon.com/AmazonS3/latest/userguide/restoring-objects-retrieval-options.html)、
+[Lifecycle transitions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-transition-general-considerations.html)、
+[RestoreStatus](https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreStatus.html)。
+已知偏差：AWS 的 CopyObject 文档把来源归档的错误写成 `ObjectNotInActiveTierError`，但实际返回的是 `InvalidObjectState`（SDK 里常见的
+“Operation is not valid for the source object's storage class”），这里按后者实现。
 
 ## 测试控制面
 

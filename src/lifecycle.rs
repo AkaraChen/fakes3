@@ -9,8 +9,10 @@
 //!
 //! The sweep covers expiration of current versions (permanent delete when unversioned, a delete
 //! marker when versioned), noncurrent version expiration (with `NewerNoncurrentVersions`),
-//! removal of expired object delete markers and aborting stale multipart uploads. Transition
-//! rules are validated and stored but have no effect (there is no storage class to move to).
+//! removal of expired object delete markers and aborting stale multipart uploads, and storage
+//! class transitions of current and noncurrent versions. A transition only rewrites the object's
+//! storage class (its data and `Last-Modified` stay); the waterfall model and the 128 KB default
+//! minimum size follow S3, and Object Lock never blocks it.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -18,7 +20,8 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use s3s::dto::{
-    BucketLifecycleConfiguration, ExpirationStatus, LifecycleRule, Timestamp, TimestampFormat, TransitionDefaultMinimumObjectSize,
+    BucketLifecycleConfiguration, ExpirationStatus, LifecycleRule, StorageClass, Timestamp, TimestampFormat,
+    TransitionDefaultMinimumObjectSize, TransitionStorageClass,
 };
 use s3s::{S3Result, s3_error};
 
@@ -44,6 +47,46 @@ struct Rule {
     expired_delete_marker: bool,
     noncurrent: Option<Noncurrent>,
     abort_days: Option<i64>,
+    transitions: Vec<(Expiration, &'static str)>,
+    noncurrent_transitions: Vec<NoncurrentMove>,
+}
+
+struct NoncurrentMove {
+    days: i64,
+    newer: Option<usize>,
+    class: &'static str,
+}
+
+/// Objects below this size are not transitioned unless a size filter says otherwise.
+const MIN_TRANSITION_SIZE: u64 = 128 * 1024;
+
+/// A storage class's place in the transition waterfall; objects only move to a higher number.
+fn rank(class: &str) -> Option<u8> {
+    Some(match class {
+        StorageClass::STANDARD | StorageClass::REDUCED_REDUNDANCY => 0,
+        StorageClass::STANDARD_IA => 1,
+        StorageClass::INTELLIGENT_TIERING => 2,
+        StorageClass::ONEZONE_IA => 3,
+        StorageClass::GLACIER_IR => 4,
+        StorageClass::GLACIER => 5,
+        StorageClass::DEEP_ARCHIVE => 6,
+        _ => return None,
+    })
+}
+
+/// The class a rule may name as a transition target, as a `'static` name.
+fn target(c: &TransitionStorageClass) -> S3Result<&'static str> {
+    [
+        StorageClass::STANDARD_IA,
+        StorageClass::INTELLIGENT_TIERING,
+        StorageClass::ONEZONE_IA,
+        StorageClass::GLACIER_IR,
+        StorageClass::GLACIER,
+        StorageClass::DEEP_ARCHIVE,
+    ]
+    .into_iter()
+    .find(|n| *n == c.as_str())
+    .ok_or_else(malformed)
 }
 
 #[derive(Clone, Copy)]
@@ -65,7 +108,7 @@ fn malformed() -> s3s::S3Error {
     )
 }
 
-fn secs(t: SystemTime) -> i64 {
+pub(crate) fn secs(t: SystemTime) -> i64 {
     match t.duration_since(UNIX_EPOCH) {
         Ok(d) => d.as_secs() as i64,
         Err(e) => -(e.duration().as_secs() as i64),
@@ -73,8 +116,17 @@ fn secs(t: SystemTime) -> i64 {
 }
 
 /// `created + days`, rounded up to the next midnight UTC, in seconds since the epoch.
-fn due(created: SystemTime, days: i64) -> i64 {
+pub(crate) fn due(created: SystemTime, days: i64) -> i64 {
     (secs(created) + days * DAY + DAY - 1).div_euclid(DAY) * DAY
+}
+
+/// `Sun, 04 Jan 1970 00:00:00 GMT`.
+pub(crate) fn http_date(at: i64) -> Option<String> {
+    let mut buf = Vec::new();
+    Timestamp::from(UNIX_EPOCH + Duration::from_secs(at.max(0) as u64))
+        .format(TimestampFormat::HttpDate, &mut buf)
+        .ok()?;
+    String::from_utf8(buf).ok()
 }
 
 impl Lifecycle {
@@ -108,6 +160,43 @@ impl Lifecycle {
         })
     }
 
+    /// `obj` moved to the deepest class a due transition names, if that is further down the
+    /// waterfall than where it is.
+    fn transition_current(&self, key: &str, obj: &Object, now: i64, expires_at: Option<i64>) -> Option<Object> {
+        let due_at = |r: &Rule| {
+            r.transitions
+                .iter()
+                .map(|(w, c)| match *w {
+                    Expiration::Days(d) => (due(obj.last_modified, d), *c),
+                    Expiration::Date(at) => (at, *c),
+                })
+                .filter(|(at, _)| *at <= now && expires_at.is_none_or(|e| *at <= e))
+                .map(|(at, c)| (c, at))
+                .collect::<Vec<_>>()
+        };
+        let moves = self
+            .rules
+            .iter()
+            .filter(|r| !r.transitions.is_empty() && r.matches(key, Some(obj)))
+            .flat_map(|r| due_at(r).into_iter().filter(|(c, _)| r.size_allows(self, obj.data.size, c)));
+        moved(obj, moves)
+    }
+
+    fn transition_noncurrent(&self, key: &str, obj: &Object, since: SystemTime, newer: usize, now: i64) -> Option<Object> {
+        let moves = self
+            .rules
+            .iter()
+            .filter(|r| !r.noncurrent_transitions.is_empty() && r.matches(key, Some(obj)))
+            .flat_map(|r| {
+                r.noncurrent_transitions
+                    .iter()
+                    .filter(move |n| due(since, n.days) <= now && n.newer.is_none_or(|keep| newer >= keep))
+                    .filter(|n| r.size_allows(self, obj.data.size, n.class))
+                    .map(|n| (n.class, due(since, n.days)))
+            });
+        moved(obj, moves)
+    }
+
     /// The `x-amz-expiration` value for a current object, if an enabled rule will expire it.
     pub fn expiration_header(&self, key: &str, obj: &Object) -> Option<String> {
         let (at, rule) = self
@@ -116,11 +205,7 @@ impl Lifecycle {
             .filter(|r| r.matches(key, Some(obj)))
             .filter_map(|r| r.expiration_due(obj.last_modified).map(|d| (d, r)))
             .min_by_key(|(d, _)| *d)?;
-        let mut buf = Vec::new();
-        Timestamp::from(UNIX_EPOCH + Duration::from_secs(at.max(0) as u64))
-            .format(TimestampFormat::HttpDate, &mut buf)
-            .ok()?;
-        let date = String::from_utf8(buf).ok()?;
+        let date = http_date(at)?;
         Some(match &rule.id {
             Some(id) => format!("expiry-date=\"{date}\", rule-id=\"{id}\""),
             None => format!("expiry-date=\"{date}\""),
@@ -261,15 +346,38 @@ impl Rule {
             }
         };
 
+        let mut transitions = Vec::new();
         for t in r.transitions.iter().flatten() {
             if t.storage_class.is_none() || t.days.is_some() == t.date.is_some() || t.days.is_some_and(|d| d < 0) {
                 return Err(malformed());
             }
+            let class = target(t.storage_class.as_ref().ok_or_else(malformed)?)?;
+            let when = match (&t.days, &t.date) {
+                (Some(d), _) => Expiration::Days(i64::from(*d)),
+                (_, Some(date)) => {
+                    let at = time::OffsetDateTime::from(date.clone());
+                    if at.unix_timestamp() % DAY != 0 || at.nanosecond() != 0 {
+                        return Err(s3_error!(InvalidArgument, "'Date' must be at midnight GMT"));
+                    }
+                    Expiration::Date(at.unix_timestamp())
+                }
+                _ => return Err(malformed()),
+            };
+            transitions.push((when, class));
         }
+        let mut noncurrent_transitions = Vec::new();
         for t in r.noncurrent_version_transitions.iter().flatten() {
             if t.storage_class.is_none() || t.noncurrent_days.is_none_or(|d| d < 0) {
                 return Err(malformed());
             }
+            if t.newer_noncurrent_versions.is_some_and(|v| v <= 0) {
+                return Err(s3_error!(InvalidArgument, "'NewerNoncurrentVersions' must be a positive integer"));
+            }
+            noncurrent_transitions.push(NoncurrentMove {
+                days: i64::from(t.noncurrent_days.unwrap_or_default()),
+                newer: t.newer_noncurrent_versions.map(|v| v as usize),
+                class: target(t.storage_class.as_ref().ok_or_else(malformed)?)?,
+            });
         }
 
         let enabled = r.status.as_str() == ExpirationStatus::ENABLED;
@@ -284,6 +392,8 @@ impl Rule {
             expired_delete_marker: expired_delete_marker && enabled,
             noncurrent: noncurrent.filter(|_| enabled),
             abort_days: abort_days.filter(|_| enabled),
+            transitions: if enabled { transitions } else { Vec::new() },
+            noncurrent_transitions: if enabled { noncurrent_transitions } else { Vec::new() },
         })
     }
 
@@ -300,6 +410,16 @@ impl Rule {
         self.larger_than.is_none_or(|n| size > n)
             && self.smaller_than.is_none_or(|n| size < n)
             && self.tags.iter().all(|t| o.tags.contains(t))
+    }
+
+    /// Whether the default minimum size lets `size` bytes move to `class`. A size filter on the
+    /// rule replaces the default.
+    fn size_allows(&self, lc: &Lifecycle, size: u64, class: &str) -> bool {
+        if self.larger_than.is_some() || self.smaller_than.is_some() || size >= MIN_TRANSITION_SIZE {
+            return true;
+        }
+        let legacy = lc.transition_default_minimum_object_size.as_ref().map(|t| t.as_str()) == Some("varies_by_storage_class");
+        legacy && matches!(class, StorageClass::GLACIER | StorageClass::DEEP_ARCHIVE)
     }
 
     fn expiration_due(&self, created: SystemTime) -> Option<i64> {
@@ -347,37 +467,68 @@ pub fn sweep(lc: &Lifecycle, bucket: &Bucket, now: SystemTime) {
     });
 }
 
+/// `obj` in the deepest of the `(class, transition time)` candidates, if it lies below the
+/// object's current class.
+fn moved(obj: &Object, candidates: impl Iterator<Item = (&'static str, i64)>) -> Option<Object> {
+    let current = obj
+        .ext
+        .as_ref()
+        .and_then(|e| e.storage_class.as_ref())
+        .map_or(0, |c| rank(c.as_str()).unwrap_or(0));
+    let (class, at) = candidates
+        .filter(|(c, _)| rank(c).is_some_and(|r| r > current))
+        .max_by_key(|(c, _)| rank(c))?;
+    let mut ext = obj.ext.as_deref().cloned().unwrap_or_default();
+    ext.storage_class = Some(StorageClass::from_static(class));
+    ext.restore = None;
+    ext.class_since = Some(UNIX_EPOCH + Duration::from_secs(at.max(0) as u64));
+    let mut out = obj.clone();
+    out.ext = Some(Arc::new(ext));
+    Some(out)
+}
+
 fn sweep_entry(lc: &Lifecycle, key: &str, entry: &mut Entry, mode: Versioning, now: i64) {
-    // 1. Expire the current version.
-    if let Some(latest) = entry.latest()
-        && let Some(obj) = &latest.obj
-    {
-        let expires_at = lc
-            .rules
+    // The current version first moves down the storage class waterfall (what was due before it
+    // expired), then expires.
+    let expires_at = entry.current().and_then(|obj| {
+        lc.rules
             .iter()
             .filter(|r| r.matches(key, Some(obj)))
             .filter_map(|r| r.expiration_due(obj.last_modified))
-            .min();
-        if let Some(at) = expires_at
-            && at <= now
-        {
-            match mode {
-                Versioning::Unversioned => entry.versions.clear(),
-                Versioning::Enabled | Versioning::Suspended => {
-                    if mode == Versioning::Suspended {
-                        entry.versions.retain(|v| v.id != "null");
-                    }
-                    entry.versions.push(Arc::new(Version {
-                        id: if mode == Versioning::Enabled {
-                            new_version_id()
-                        } else {
-                            "null".to_owned()
-                        },
-                        obj: None,
-                        // The marker appears when the rule fires, not when we got around to it.
-                        last_modified: UNIX_EPOCH + Duration::from_secs(at.max(0) as u64),
-                    }));
+            .min()
+    });
+    if let Some(latest) = entry.latest()
+        && let Some(obj) = &latest.obj
+        && let Some(moved) = lc.transition_current(key, obj, now, expires_at)
+    {
+        let last = entry.versions.len() - 1;
+        entry.versions[last] = Arc::new(Version {
+            id: latest.id.clone(),
+            obj: Some(moved),
+            last_modified: latest.last_modified,
+        });
+    }
+
+    // 1. Expire the current version.
+    if let Some(at) = expires_at
+        && at <= now
+    {
+        match mode {
+            Versioning::Unversioned => entry.versions.clear(),
+            Versioning::Enabled | Versioning::Suspended => {
+                if mode == Versioning::Suspended {
+                    entry.versions.retain(|v| v.id != "null");
                 }
+                entry.versions.push(Arc::new(Version {
+                    id: if mode == Versioning::Enabled {
+                        new_version_id()
+                    } else {
+                        "null".to_owned()
+                    },
+                    obj: None,
+                    // The marker appears when the rule fires, not when we got around to it.
+                    last_modified: UNIX_EPOCH + Duration::from_secs(at.max(0) as u64),
+                }));
             }
         }
     }
@@ -406,6 +557,24 @@ fn sweep_entry(lc: &Lifecycle, key: &str, entry: &mut Entry, mode: Versioning, n
         }
         for i in remove.into_iter().rev() {
             entry.versions.remove(i);
+        }
+    }
+
+    // Same for noncurrent versions that have been noncurrent long enough.
+    if lc.rules.iter().any(|r| !r.noncurrent_transitions.is_empty()) && entry.versions.len() > 1 {
+        let last = entry.versions.len() - 1;
+        for i in 0..last {
+            let v = &entry.versions[i];
+            let Some(obj) = &v.obj else { continue };
+            let became_noncurrent = entry.versions[i + 1].last_modified;
+            let newer = last - i - 1;
+            if let Some(moved) = lc.transition_noncurrent(key, obj, became_noncurrent, newer, now) {
+                entry.versions[i] = Arc::new(Version {
+                    id: v.id.clone(),
+                    obj: Some(moved),
+                    last_modified: v.last_modified,
+                });
+            }
         }
     }
 

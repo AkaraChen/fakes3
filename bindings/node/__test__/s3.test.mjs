@@ -85,6 +85,24 @@ test('option noAuth accepts unsigned requests', async () => {
   }
 })
 
+test('option noAuth accepts requests signed with any credentials', async () => {
+  const server = await start({ noAuth: true })
+  try {
+    const s3 = new S3Client({
+      endpoint: server.endpoint,
+      region: 'eu-west-1',
+      forcePathStyle: true,
+      credentials: { accessKeyId: 'AKIARANDOMKEY', secretAccessKey: 'not-the-server-secret' },
+    })
+    await s3.send(new CreateBucketCommand({ Bucket: 'any' }))
+    await s3.send(new PutObjectCommand({ Bucket: 'any', Key: 'k', Body: 'hello' }))
+    const got = await s3.send(new GetObjectCommand({ Bucket: 'any', Key: 'k' }))
+    assert.equal(await got.Body.transformToString(), 'hello')
+  } finally {
+    await server.stop()
+  }
+})
+
 test('stop releases the port and is idempotent', async () => {
   const server = await start()
   const { port } = server
