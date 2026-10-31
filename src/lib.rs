@@ -329,6 +329,9 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 if head && resp.status() == http::StatusCode::OK && resp.headers().contains_key(http::header::CONTENT_RANGE) {
                     *resp.status_mut() = http::StatusCode::PARTIAL_CONTENT;
                 }
+                if resp.status() == http::StatusCode::SEE_OTHER {
+                    quote_redirect_etag(&mut resp);
+                }
                 if let Some(archive::StatusOverride(status)) = resp.extensions().get().copied() {
                     *resp.status_mut() = status;
                 }
@@ -363,6 +366,23 @@ impl hyper::service::Service<http::Request<hyper::body::Incoming>> for ServiceFn
 
     fn call(&self, req: http::Request<hyper::body::Incoming>) -> Self::Future {
         (self.0)(req, self.1)
+    }
+}
+
+/// A POST form's `success_action_redirect` answer (the only 303 fakes3 sends) carries
+/// `?bucket=…&key=…&etag=…` appended to the client's URL. s3s appends the ETag bare; S3 appends it
+/// with its quotes (`etag=%22…%22`), as the `ETag` header has them.
+fn quote_redirect_etag(resp: &mut s3s::HttpResponse) {
+    let Some(location) = resp.headers().get(http::header::LOCATION).and_then(|v| v.to_str().ok()) else {
+        return;
+    };
+    let Some(at) = location.rfind("&etag=") else { return };
+    let (head, etag) = location.split_at(at + "&etag=".len());
+    if etag.starts_with("%22") {
+        return;
+    }
+    if let Ok(v) = http::HeaderValue::from_str(&format!("{head}%22{etag}%22")) {
+        resp.headers_mut().insert(http::header::LOCATION, v);
     }
 }
 
