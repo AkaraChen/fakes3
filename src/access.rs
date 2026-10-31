@@ -17,7 +17,6 @@
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::SystemTime;
 
 use s3s::access::{S3Access, S3AccessContext};
 use s3s::dto::{CopySource, DeleteObjectsInput, PostObjectInput};
@@ -272,15 +271,6 @@ impl S3Access for Access {
     }
 
     async fn post_object(&self, req: &mut S3Request<PostObjectInput>) -> S3Result<()> {
-        // s3s checks the policy's expiry against the host clock; the server clock may differ.
-        if let Some(p) = &req.input.policy
-            && SystemTime::from(time::OffsetDateTime::from(p.expiration.clone())) <= self.clock.now()
-        {
-            return Err(S3Error::with_message(
-                S3ErrorCode::AccessDenied,
-                "Invalid according to Policy: Policy expired.",
-            ));
-        }
         let signed = req.credentials.is_some();
         if !self.auth || signed && !self.store.access.any_policy.load(Ordering::Relaxed) {
             return Ok(());

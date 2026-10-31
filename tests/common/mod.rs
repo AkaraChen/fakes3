@@ -5,7 +5,7 @@
 use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -106,7 +106,7 @@ pub fn amz_date(t: SystemTime) -> String {
 }
 
 pub fn signing_key(date: &str) -> Vec<u8> {
-    let k = hmac(format!("AWS4{SECRET}").as_bytes(), date[..8].as_bytes());
+    let k = hmac(format!("AWS4{SECRET}").as_bytes(), &date.as_bytes()[..8]);
     let k = hmac(&k, REGION.as_bytes());
     let k = hmac(&k, b"s3");
     hmac(&k, b"aws4_request")

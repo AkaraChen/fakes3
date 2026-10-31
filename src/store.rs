@@ -12,8 +12,10 @@ use std::io::Write;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use parking_lot::RwLock;
+
+use crate::memory::{LimitExceeded, MemoryTracker, Reservation, Tracked};
 
 #[derive(Clone, Default)]
 pub struct ObjectData {
@@ -225,53 +227,91 @@ impl Bucket {
     }
 }
 
+/// Why a blob could not be written.
+#[derive(Debug)]
+pub enum BlobError {
+    Limit(LimitExceeded),
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for BlobError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+impl From<LimitExceeded> for BlobError {
+    fn from(e: LimitExceeded) -> Self {
+        Self::Limit(e)
+    }
+}
+
 /// Accumulates an incoming body, spilling to a memfd once it reaches `threshold` bytes.
 ///
 /// Small bodies are copied into an exact-size heap buffer rather than keeping the request's
 /// chunks, which would pin hyper's (much larger) read buffers.
+///
+/// Memory is charged to the tracker up front when the size is known (so an oversized request is
+/// refused before its body is read) and chunk by chunk otherwise. Dropping the writer unfinished
+/// releases everything; finishing hands the charge to the returned `Bytes`.
 pub struct BlobWriter {
     threshold: usize,
-    mem: BytesMut,
+    reservation: Reservation,
+    len: u64,
+    mem: Vec<u8>,
     file: Option<File>,
 }
 
 impl BlobWriter {
-    pub fn new(threshold: usize, size_hint: Option<u64>) -> std::io::Result<Self> {
+    pub fn new(memory: &Arc<MemoryTracker>, threshold: usize, size_hint: Option<u64>) -> Result<Self, BlobError> {
         let mut w = Self {
             threshold,
-            mem: BytesMut::new(),
+            reservation: memory.reserve(size_hint.unwrap_or(0))?,
+            len: 0,
+            mem: Vec::new(),
             file: None,
         };
         match size_hint {
             Some(n) if n as usize >= threshold => w.file = Some(new_memfd(n)?),
-            Some(n) => w.mem.reserve(n as usize),
+            Some(n) => w.mem.reserve_exact(n as usize),
             None => {}
         }
         Ok(w)
     }
 
-    pub fn write(&mut self, chunk: &[u8]) -> std::io::Result<()> {
+    pub fn write(&mut self, chunk: &[u8]) -> Result<(), BlobError> {
+        self.len += chunk.len() as u64;
+        if let Some(extra) = self.len.checked_sub(self.reservation.bytes()) {
+            self.reservation.grow(extra)?;
+        }
         if let Some(f) = &mut self.file {
-            return f.write_all(chunk);
+            return Ok(f.write_all(chunk)?);
         }
         self.mem.extend_from_slice(chunk);
         if self.mem.len() >= self.threshold {
             let mut f = new_memfd(0)?;
             f.write_all(&self.mem)?;
-            self.mem = BytesMut::new();
+            self.mem = Vec::new();
             self.file = Some(f);
         }
         Ok(())
     }
 
-    pub fn finish(self) -> std::io::Result<Bytes> {
-        let Some(f) = self.file else { return Ok(self.mem.freeze()) };
+    pub fn finish(mut self) -> Result<Bytes, BlobError> {
+        self.reservation.shrink_to(self.len);
+        let Some(f) = self.file else {
+            if self.mem.is_empty() {
+                return Ok(Bytes::new());
+            }
+            self.mem.shrink_to_fit();
+            return Ok(Bytes::from_owner(Tracked::new(self.mem, self.reservation)));
+        };
         if f.metadata()?.len() == 0 {
             return Ok(Bytes::new());
         }
         // SAFETY: the memfd is private to this process and never written again.
         let map = unsafe { memmap2::Mmap::map(&f)? };
-        Ok(Bytes::from_owner(map))
+        Ok(Bytes::from_owner(Tracked::new(map, self.reservation)))
     }
 }
 
@@ -284,4 +324,139 @@ fn new_memfd(size_hint: u64) -> std::io::Result<File> {
         let _ = rustix::fs::fallocate(&f, rustix::fs::FallocateFlags::KEEP_SIZE, 0, size_hint);
     }
     Ok(f)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn blob(memory: &Arc<MemoryTracker>, threshold: usize, len: usize, hint: bool) -> Result<Bytes, BlobError> {
+        let mut w = BlobWriter::new(memory, threshold, hint.then_some(len as u64))?;
+        for chunk in vec![5u8; len].chunks(100) {
+            w.write(chunk)?;
+        }
+        w.finish()
+    }
+
+    fn object(data: Bytes) -> Object {
+        Object {
+            data: ObjectData::from_segments(vec![data]),
+            meta: ObjectMeta::default(),
+            e_tag: String::new(),
+            last_modified: SystemTime::UNIX_EPOCH,
+            checksum: Default::default(),
+            checksum_type: None,
+            parts_count: None,
+            part_sizes: None,
+            tags: Vec::new(),
+            acl: None,
+        }
+    }
+
+    #[test]
+    fn writer_accounts_heap_and_memfd_with_and_without_a_size_hint() {
+        let t = MemoryTracker::new(None);
+        for hint in [true, false] {
+            // 250 bytes with a 1000-byte threshold stays on the heap; 2500 goes to a memfd.
+            let small = blob(&t, 1000, 250, hint).unwrap();
+            let big = blob(&t, 1000, 2500, hint).unwrap();
+            assert_eq!(t.stats().used, 2750, "hint={hint}");
+            let slice = big.slice(10..20);
+            drop(big);
+            assert_eq!(t.stats().used, 2750, "a slice keeps its whole buffer alive");
+            drop(slice);
+            drop(small);
+            assert_eq!(t.stats().used, 0, "hint={hint}");
+        }
+        assert_eq!(blob(&t, 1000, 0, true).unwrap().len(), 0);
+        assert_eq!(blob(&t, 1000, 0, false).unwrap().len(), 0);
+        assert_eq!(t.stats().used, 0);
+    }
+
+    #[test]
+    fn writer_refuses_up_front_or_mid_stream_and_releases() {
+        let t = MemoryTracker::new(Some(1000));
+        let keep = blob(&t, 4096, 600, true).unwrap();
+        assert!(matches!(BlobWriter::new(&t, 4096, Some(500)), Err(BlobError::Limit(_))));
+        assert_eq!(t.stats().used, 600);
+
+        // Unknown length: charged as it arrives, and everything is returned when it fails.
+        let mut w = BlobWriter::new(&t, 4096, None).unwrap();
+        w.write(&[0; 300]).unwrap();
+        assert_eq!(t.stats().used, 900);
+        assert!(matches!(w.write(&[0; 200]), Err(BlobError::Limit(_))));
+        drop(w);
+        assert_eq!(t.stats().used, 600);
+        drop(keep);
+        assert_eq!(t.stats().used, 0);
+    }
+
+    #[test]
+    fn writer_dropped_unfinished_releases_its_reservation() {
+        let t = MemoryTracker::new(Some(10_000));
+        let mut w = BlobWriter::new(&t, 100, Some(5000)).unwrap();
+        w.write(&[1; 300]).unwrap();
+        assert_eq!(t.stats().used, 5000);
+        drop(w);
+        assert_eq!(t.stats().used, 0);
+    }
+
+    #[test]
+    fn short_body_gives_back_the_unused_part_of_the_reservation() {
+        let t = MemoryTracker::new(None);
+        let mut w = BlobWriter::new(&t, 4096, Some(1000)).unwrap();
+        w.write(&[1; 400]).unwrap();
+        let b = w.finish().unwrap();
+        assert_eq!((b.len(), t.stats().used), (400, 400));
+    }
+
+    #[test]
+    fn dropping_buckets_releases_everything_including_shared_and_versioned_data() {
+        let t = MemoryTracker::new(None);
+        let store = Store::default();
+        let bucket = Arc::new(Bucket::new(SystemTime::UNIX_EPOCH));
+        *bucket.versioning.write() = Versioning::Enabled;
+        store.buckets.write().insert("b".into(), bucket.clone());
+
+        let shared = blob(&t, 1000, 2500, true).unwrap();
+        {
+            let mut objects = bucket.objects.write();
+            bucket.put(&mut objects, "a".into(), object(shared.clone()));
+            bucket.put(&mut objects, "a".into(), object(blob(&t, 1000, 300, true).unwrap()));
+            bucket.put(&mut objects, "copy".into(), object(shared.slice(0..100)));
+        }
+        bucket.uploads.write().insert(
+            ("k".into(), "u".into()),
+            Upload {
+                meta: ObjectMeta::default(),
+                tags: Vec::new(),
+                acl: None,
+                initiated: SystemTime::UNIX_EPOCH,
+                checksum_algorithm: None,
+                checksum_type: s3s::dto::ChecksumType::from_static(s3s::dto::ChecksumType::FULL_OBJECT),
+                parts: BTreeMap::from([(
+                    1,
+                    Part {
+                        data: ObjectData::from_segments(vec![blob(&t, 1000, 700, true).unwrap()]),
+                        md5: [0; 16],
+                        last_modified: SystemTime::UNIX_EPOCH,
+                        checksum: Default::default(),
+                    },
+                )]),
+            },
+        );
+        drop(shared);
+        assert_eq!(t.stats().used, 2500 + 300 + 700);
+
+        // One version, then the version deleted by id.
+        Bucket::delete_version(&mut bucket.objects.write(), "a", "nonexistent");
+        let first = bucket.objects.read()["a"].versions[0].id.clone();
+        Bucket::delete_version(&mut bucket.objects.write(), "a", &first);
+        assert_eq!(t.stats().used, 2500 + 300 + 700, "'copy' still pins the first buffer");
+
+        // A reset is just dropping the buckets.
+        drop(bucket);
+        store.buckets.write().clear();
+        assert_eq!(t.stats().used, 0);
+    }
 }

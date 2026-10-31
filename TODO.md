@@ -25,10 +25,13 @@
 - [x] `encoding-type=url`
 - [x] 条件请求：If-Match / If-None-Match / If-Modified-Since / If-Unmodified-Since，CopySource 的条件头
 - [x] 对象和 bucket 的 Tagging
-- [ ] ACL、Bucket Policy 求值、CORS 预检、Lifecycle、Website、Notification
+- [x] ACL（canned / grant / 请求体）、OwnershipControls、PublicAccessBlock、Bucket Policy 求值（匿名访问 + 显式 Deny）、
+      CORS 预检与响应头、Lifecycle（按服务端时钟惰性执行）、Website 与 Notification 的配置读写
+- [ ] Website 端点（按 index/error document 和 routing rules 提供静态网站）、Notification 实际投递、
+      Lifecycle 的 Transition、新建 bucket 默认启用 BucketOwnerEnforced 和 Block Public Access（AWS 2023 年之后的默认值）
 - [ ] SSE-C（校验 key MD5）、SSE-S3/KMS header 回显
-- [ ] POST policy 表单上传
-- [ ] virtual-host 寻址的默认域名配置
+- [x] POST policy 表单上传（条件校验由 s3s 完成；过期时间按宿主机时钟判断，不受虚拟时钟影响）
+- [x] virtual-host 寻址：`--domain`（可重复），默认 `localhost`，即 `http://<bucket>.localhost:<port>`
 - [x] ListMultipartUploads
 - [ ] GetObjectAttributes
 - [ ] 回显 `storage_class`、`x-amz-website-redirect-location` 等剩余元数据
@@ -39,7 +42,7 @@
 - [x] MD5 优化：换成 OpenSSL 的汇编实现（通过底层 `MD5_*` 接口调用，不链接 EVP，二进制体积不变），
       大于 inline 阈值的请求体把 MD5 放到独立线程，与接收、校验和、写 memfd 流水线并行
 - [ ] 多个并发流共享 SIMD 的多路 MD5（类似 MinIO 的 md5-simd），提升多并发大对象写入的总吞吐
-- [ ] 内存上限和超出上限时的明确报错
+- [x] 内存上限（`--memory-limit`）和超出上限时的明确报错（507 `XFakeS3MemoryLimitExceeded`）
 - [x] 评估每 bucket 的 `RwLock<BTreeMap>` 是否是瓶颈：CI（4 核）上 64 并发 PUT 与 16 并发吞吐持平（约 2.3 万 ops/s），
       服务端只用了约 0.74 核，瓶颈在压测客户端而不是锁，暂不更换。
 - [ ] 做测试控制面的快照功能时，把索引换成 `im::OrdMap`（O(1) 快照）；届时在核数更多的机器上复测写入争用

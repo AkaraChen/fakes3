@@ -51,7 +51,28 @@ s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 | `--access-key` | `FAKES3_ACCESS_KEY` | `fakes3` | 访问凭证 |
 | `--secret-key` | `FAKES3_SECRET_KEY` | `fakes3secret` | 访问凭证 |
 | `--no-auth` | | 关 | 不校验签名 |
+| `--domain` | `FAKES3_DOMAIN` | `localhost` | virtual-host 寻址的基础域名，可重复（或逗号分隔）；`<bucket>.<domain>` 选择 bucket，其它主机名仍按 path-style 处理；传空字符串关闭 |
 | `--inline-threshold` | | `1048576` | 达到这个大小的对象或 part 存进 memfd，小于它的放在堆上 |
+| `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | 对象数据占用内存的上限，见下文。可以写 `2GiB`、`512MiB`、`unlimited`、`auto` |
+
+**内存上限**：fakes3 统计所有对象数据实际占用的内存（堆上的小对象、memfd 里的大对象、尚未 Complete 的分段上传的 part），
+超出上限的写入会被拒绝，而不是让进程被 OOM killer 杀掉。
+
+- 默认值 `auto` 是容器 cgroup 内存限制和物理内存中较小者的 75%（读不到时不限制）。memfd 的页面算在 cgroup 的内存里，
+  不设上限的话，容器超限时进程会被直接杀掉，没有任何报错；留 25% 给元数据、连接缓冲区和测试进程自己。
+  机器上跑多个 fakes3 或其他大内存进程时，每个实例各自按这个比例计算，需要的话用 `--memory-limit` 显式指定。
+  设成 `unlimited`（或 `0`）取消限制。作为库使用时对应 `Config::memory_limit`（`MemoryLimit::Auto` / `Unlimited` / `Bytes(n)`），
+  当前用量和上限可以用 `Server::memory()` 读取；用量超过 90% 时会打印一条 warning（默认日志级别就是 `warn`）。
+- 统计的是数据 buffer 本身，不含元数据、key 和分配器开销。同一个 buffer 被多个对象、版本、CopyObject、UploadPartCopy、
+  CompleteMultipartUpload 共享时只算一次，最后一个引用释放时才归还；覆盖、删除、删除版本、Abort 都会释放。
+  因此删掉一个仍被副本引用的对象，内存不会下降。
+- 写入时先按 `Content-Length` 一次性预留，放不下就在读取请求体**之前**拒绝（带 `Expect: 100-continue` 的客户端根本不会发送请求体）；
+  没有长度的请求体（chunked）边读边计，越线立刻失败并释放已缓冲的部分。拒绝前会把剩余请求体读掉丢弃，
+  这样客户端收到的是明确的错误响应，而不是连接被重置。
+- 覆盖同一个 key 时，新对象写完前旧对象仍可读，所以瞬时需要同时容纳新旧两份。
+- 超限时返回 **HTTP 507 Insufficient Storage**，错误码 `XFakeS3MemoryLimitExceeded`，消息写明已用量、上限和调大的方法。
+  不用 503 SlowDown 是因为 SDK 会对它退避重试，只会把失败拖慢；不用 400 EntityTooLarge 是因为它表示单个对象太大。
+  各主流 SDK 的默认重试策略都不会重试 507（MinIO 的磁盘满也是 507）。
 
 ## 支持的功能
 
@@ -65,8 +86,15 @@ s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
   分段上传支持 COMPOSITE 和 FULL_OBJECT；没指定算法时默认计算 CRC64NVME，和现在的 AWS S3 一致
 - 认证：SigV4（包括 presigned URL 和带 trailer 的流式上传）、SigV2
 - 对象标签、Range 读取、Content-MD5 校验
+- 访问控制：Bucket/Object ACL（canned、grant 头、请求体）、OwnershipControls（BucketOwnerEnforced 时 ACL 被禁用）、
+  PublicAccessBlock、Bucket Policy（含 Condition，显式 Deny 对已签名请求也生效）；未签名的匿名请求在 policy 或公开 ACL 允许时放行，
+  `--no-auth` 时不做授权
+- CORS：预检 `OPTIONS` 和实际响应上的 CORS 头
+- Lifecycle：过期（含版本控制下的删除标记、非当前版本、`NewerNoncurrentVersions`）和清理未完成的分段上传，按服务端虚拟时钟在 UTC 日期变化后的第一次访问时执行；
+  没有规则的 bucket 零开销
+- Website、Notification 配置的存取（不提供网站端点，不投递事件）；POST policy 表单上传
 
-还没做的功能见 [TODO.md](TODO.md)，主要是 Object Lock、ACL/Policy、CORS、Lifecycle、SSE，以及测试控制面
+还没做的功能见 [TODO.md](TODO.md)，主要是 Object Lock、SSE、Website 端点，以及测试控制面
 （reset、快照、虚拟时钟、故障注入）。
 
 ## 兼容性
