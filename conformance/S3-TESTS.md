@@ -3,7 +3,7 @@
 [ceph/s3-tests](https://github.com/ceph/s3-tests) is the S3 conformance suite used by Ceph RGW; about a thousand pytest cases written against real AWS behaviour (and RGW's). This page is the measured baseline of fakes3 against it, with every failure categorised, and the backlog that follows. It complements the 43 scenarios of the SDK matrix ([../matrix/SPEC.md](../matrix/SPEC.md)).
 
 - **Pinned commit:** [`5b3987116eca0b4b8fa57d6b10f3db57bab196b6`](https://github.com/ceph/s3-tests/commit/5b3987116eca0b4b8fa57d6b10f3db57bab196b6) (master, 2026-10-12), 1053 collected test cases: `test_s3.py` 838 (760 functions, parametrized cases counted separately), `test_headers.py` 48, `test_iam.py` 90, `test_sts.py` 36, `test_s3select.py` 34, `test_sns.py` 5, `test_s3control.py` 1, `test_utils.py` 1.
-- **Measured:** fakes3 at `main` as of merge `20bf005` (includes `--bucket-defaults`), run [41197624119](https://github.com/AkaraChen/fakes3/actions/runs/41197624119). MinIO (`cgr.dev/chainguard/minio:latest`) and LocalStack 4.14 are references, run the same way. The numbers will move; the CI run is the source of truth, this file is a snapshot.
+- **Measured:** fakes3 at `main` as of its merge into this branch (archive tiers, `--bucket-defaults` and `--no-auth` fixes included), run [41198487135](https://github.com/AkaraChen/fakes3/actions/runs/41198487135). MinIO (`cgr.dev/chainguard/minio:latest`) and LocalStack 4.14 are references, run the same way. The numbers will move; the CI run is the source of truth, this file is a snapshot.
 - **Baseline definition:** the headline numbers exclude the 237 tests s3-tests itself marks `fails_on_aws` (they pass on RGW and fail on AWS, so they say nothing about AWS compatibility); they are still run and listed separately. `fails_on_rgw` / `fails_on_dbstore` / `fails_on_dho` tests are AWS-valid and stay in.
 
 ## How to run
@@ -29,7 +29,7 @@ python3 conformance/s3-tests/report.py conformance/s3-tests/results --src confor
 
 `run.sh` pins the commit (`S3TESTS_REF`), checks it out under `.work/`, builds a Python 3.12 venv with `boto3==botocore==1.43.123` (`constraints.txt`) plus pytest-xdist and pytest-timeout, writes `s3tests.conf`, starts the server with `bench/servers.sh start`, runs pytest and stops the server. Knobs are documented at the top of the script (`S3T_WORKERS`, `S3T_MARKER`, `S3T_KEYWORD`, `S3T_PATHS`, `S3T_TIMEOUT`, …). `report.py` + `triage.json` produce everything below.
 
-**Runtime.** pytest takes 2m28s for fakes3 with 4 xdist workers (MinIO 3m45s, LocalStack 4m47s) and 5m12s serially (run [41196487837](https://github.com/AkaraChen/fakes3/actions/runs/41196487837)); the Docker image build adds about a minute with a warm cache and about six cold. The serial and the parallel runs agree on the outcome of all 1053 tests, as did two further parallel runs, so xdist is on by default. Lifecycle tests would sleep up to 20 × `lc_debug_interval`; the runner sets the interval to 1 s (they fail for other reasons on every server anyway: nothing here accelerates "days").
+**Runtime.** pytest takes 2m04s for fakes3 with 4 xdist workers (MinIO 3m45s, LocalStack 3m50s) and 5m12s serially (run [41196487837](https://github.com/AkaraChen/fakes3/actions/runs/41196487837)); the Docker image build adds about a minute with a warm cache and about six cold. The serial and the parallel runs agree on the outcome of all 1053 tests, as did two further parallel runs, so xdist is on by default. Lifecycle tests would sleep up to 20 × `lc_debug_interval`; the runner sets the interval to 1 s (they fail for other reasons on every server anyway: nothing here accelerates "days").
 
 ### Harness decisions you should know about
 
@@ -45,18 +45,18 @@ python3 conformance/s3-tests/report.py conformance/s3-tests/results --src confor
 
 | server | pass | fail | error | skip | total | pass rate | pass rate excl. skips | runtime |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
-| fakes3 | 474 | 271 | 0 | 71 | 816 | 58.1% | 63.6% | 2m28s |
-| fakes3-aws | 381 | 364 | 0 | 71 | 816 | 46.7% | 51.1% | 3m02s |
-| localstack | 404 | 341 | 0 | 71 | 816 | 49.5% | 54.2% | 4m47s |
+| fakes3 | 475 | 270 | 0 | 71 | 816 | 58.2% | 63.8% | 2m04s |
+| fakes3-aws | 382 | 363 | 0 | 71 | 816 | 46.8% | 51.3% | 2m53s |
+| localstack | 404 | 341 | 0 | 71 | 816 | 49.5% | 54.2% | 3m50s |
 | minio | 358 | 387 | 0 | 71 | 816 | 43.9% | 48.1% | 3m45s |
 
 ### All tests
 
 | server | pass | fail | error | skip | total | pass rate | pass rate excl. skips | runtime |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
-| fakes3 | 530 | 360 | 0 | 163 | 1053 | 50.3% | 59.6% | 2m28s |
-| fakes3-aws | 421 | 469 | 0 | 163 | 1053 | 40.0% | 47.3% | 3m02s |
-| localstack | 450 | 440 | 0 | 163 | 1053 | 42.7% | 50.6% | 4m47s |
+| fakes3 | 531 | 359 | 0 | 163 | 1053 | 50.4% | 59.7% | 2m04s |
+| fakes3-aws | 422 | 468 | 0 | 163 | 1053 | 40.1% | 47.4% | 2m53s |
+| localstack | 450 | 440 | 0 | 163 | 1053 | 42.7% | 50.6% | 3m50s |
 | minio | 386 | 504 | 0 | 163 | 1053 | 36.7% | 43.4% | 3m45s |
 
 ## By file (AWS-applicable tests)
@@ -65,7 +65,7 @@ python3 conformance/s3-tests/report.py conformance/s3-tests/results --src confor
 |---|--:|--:|--:|--:|
 | test_headers.py | 21/48 | 20/48 | 26/48 | 23/48 |
 | test_iam.py | 0/88 | 0/88 | 0/88 | 2/88 |
-| test_s3.py | 430/603 | 338/603 | 355/603 | 313/603 |
+| test_s3.py | 431/603 | 339/603 | 355/603 | 313/603 |
 | test_s3control.py | 0/1 | 0/1 | 0/1 | 0/1 |
 | test_s3select.py | 22/34 | 22/34 | 22/34 | 19/34 |
 | test_sns.py | 0/5 | 0/5 | 0/5 | 0/5 |
@@ -76,14 +76,14 @@ python3 conformance/s3-tests/report.py conformance/s3-tests/results --src confor
 
 | category | failing tests | groups |
 |---|--:|--:|
-| Real fakes3 bug (wrong status / code / header / body vs AWS) | 61 | 28 |
+| Real fakes3 bug (wrong status / code / header / body vs AWS) | 60 | 28 |
 | Unimplemented feature | 20 | 6 |
 | Needs several users / tenants / IAM / STS (the servers know one credential) | 99 | 3 |
 | s3s limitation (verified in the s3s source) | 25 | 5 |
 | Test is not AWS-compatible / RGW-specific / ineffective with boto3 (not marked by s3-tests) | 66 | 14 |
 | Marked `fails_on_aws` by s3-tests itself (excluded from the baseline) | 89 | 1 |
 
-### Real fakes3 bug (wrong status / code / header / body vs AWS): 61 tests
+### Real fakes3 bug (wrong status / code / header / body vs AWS): 60 tests
 
 #### CreateBucket on a bucket the caller already owns returns 409 (5)
 
@@ -151,12 +151,6 @@ Common prefix `quux ab/` comes back as `quux+ab/`; boto3 only decodes `%XX`, so 
 
 Tests: `test_bucket_list_encoding_basic`, `test_bucket_listv2_encoding_basic`
 
-#### Lifecycle: rule without ID is returned without one; invalid transition `Date` accepted (2)
-
-AWS generates a rule ID when none is given (`assert 'ID' in lc_rule`) and rejects `Transitions[].Date` that is not ISO 8601 midnight (`20220927`) with 400 `MalformedXML`/`InvalidArgument`. MinIO passes the first, MinIO and LocalStack the second. Cost: **cheap**. Also passes on: minio.
-
-Tests: `test_lifecycle_get_no_id`, `test_lifecycle_transition_set_invalid_date`
-
 #### DeleteObjects accepts more than 1000 keys (2)
 
 AWS answers 400 `MalformedXML`; fakes3 deletes all 1001 (`ClientError not raised`). MinIO passes. Cost: **cheap**. Also passes on: minio.
@@ -210,6 +204,12 @@ Tests: `test_cors_origin_response`
 `KeyError: 'x-amz-delete-marker'` on the 404. The test expects the header; whether AWS sends it for unversioned buckets is unconfirmed (MinIO and LocalStack fail too). Cost: **cheap**.
 
 Tests: `test_delete_marker_nonversioned`
+
+#### Lifecycle: rule without ID is returned without one (1)
+
+AWS generates a rule ID when none is given (`assert 'ID' in lc_rule`); fakes3 returns the rule without one. MinIO passes. (Rejecting a non-ISO-8601 `Transitions[].Date`, `test_lifecycle_transition_set_invalid_date`, was fixed on main by the archive-tiers merge during this work.) Cost: **cheap**. Also passes on: minio.
+
+Tests: `test_lifecycle_get_no_id`
 
 #### CompleteMultipartUpload accepts a malformed request-level checksum (1)
 
@@ -475,43 +475,43 @@ Tests: `test_sse_kms_no_key`
 | 11 | [s3 cloud] section missing cloud_storage_class |
 | 4 | requires 3 or more storage classes |
 | 1 | no api_name configured |
-| 1 | got empty parameter set for (source_mode_key, source_storage_class, dest_storage_class) |
 | 1 | requires 2 or more storage classes |
 | 1 | no cloud_storage_class configured |
+| 1 | got empty parameter set for (source_mode_key, source_storage_class, dest_storage_class) |
 
 ## fakes3-aws (`--bucket-defaults aws`) against fakes3
 
 109 tests pass with the legacy defaults and fail with the AWS defaults; 0 go the other way. s3-tests predates the 2023 changes (ACLs, public policies and SSE-C all assumed available), so these are the tests that no longer apply to a bucket created the way AWS creates it today.
 
 - 27 × `ClientError InvalidBucketAclWithObjectOwnership on CreateBucket` — `test_post_object_anonymous_request`, `test_post_object_authenticated_no_content_type`, `test_post_object_authenticated_request_bad_access_key`, … (27)
-- 23 × `ClientError AccessDenied on PutObject` — `test_get_sse_c_encrypted_object_attributes`, `test_copy_enc[sse-c-sse-s3-STANDARD-STANDARD-8388608]`, `test_copy_enc[sse-c-sse-c-STANDARD-STANDARD-1]`, … (23)
-- 12 × `ClientError AccessDenied on CopyObject` — `test_copy_enc[unencrypted-sse-c-STANDARD-STANDARD-8388608]`, `test_copy_enc[sse-s3-sse-c-STANDARD-STANDARD-1]`, `test_copy_enc[sse-s3-sse-c-STANDARD-STANDARD-1024]`, … (12)
-- 11 × `ClientError AccessDenied on PutBucketPolicy` — `test_bucket_policy_another_bucket`, `test_bucketv2_policy_another_bucket`, `test_set_get_del_bucket_policy`, … (11)
-- 9 × `ClientError AccessControlListNotSupported on PutObjectAcl` — `test_object_copy_not_owned_object_bucket`, `test_object_put_acl_mtime`, `test_object_acl`, … (9)
-- 7 × `ClientError AccessControlListNotSupported on PutBucketAcl` — `test_bucket_list_objects_anonymous`, `test_bucket_listv2_objects_anonymous`, `test_100_continue`, … (7)
+- 23 × `ClientError AccessDenied on PutObject` — `test_encryption_sse_c_method_head`, `test_encryption_sse_c_present`, `test_encryption_sse_c_enforced_with_bucket_policy`, … (23)
+- 12 × `ClientError AccessDenied on CopyObject` — `test_copy_enc[sse-s3-sse-c-STANDARD-STANDARD-1]`, `test_copy_enc[sse-s3-sse-c-STANDARD-STANDARD-1024]`, `test_copy_enc[sse-s3-sse-c-STANDARD-STANDARD-1048576]`, … (12)
+- 11 × `ClientError AccessDenied on PutBucketPolicy` — `test_bucket_policy`, `test_bucketv2_policy`, `test_bucket_policy_another_bucket`, … (11)
+- 9 × `ClientError AccessControlListNotSupported on PutObjectAcl` — `test_object_put_acl_mtime`, `test_object_acl`, `test_object_acl_write`, … (9)
+- 7 × `ClientError AccessControlListNotSupported on PutBucketAcl` — `test_bucket_list_objects_anonymous`, `test_bucket_listv2_objects_anonymous`, `test_bucket_policy_acl`, … (7)
 - 5 × `assert N == N` — `test_object_presigned_put_object_with_acl`, `test_object_presigned_put_object_with_acl_tenant`, `test_encryption_sse_c_multipart_invalid_chunks_2`, … (5)
 - 4 × `AssertionError: assert '' == 'ServerSideEn...NotFoundError'` — `test_get_bucket_encryption_s3`, `test_get_bucket_encryption_kms`, `test_delete_bucket_encryption_s3`, … (4)
 - 3 × `ClientError AccessControlListNotSupported on PutObject` — `test_object_raw_authenticated_bucket_acl`, `test_object_raw_get_bucket_acl`, `test_object_raw_response_headers`
 - 2 × `ClientError AccessDenied on CreateMultipartUpload` — `test_encryption_sse_c_multipart_upload`, `test_encryption_sse_c_unaligned_multipart_upload`
 - 1 × `assert False == True` — `test_bucket_concurrent_set_canned_acl`
-- 1 × `ClientError AccessControlListNotSupported on CopyObject` — `test_object_copy_canned_acl`
 - 1 × `AssertionError: assert 'AccessContro...tNotSupported' == 'InvalidArgument'` — `test_bucket_acl_grant_nonexist_user`
 - 1 × `AssertionError: assert 'AccessContro...tNotSupported' == 'Unresolvable...yEmailAddress'` — `test_bucket_acl_grant_email_not_exist`
+- 1 × `AssertionError: assert N == N` — `test_block_public_object_canned_acls`
 - 1 × `AssertionError: ClientError not raised` — `test_create_bucket_no_ownership_controls`
 - … 1 more error shapes
 
 
 ## Prioritised backlog
 
-Numbers are failing AWS-applicable tests on fakes3 with the default (`legacy`) bucket defaults; today 474 of 816 pass (58.1%).
+Numbers are failing AWS-applicable tests on fakes3 with the default (`legacy`) bucket defaults; today 475 of 816 pass (58.2%).
 
-1. **Cheap fakes3 fixes, 47 tests (→ ~521/816, 63.8%).** All are small, local behaviour fixes with a known AWS answer; most also pass on MinIO or LocalStack, which is the evidence they are bugs rather than test quirks. Largest first:
+1. **Cheap fakes3 fixes, 46 tests (→ ~521/816, 63.8%).** All are small, local behaviour fixes with a known AWS answer; most also pass on MinIO or LocalStack, which is the evidence they are bugs rather than test quirks. Largest first:
    - `CreateBucket` on an owned bucket → 200 in us-east-1 (5, including an S3 Select test that creates its bucket twice)
    - `GetObject ?partNumber` returns `x-amz-checksum-type` (5)
    - SSE-C `UploadPart` with a different key → 400 (4)
    - ListObjects: echo `<Marker/>`, return `Owner` (v1 default / `fetch-owner`), no empty `Delimiter`, `%20` for spaces under `encoding-type=url` (7)
    - Object Lock: governance→compliance needs bypass, `InvalidRetentionPeriod` (3)
-   - `DeleteObjects` > 1000 keys → `MalformedXML` (2); `Content-MD5` empty / malformed → `InvalidDigest` (2); lifecycle rule ID generation and transition-date validation (2); SSE headers on GET/HEAD → 400 (2); no `VersionId` on unversioned PutObject (2); `MFADelete: Disabled` must not demand a token (2)
+   - `DeleteObjects` > 1000 keys → `MalformedXML` (2); `Content-MD5` empty / malformed → `InvalidDigest` (2); lifecycle rule ID generation (1); SSE headers on GET/HEAD → 400 (2); no `VersionId` on unversioned PutObject (2); `MFADelete: Disabled` must not demand a token (2)
    - one-liners: request id in responses and error bodies, default `Content-Type: binary/octet-stream`, 500 → 400 `InvalidTag` for 11 tags, tag order, non-UTF-8 key → 400, NotPrincipal+Allow → `MalformedPolicy`, bad request-level checksum on Complete → `BadDigest`, `x-amz-expected-bucket-owner`.
    The request-id one is worth doing first regardless of the test count: every client logs it and every AWS-shaped error carries it.
 2. **Second identity support in fakes3 (unlocks the 36 "multi-user" tests plus whatever they hide).** Add repeatable credentials (e.g. `--user name:access:secret[:canonical-id]`, tenants as a naming rule) and point `[s3 alt]` / `[s3 tenant]` at them. Those 36 tests are the bulk of S3 access-control semantics (bucket / object ACL grants between users, policy principals, `test_access_*`, ownership, cross-user copy and multipart owner fields); today they cannot tell us anything. Re-triage afterwards: a few will turn into real bugs.

@@ -110,11 +110,10 @@
   {
    "id": "lifecycle-validation",
    "category": "bug",
-   "title": "Lifecycle: rule without ID is returned without one; invalid transition `Date` accepted",
-   "why": "AWS generates a rule ID when none is given (`assert 'ID' in lc_rule`) and rejects `Transitions[].Date` that is not ISO 8601 midnight (`20220927`) with 400 `MalformedXML`/`InvalidArgument`. MinIO passes the first, MinIO and LocalStack the second.",
+   "title": "Lifecycle: rule without ID is returned without one",
+   "why": "AWS generates a rule ID when none is given (`assert 'ID' in lc_rule`); fakes3 returns the rule without one. MinIO passes. (Rejecting a non-ISO-8601 `Transitions[].Date`, `test_lifecycle_transition_set_invalid_date`, was fixed on main by the archive-tiers merge during this work.)",
    "tests": [
-    "test_lifecycle_get_no_id",
-    "test_lifecycle_transition_set_invalid_date"
+    "test_lifecycle_get_no_id"
    ],
    "cost": "cheap"
   },
