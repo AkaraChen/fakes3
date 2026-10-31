@@ -116,10 +116,10 @@ pub async fn signed_form(req: &mut http::Request<s3s::Body>) -> bool {
     let Ok(body) = std::mem::take(req.body_mut()).collect().await.map(|b| b.to_bytes()) else {
         return false;
     };
-    // The fields come before the file.
+    // The fields come before the file part (some clients, like Python's requests, give every field a filename).
     let fields = body
-        .windows(9)
-        .position(|w| w == b"filename=")
+        .windows(11)
+        .position(|w| w == b"name=\"file\"")
         .map_or(&body[..], |end| &body[..end]);
     let signed = fields.windows(10).any(|w| w.eq_ignore_ascii_case(b"signature\""));
     *req.body_mut() = s3s::Body::from(body);

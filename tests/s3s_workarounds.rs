@@ -150,10 +150,13 @@ async fn v2_bad_dates_are_access_denied() {
     server.shutdown().await;
 }
 
+/// A form with Python-requests-style parts: every field carries a filename.
 fn multipart(boundary: &str, fields: &[(&str, &str)], file: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     for (k, v) in fields {
-        out.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n").as_bytes());
+        out.extend_from_slice(
+            format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"; filename=\"{k}\"\r\n\r\n{v}\r\n").as_bytes(),
+        );
     }
     out.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.txt\"\r\n\r\n").as_bytes());
     out.extend_from_slice(file);
