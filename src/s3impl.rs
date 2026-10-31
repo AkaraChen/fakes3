@@ -12,18 +12,64 @@ use s3s::{S3, S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 
 use crate::clock::Clock;
 use crate::digest;
+use crate::memory::{LimitExceeded, MemoryTracker};
 use crate::store::{
-    BlobWriter, Bucket as StoreBucket, Entry, Object as StoreObject, ObjectData, ObjectMeta, Part, Store, Upload, Version, Versioning,
+    BlobError, BlobWriter, Bucket as StoreBucket, Entry, Object as StoreObject, ObjectData, ObjectMeta, Part, Store, Upload, Version,
+    Versioning,
 };
 
 pub struct FakeS3 {
     pub store: Store,
     pub inline_threshold: usize,
+    pub memory: Arc<MemoryTracker>,
     pub clock: Arc<Clock>,
 }
 
-fn io_err(e: std::io::Error) -> S3Error {
-    s3_error!(e, InternalError)
+impl FakeS3 {
+    fn sink<'a>(&'a self, headers: &http::HeaderMap) -> Sink<'a> {
+        Sink {
+            threshold: self.inline_threshold,
+            memory: &self.memory,
+            // A client waiting for `100 Continue` hasn't sent the body yet; answer without asking for it.
+            drain_rejected: !headers
+                .get(http::header::EXPECT)
+                .is_some_and(|v| v.as_bytes().eq_ignore_ascii_case(b"100-continue")),
+        }
+    }
+}
+
+/// Where an incoming body is stored and how a refused one is handled.
+struct Sink<'a> {
+    threshold: usize,
+    memory: &'a Arc<MemoryTracker>,
+    /// Read and discard the rest of a body that is refused for lack of memory, so the client sees
+    /// the error response rather than a connection reset while it is still uploading.
+    drain_rejected: bool,
+}
+
+fn blob_err(e: BlobError) -> S3Error {
+    match e {
+        BlobError::Io(e) => s3_error!(e, InternalError),
+        BlobError::Limit(l) => limit_err(&l),
+    }
+}
+
+/// HTTP 507 with a fakes3-specific code, like MinIO's `XMinioStorageFull`. The status is
+/// deliberately not 503 SlowDown (SDKs retry that with backoff, which only delays the failure)
+/// and not 400 EntityTooLarge (it reads as a per-object size cap). None of the AWS SDKs'
+/// default retry policies retry a 507.
+fn limit_err(l: &LimitExceeded) -> S3Error {
+    let code = "XFakeS3MemoryLimitExceeded".parse::<S3ErrorCode>().expect("infallible");
+    let mut e = S3Error::with_message(code, l.to_string());
+    e.set_status_code(http::StatusCode::INSUFFICIENT_STORAGE);
+    e
+}
+
+async fn reject(body: Option<&mut StreamingBlob>, drain: bool, l: &LimitExceeded) -> S3Error {
+    if drain && let Some(body) = body {
+        while body.next().await.is_some_and(|c| c.is_ok()) {}
+    }
+    limit_err(l)
 }
 
 fn ts(t: SystemTime) -> Timestamp {
@@ -164,8 +210,8 @@ struct Ingested {
 /// Reads a request body into a blob, validating Content-MD5 and any flexible checksums
 /// (header or aws-chunked trailer) the client supplied.
 async fn ingest(
-    threshold: usize,
-    body: Option<StreamingBlob>,
+    sink: Sink<'_>,
+    mut body: Option<StreamingBlob>,
     content_length: Option<i64>,
     content_md5: Option<&str>,
     mut expected: Checksum,
@@ -174,17 +220,30 @@ async fn ingest(
 ) -> S3Result<Ingested> {
     let mut hasher = hasher_for(&expected, algorithm)?;
     // Large bodies hash MD5 on another thread, overlapping with the work below.
-    let mut md5 = digest::Streaming::new(content_length.is_some_and(|n| n as usize >= threshold));
-    let mut w = BlobWriter::new(threshold, content_length.map(|n| n as u64)).map_err(io_err)?;
-    if let Some(mut body) = body {
+    let mut md5 = digest::Streaming::new(content_length.is_some_and(|n| n as usize >= sink.threshold));
+    // Refused here, before any of the body is read, when the declared length doesn't fit.
+    let mut w = match BlobWriter::new(sink.memory, sink.threshold, content_length.and_then(|n| u64::try_from(n).ok())) {
+        Ok(w) => w,
+        Err(BlobError::Limit(l)) => return Err(reject(body.as_mut(), sink.drain_rejected, &l).await),
+        Err(e) => return Err(blob_err(e)),
+    };
+    if let Some(body) = body.as_mut() {
         while let Some(chunk) = body.next().await {
             let chunk = chunk.map_err(|e| s3_error!(IncompleteBody, "{e}"))?;
             md5.update(&chunk).await;
             hasher.update(&chunk);
-            w.write(&chunk).map_err(io_err)?;
+            match w.write(&chunk) {
+                Ok(()) => {}
+                Err(BlobError::Limit(l)) => {
+                    // Crossed the limit mid-stream (unknown length): free what was buffered.
+                    drop(w);
+                    return Err(reject(Some(body), sink.drain_rejected, &l).await);
+                }
+                Err(e) => return Err(blob_err(e)),
+            }
         }
     }
-    let data = w.finish().map_err(io_err)?;
+    let data = w.finish().map_err(blob_err)?;
     if let Some(n) = content_length
         && n as usize != data.len()
     {
@@ -746,7 +805,7 @@ impl S3 for FakeS3 {
         let tags = parse_tagging_header(input.tagging.as_deref())?;
         let expected = checksum_from!(&input);
         let ing = ingest(
-            self.inline_threshold,
+            self.sink(&req.headers),
             input.body,
             input.content_length,
             input.content_md5.as_deref(),
@@ -1391,7 +1450,7 @@ impl S3 for FakeS3 {
         };
         let expected = checksum_from!(&input);
         let ing = ingest(
-            self.inline_threshold,
+            self.sink(&req.headers),
             input.body,
             input.content_length,
             input.content_md5.as_deref(),
