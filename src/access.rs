@@ -325,7 +325,7 @@ impl Access {
                 owner
                     || by_policy
                     || (perm == Perm::Read
-                        && (self.bucket_acl_allows(bucket, who, Perm::Read, public) || self.may_list(&policy, name, key, who, &pab, ctx)))
+                        && (self.bucket_acl_allows(bucket, who, Perm::Read, public) || self.may_list(&policy, name, key, &pab, ctx)))
                     || initiator()
             }
         }
@@ -337,13 +337,13 @@ impl Access {
         policy: &Option<Arc<crate::policy::Policy>>,
         name: &str,
         key: &str,
-        who: Identity,
         pab: &crate::bucket_config::PublicAccessBlock,
         ctx: &Context<'_>,
     ) -> bool {
         let Some(p) = policy else { return false };
         let ctx = Context { prefix: Some(key), ..*ctx };
-        p.evaluate("s3:ListBucket", &arn(name, None), &ctx) == Verdict::Allow && !(pab.restrict_public_buckets && p.public && !who.signed())
+        // Only reached by callers other than the bucket owner, so a public policy is restricted for all of them.
+        p.evaluate("s3:ListBucket", &arn(name, None), &ctx) == Verdict::Allow && !(pab.restrict_public_buckets && p.public)
     }
 
     fn peer(&self, ext: &mut http::Extensions) -> Option<IpAddr> {

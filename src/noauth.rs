@@ -503,6 +503,26 @@ mod tests {
     }
 
     #[test]
+    fn the_access_key_picks_the_identity() {
+        let users = Users::new("fakes3", "s", &["alt:ALTKEY:x".parse().unwrap()]).unwrap();
+        let user_of = |uri: &str, auth: Option<&str>| {
+            let mut req = http::Request::get(uri).body(s3s::Body::empty()).unwrap();
+            if let Some(a) = auth {
+                req.headers_mut().insert(http::header::AUTHORIZATION, a.parse().unwrap());
+            }
+            accept_any(&mut req, &users).map(|s| s.user)
+        };
+        let header = |key: &str| format!("AWS4-HMAC-SHA256 Credential={key}/20240101/r/s3/aws4_request, Signature=ab");
+        assert_eq!(user_of("/b/k", Some(&header("ALTKEY"))), Some(UserId::DEFAULT.next()));
+        assert_eq!(user_of("/b/k", Some(&header("fakes3"))), Some(UserId::DEFAULT));
+        // Nobody's key is the default account; no signature at all is anonymous.
+        assert_eq!(user_of("/b/k", Some(&header("stranger"))), Some(UserId::DEFAULT));
+        assert_eq!(user_of("/b/k", None), None);
+        let query = "/b/k?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ALTKEY%2F20240101%2Fr%2Fs3%2Faws4_request&X-Amz-Signature=ab";
+        assert_eq!(user_of(query, None), Some(UserId::DEFAULT.next()));
+    }
+
+    #[test]
     fn presigned_queries() {
         let v4 = "response-content-type=text%2Fplain&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKID%2F20240101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240101T000000Z&X-Amz-Expires=60&X-Amz-SignedHeaders=host&X-Amz-Signature=ab";
         let (rest, key) = strip_presigned(v4).unwrap();

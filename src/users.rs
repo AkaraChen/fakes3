@@ -32,6 +32,12 @@ impl UserId {
     pub fn index(self) -> usize {
         self.0 as usize
     }
+
+    /// The identity after this one in the table (for tests that need a second one).
+    #[cfg(test)]
+    pub fn next(self) -> Self {
+        Self(self.0 + 1)
+    }
 }
 
 /// One identity as configured: `--user name:access-key:secret[:account-id[:canonical-id]]`.
