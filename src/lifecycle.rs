@@ -385,11 +385,16 @@ fn sweep_entry(lc: &Lifecycle, key: &str, entry: &mut Entry, mode: Versioning, n
     // 2. Remove noncurrent versions that have been noncurrent long enough.
     if entry.versions.len() > 1 {
         let last = entry.versions.len() - 1;
+        let locked_at = UNIX_EPOCH + Duration::from_secs(now.max(0) as u64);
         let mut remove = Vec::new();
         for (i, v) in entry.versions[..last].iter().enumerate() {
             let became_noncurrent = entry.versions[i + 1].last_modified;
             // Noncurrent versions newer than this one (the current version does not count).
             let newer = last - i - 1;
+            // Object Lock holds a version past its rule until the retention ends.
+            if v.obj.as_ref().is_some_and(|o| crate::objext::delete_blocked(o, locked_at, false)) {
+                continue;
+            }
             let expired = lc.rules.iter().any(|r| {
                 r.noncurrent.as_ref().is_some_and(|n| {
                     r.matches(key, v.obj.as_ref()) && due(became_noncurrent, n.days) <= now && n.newer.is_none_or(|keep| newer >= keep)
@@ -455,6 +460,7 @@ mod tests {
             part_sizes: None,
             tags: Vec::new(),
             acl: None,
+            ext: None,
         }
     }
 

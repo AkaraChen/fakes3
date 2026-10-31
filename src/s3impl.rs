@@ -15,6 +15,8 @@ use crate::bucket_config::Ownership;
 use crate::clock::Clock;
 use crate::digest;
 use crate::memory::{LimitExceeded, MemoryTracker};
+use crate::objext::{self, apply_ext, apply_sse, object_opts};
+use crate::objops;
 use crate::store::{
     BlobError, BlobWriter, Bucket as StoreBucket, Entry, Index, Object as StoreObject, ObjectData, ObjectMeta, Part, Store, Upload,
     Version, Versioning,
@@ -74,7 +76,7 @@ async fn reject(body: Option<&mut StreamingBlob>, drain: bool, l: &LimitExceeded
     limit_err(l)
 }
 
-fn ts(t: SystemTime) -> Timestamp {
+pub(crate) fn ts(t: SystemTime) -> Timestamp {
     Timestamp::from(t)
 }
 
@@ -513,6 +515,9 @@ impl FakeS3 {
     /// Resolves the version a read addresses. Returns the version and whether the bucket reports
     /// version ids.
     pub(crate) fn version(&self, bucket: &str, key: &str, version_id: Option<&str>) -> S3Result<(Arc<Version>, bool)> {
+        if let Some(id) = version_id {
+            objext::check_version_id(id)?;
+        }
         let b = self.bucket(bucket)?;
         let versioned = *b.versioning.read() != Versioning::Unversioned;
         let objects = b.objects.read();
@@ -546,6 +551,15 @@ impl FakeS3 {
     }
 }
 
+fn delete_error(key: String, version_id: Option<String>, e: S3Error) -> s3s::dto::Error {
+    s3s::dto::Error {
+        code: Some(e.code().as_str().to_owned()),
+        key: Some(key),
+        message: e.message().map(str::to_owned),
+        version_id,
+    }
+}
+
 /// Byte range of part `n` (1-based). Objects not assembled from parts have a single part.
 fn part_range(o: &StoreObject, n: i32) -> S3Result<std::ops::Range<u64>> {
     let sizes: &[u64] = match &o.part_sizes {
@@ -564,7 +578,7 @@ fn part_range(o: &StoreObject, n: i32) -> S3Result<std::ops::Range<u64>> {
     Ok(start..start + sizes[n as usize - 1])
 }
 
-fn obj(v: &Version) -> &StoreObject {
+pub(crate) fn obj(v: &Version) -> &StoreObject {
     v.obj.as_ref().expect("resolved versions are never delete markers")
 }
 
@@ -610,6 +624,9 @@ where
     V: Fn(&Entry) -> bool,
     F: FnMut(&str, &Entry) -> usize,
 {
+    if max_keys == 0 {
+        return (Vec::new(), false, None);
+    }
     let mut prefixes = Vec::new();
     let mut used = 0usize;
     let mut next = None;
@@ -664,7 +681,10 @@ fn list(objects: &Index, prefix: &str, delimiter: Option<&str>, after: Option<&s
             e_tag: Some(ETag::Strong(o.e_tag.clone())),
             last_modified: Some(ts(o.last_modified)),
             size: Some(o.data.size as i64),
-            storage_class: Some(ObjectStorageClass::from_static(ObjectStorageClass::STANDARD)),
+            storage_class: Some(match objext::storage_class(o.ext.as_deref()) {
+                Some(c) => ObjectStorageClass::from(c.as_str().to_owned()),
+                None => ObjectStorageClass::from_static(ObjectStorageClass::STANDARD),
+            }),
             ..Default::default()
         });
         1
@@ -725,6 +745,11 @@ impl S3 for FakeS3 {
         if let Some(acl) = acl::resolve_for_new_bucket(&bucket.config, &acl::acl_args!(&input, bucket))? {
             *bucket.config.acl.write() = acl;
         }
+        if input.object_lock_enabled_for_bucket == Some(true) {
+            // Object Lock needs versioning, which it keeps on for good.
+            *bucket.versioning.write() = Versioning::Enabled;
+            bucket.cfg.enable_lock();
+        }
         let mut buckets = self.store.buckets.write();
         if buckets.contains_key(&name) {
             return Err(s3_error!(BucketAlreadyOwnedByYou));
@@ -781,12 +806,35 @@ impl S3 for FakeS3 {
 
     async fn put_bucket_versioning(&self, req: S3Request<PutBucketVersioningInput>) -> S3Result<S3Response<PutBucketVersioningOutput>> {
         let b = self.bucket(&req.input.bucket)?;
-        let status = req.input.versioning_configuration.status.ok_or_else(|| s3_error!(MalformedXML))?;
+        let conf = req.input.versioning_configuration;
+        let status = conf.status.ok_or_else(|| s3_error!(MalformedXML))?;
         let mode = match status.as_str() {
             BucketVersioningStatus::ENABLED => Versioning::Enabled,
             BucketVersioningStatus::SUSPENDED => Versioning::Suspended,
             _ => return Err(s3_error!(MalformedXML)),
         };
+        let mfa_delete = match conf.mfa_delete.as_ref().map(|m| m.as_str()) {
+            None => None,
+            Some(MFADelete::ENABLED) => Some(true),
+            Some(MFADelete::DISABLED) => Some(false),
+            Some(_) => return Err(s3_error!(MalformedXML)),
+        };
+        // Changing MFA Delete, or the versioning state of a bucket that has it on, takes a token.
+        if mfa_delete.is_some() || b.cfg.mfa_delete() == Some(true) {
+            match req.input.mfa.as_deref() {
+                None => return Err(s3_error!(AccessDenied, "Mfa Authentication must be used for this request")),
+                Some(m) => objops::check_mfa_header(m)?,
+            }
+        }
+        if mode == Versioning::Suspended && b.cfg.lock_enabled() {
+            return Err(s3_error!(
+                InvalidBucketState,
+                "An Object Lock configuration is present on this bucket, so the versioning state cannot be changed."
+            ));
+        }
+        if let Some(on) = mfa_delete {
+            b.cfg.set_mfa_delete(on);
+        }
         *b.versioning.write() = mode;
         Ok(S3Response::new(PutBucketVersioningOutput {}))
     }
@@ -798,10 +846,11 @@ impl S3 for FakeS3 {
             Versioning::Enabled => Some(BucketVersioningStatus::from_static(BucketVersioningStatus::ENABLED)),
             Versioning::Suspended => Some(BucketVersioningStatus::from_static(BucketVersioningStatus::SUSPENDED)),
         };
-        Ok(S3Response::new(GetBucketVersioningOutput {
-            status,
-            ..Default::default()
-        }))
+        let mfa_delete = b
+            .cfg
+            .mfa_delete()
+            .map(|on| MFADeleteStatus::from_static(if on { MFADeleteStatus::ENABLED } else { MFADeleteStatus::DISABLED }));
+        Ok(S3Response::new(GetBucketVersioningOutput { status, mfa_delete }))
     }
 
     async fn put_bucket_tagging(&self, req: S3Request<PutBucketTaggingInput>) -> S3Result<S3Response<PutBucketTaggingOutput>> {
@@ -961,6 +1010,7 @@ impl S3 for FakeS3 {
         let tags = parse_tagging_header(input.tagging.as_deref())?;
         let acl = acl::resolve(&bucket.config, &acl::acl_args!(&input), false)?.map(Arc::new);
         let expected = checksum_from!(&input);
+        let ext = objext::resolve(object_opts!(input), &bucket, &self.clock)?;
         let ing = ingest(
             self.sink(&req.headers),
             input.body,
@@ -971,7 +1021,9 @@ impl S3 for FakeS3 {
             req.trailing_headers,
         )
         .await?;
-        let e_tag = hex::encode(ing.md5);
+        let e_tag = objext::etag_for(&ing.md5, ext.as_ref());
+        let last_modified = self.clock.now();
+        let ext = objext::finish(ext, &bucket, last_modified);
         let obj = StoreObject {
             data: ObjectData::from_segments(vec![ing.data]),
             meta: meta_from(
@@ -984,12 +1036,13 @@ impl S3 for FakeS3 {
                 input.metadata,
             ),
             e_tag: e_tag.clone(),
-            last_modified: self.clock.now(),
+            last_modified,
             checksum: ing.checksum.clone(),
             checksum_type: Some(checksum_type(ChecksumType::FULL_OBJECT)),
             parts_count: None,
             part_sizes: None,
             tags,
+            ext: ext.clone(),
             acl,
         };
         let expiration = self.expiration_header(&input.bucket, &input.key, &obj);
@@ -998,7 +1051,7 @@ impl S3 for FakeS3 {
             check_write_conditions(objects.get(&input.key), input.if_match.as_ref(), input.if_none_match.as_ref())?;
             bucket.put(&mut objects, input.key, obj)
         };
-        Ok(S3Response::new(with_checksum!(
+        let mut out = with_checksum!(
             PutObjectOutput {
                 e_tag: Some(ETag::Strong(e_tag)),
                 expiration: expiration,
@@ -1006,13 +1059,22 @@ impl S3 for FakeS3 {
                 checksum_type: Some(checksum_type(ChecksumType::FULL_OBJECT)),
             },
             ing.checksum
-        )))
+        );
+        apply_sse!(out, objext::sse_out(ext.as_deref()));
+        out.ssekms_encryption_context = objext::sse_context(ext.as_deref());
+        Ok(S3Response::new(out))
     }
 
     async fn get_object(&self, req: S3Request<GetObjectInput>) -> S3Result<S3Response<GetObjectOutput>> {
         let input = req.input;
         let (v, versioned) = self.version(&input.bucket, &input.key, input.version_id.as_deref())?;
         let o = obj(&v);
+        objext::check_read_key(
+            o.ext.as_deref(),
+            input.sse_customer_algorithm.as_deref(),
+            input.sse_customer_key.as_deref(),
+            input.sse_customer_key_md5.as_deref(),
+        )?;
         check_conditions(
             o,
             input.if_match.as_ref(),
@@ -1053,7 +1115,7 @@ impl S3 for FakeS3 {
             (Checksum::default(), None)
         };
         let m = &o.meta;
-        let out = with_checksum!(
+        let mut out = with_checksum!(
             GetObjectOutput {
                 body: Some(body),
                 content_length: Some((range.end - range.start) as i64),
@@ -1076,6 +1138,7 @@ impl S3 for FakeS3 {
             },
             checksum
         );
+        apply_ext!(out, o.ext.as_deref());
         Ok(S3Response::new(out))
     }
 
@@ -1083,6 +1146,12 @@ impl S3 for FakeS3 {
         let input = req.input;
         let (v, versioned) = self.version(&input.bucket, &input.key, input.version_id.as_deref())?;
         let o = obj(&v);
+        objext::check_read_key(
+            o.ext.as_deref(),
+            input.sse_customer_algorithm.as_deref(),
+            input.sse_customer_key.as_deref(),
+            input.sse_customer_key_md5.as_deref(),
+        )?;
         check_conditions(
             o,
             input.if_match.as_ref(),
@@ -1116,7 +1185,7 @@ impl S3 for FakeS3 {
         };
         let partial = content_range.is_some();
         let m = &o.meta;
-        let out = with_checksum!(
+        let mut out = with_checksum!(
             HeadObjectOutput {
                 content_length: Some(content_length as i64),
                 content_range: content_range,
@@ -1138,6 +1207,7 @@ impl S3 for FakeS3 {
             },
             checksum
         );
+        apply_ext!(out, o.ext.as_deref());
         let mut resp = S3Response::new(out);
         if partial {
             resp.status = Some(http::StatusCode::PARTIAL_CONTENT);
@@ -1149,6 +1219,13 @@ impl S3 for FakeS3 {
         let input = req.input;
         let b = self.bucket(&input.bucket)?;
         let mut objects = b.objects.write();
+        if let Some(id) = &input.version_id {
+            objext::check_version_id(id)?;
+            objops::mfa_required(&b.cfg, input.mfa.as_deref())?;
+            if objops::version_locked(&b, &objects, &input.key, id, self.clock.now(), input.bypass_governance_retention) {
+                return Err(objext::locked_error());
+            }
+        }
         if let Some(c) = &input.if_match {
             match objects.get(&input.key).and_then(Entry::current) {
                 Some(o) => check_conditions(o, Some(c), None, None, None)?,
@@ -1182,6 +1259,9 @@ impl S3 for FakeS3 {
         let mut deleted = Vec::new();
         let mut errors = Vec::new();
         let denied = req.extensions.get::<crate::access::Denied>();
+        if req.input.delete.objects.iter().any(|o| o.version_id.is_some()) {
+            objops::mfa_required(&b.cfg, req.input.mfa.as_deref())?;
+        }
         {
             let mut objects = b.objects.write();
             for id in req.input.delete.objects {
@@ -1198,6 +1278,14 @@ impl S3 for FakeS3 {
                 }
                 let d = match id.version_id {
                     Some(vid) => {
+                        if let Err(e) = objext::check_version_id(&vid) {
+                            errors.push(delete_error(id.key, Some(vid), e));
+                            continue;
+                        }
+                        if objops::version_locked(&b, &objects, &id.key, &vid, self.clock.now(), req.input.bypass_governance_retention) {
+                            errors.push(delete_error(id.key, Some(vid), objext::locked_error()));
+                            continue;
+                        }
                         let marker = StoreBucket::delete_version(&mut objects, &id.key, &vid);
                         DeletedObject {
                             key: Some(id.key),
@@ -1235,6 +1323,12 @@ impl S3 for FakeS3 {
         let input = req.input;
         let (src_v, src_versioned) = self.source_object(&input.copy_source)?;
         let src = obj(&src_v);
+        objext::check_read_key(
+            src.ext.as_deref(),
+            input.copy_source_sse_customer_algorithm.as_deref(),
+            input.copy_source_sse_customer_key.as_deref(),
+            input.copy_source_sse_customer_key_md5.as_deref(),
+        )?;
         check_conditions(
             src,
             input.copy_source_if_match.as_ref(),
@@ -1251,6 +1345,13 @@ impl S3 for FakeS3 {
         })?;
         let dst_bucket = self.bucket(&input.bucket)?;
         let acl = acl::resolve(&dst_bucket.config, &acl::acl_args!(&input), false)?.map(Arc::new);
+        let opts = object_opts!(input);
+        let changes_attributes = !opts.is_empty();
+        let mut ext = objext::resolve(opts, &dst_bucket, &self.clock)?;
+        // A multipart object keeps answering GetObjectAttributes with its per-part checksums.
+        if let Some(pc) = src.ext.as_ref().and_then(|e| e.part_checksums.clone()) {
+            ext.get_or_insert_default().part_checksums = Some(pc);
+        }
         let replace = input
             .metadata_directive
             .as_ref()
@@ -1265,6 +1366,7 @@ impl S3 for FakeS3 {
             version_id: None,
         } = &input.copy_source
             && !replace
+            && !changes_attributes
             && **bucket == *input.bucket
             && **key == *input.key
         {
@@ -1292,10 +1394,12 @@ impl S3 for FakeS3 {
             src.tags.clone()
         };
         let now = self.clock.now();
+        let e_tag = objext::copy_etag(src, ext.as_ref());
+        let ext = objext::finish(ext, &dst_bucket, now);
         let new = StoreObject {
             data: src.data.clone(),
             meta,
-            e_tag: src.e_tag.clone(),
+            e_tag: e_tag.clone(),
             last_modified: now,
             checksum: src.checksum.clone(),
             checksum_type: src.checksum_type.clone(),
@@ -1303,21 +1407,25 @@ impl S3 for FakeS3 {
             part_sizes: src.part_sizes.clone(),
             tags,
             acl,
+            ext: ext.clone(),
         };
         let version_id = {
             let mut objects = dst_bucket.objects.write();
             dst_bucket.put(&mut objects, input.key, new)
         };
-        Ok(S3Response::new(CopyObjectOutput {
+        let mut out = CopyObjectOutput {
             copy_object_result: Some(CopyObjectResult {
-                e_tag: Some(ETag::Strong(src.e_tag.clone())),
+                e_tag: Some(ETag::Strong(e_tag)),
                 last_modified: Some(ts(now)),
                 ..Default::default()
             }),
             version_id,
             copy_source_version_id: src_versioned.then(|| src_v.id.clone()),
             ..Default::default()
-        }))
+        };
+        apply_sse!(out, objext::sse_out(ext.as_deref()));
+        out.ssekms_encryption_context = objext::sse_context(ext.as_deref());
+        Ok(S3Response::new(out))
     }
 
     async fn put_object_tagging(&self, req: S3Request<PutObjectTaggingInput>) -> S3Result<S3Response<PutObjectTaggingOutput>> {
@@ -1463,6 +1571,18 @@ impl S3 for FakeS3 {
         let input = req.input;
         let b = self.bucket(&input.bucket)?;
         let prefix = input.prefix.clone().unwrap_or_default();
+        if input.max_keys.is_some_and(|n| n < 0) {
+            return Err(s3_error!(
+                InvalidArgument,
+                "Argument maxKeys must be an integer between 0 and 2147483647"
+            ));
+        }
+        if input.version_id_marker.as_deref().is_some_and(|v| !v.is_empty()) && input.key_marker.as_deref().is_none_or(str::is_empty) {
+            return Err(s3_error!(
+                InvalidArgument,
+                "A version-id marker cannot be specified without a key marker."
+            ));
+        }
         let max_keys = input.max_keys.unwrap_or(1000).clamp(0, 1000) as usize;
         let objects = b.objects.read();
         let mut versions = Vec::new();
@@ -1512,7 +1632,10 @@ impl S3 for FakeS3 {
                             e_tag: Some(ETag::Strong(o.e_tag.clone())),
                             last_modified: Some(ts(o.last_modified)),
                             size: Some(o.data.size as i64),
-                            storage_class: Some(ObjectVersionStorageClass::from_static(ObjectVersionStorageClass::STANDARD)),
+                            storage_class: Some(match objext::storage_class(o.ext.as_deref()) {
+                                Some(c) => ObjectVersionStorageClass::from(c.as_str().to_owned()),
+                                None => ObjectVersionStorageClass::from_static(ObjectVersionStorageClass::STANDARD),
+                            }),
                             owner: Some(owner()),
                             ..Default::default()
                         }),
@@ -1544,8 +1667,9 @@ impl S3 for FakeS3 {
             name: Some(input.bucket),
             prefix: Some(prefix),
             delimiter: input.delimiter,
-            key_marker: input.key_marker,
-            version_id_marker: input.version_id_marker,
+            // S3 always writes the (possibly empty) markers.
+            key_marker: Some(input.key_marker.unwrap_or_default()),
+            version_id_marker: Some(input.version_id_marker.unwrap_or_default()),
             max_keys: Some(max_keys as i32),
             is_truncated: Some(truncated),
             next_key_marker: if truncated { next_key } else { None },
@@ -1577,6 +1701,7 @@ impl S3 for FakeS3 {
         let tags = parse_tagging_header(input.tagging.as_deref())?;
         let ty = upload_checksum_type(input.checksum_algorithm.as_ref(), input.checksum_type.as_ref())?;
         let acl = acl::resolve(&b.config, &acl::acl_args!(&input), false)?.map(Arc::new);
+        let ext = objext::resolve(object_opts!(input), &b, &self.clock)?;
         let upload_id = uuid::Uuid::new_v4().simple().to_string();
         b.uploads.write().insert(
             (input.key.clone(), upload_id.clone()),
@@ -1591,6 +1716,7 @@ impl S3 for FakeS3 {
                     input.metadata,
                 ),
                 tags,
+                ext: ext.clone(),
                 acl,
                 initiated: self.clock.now(),
                 checksum_algorithm: input.checksum_algorithm.clone(),
@@ -1598,14 +1724,17 @@ impl S3 for FakeS3 {
                 parts: BTreeMap::new(),
             },
         );
-        Ok(S3Response::new(CreateMultipartUploadOutput {
+        let mut out = CreateMultipartUploadOutput {
             bucket: Some(input.bucket),
             key: Some(input.key),
             upload_id: Some(upload_id),
             checksum_type: input.checksum_algorithm.is_some().then_some(ty),
             checksum_algorithm: input.checksum_algorithm,
+            ssekms_encryption_context: objext::sse_context(ext.as_ref()),
             ..Default::default()
-        }))
+        };
+        apply_sse!(out, objext::sse_out(ext.as_ref()));
+        Ok(S3Response::new(out))
     }
 
     async fn upload_part(&self, req: S3Request<UploadPartInput>) -> S3Result<S3Response<UploadPartOutput>> {
@@ -1618,15 +1747,23 @@ impl S3 for FakeS3 {
             ));
         }
         let id = (input.key.clone(), input.upload_id.clone());
-        let algorithm = {
+        let (algorithm, sse) = {
             let uploads = b.uploads.read();
             let up = uploads.get(&id).ok_or_else(|| s3_error!(NoSuchUpload))?;
+            // An SSE-C upload takes its key with every part.
+            objext::check_read_key(
+                up.ext.as_ref(),
+                input.sse_customer_algorithm.as_deref(),
+                input.sse_customer_key.as_deref(),
+                input.sse_customer_key_md5.as_deref(),
+            )?;
             // Without an algorithm, S3 gives the object a full-object CRC64NVME, so each part needs one.
-            input
+            let algorithm = input
                 .checksum_algorithm
                 .clone()
                 .or_else(|| up.checksum_algorithm.clone())
-                .unwrap_or_else(|| ChecksumAlgorithm::from_static(ChecksumAlgorithm::CRC64NVME))
+                .unwrap_or_else(|| ChecksumAlgorithm::from_static(ChecksumAlgorithm::CRC64NVME));
+            (algorithm, objext::sse_out(up.ext.as_ref()))
         };
         let expected = checksum_from!(&input);
         let ing = ingest(
@@ -1650,12 +1787,14 @@ impl S3 for FakeS3 {
                 checksum: ing.checksum.clone(),
             },
         );
-        Ok(S3Response::new(with_checksum!(
+        let mut out = with_checksum!(
             UploadPartOutput {
                 e_tag: Some(ETag::Strong(hex::encode(ing.md5)))
             },
             ing.checksum
-        )))
+        );
+        apply_sse!(out, sse);
+        Ok(S3Response::new(out))
     }
 
     async fn upload_part_copy(&self, req: S3Request<UploadPartCopyInput>) -> S3Result<S3Response<UploadPartCopyOutput>> {
@@ -1669,6 +1808,12 @@ impl S3 for FakeS3 {
         }
         let (src_v, src_versioned) = self.source_object(&input.copy_source)?;
         let src = obj(&src_v);
+        objext::check_read_key(
+            src.ext.as_deref(),
+            input.copy_source_sse_customer_algorithm.as_deref(),
+            input.copy_source_sse_customer_key.as_deref(),
+            input.copy_source_sse_customer_key_md5.as_deref(),
+        )?;
         check_conditions(
             src,
             input.copy_source_if_match.as_ref(),
@@ -1688,12 +1833,20 @@ impl S3 for FakeS3 {
             None => 0..src.data.size,
         };
         let id = (input.key.clone(), input.upload_id.clone());
-        let algorithm = {
+        let (algorithm, sse) = {
             let uploads = b.uploads.read();
             let up = uploads.get(&id).ok_or_else(|| s3_error!(NoSuchUpload))?;
-            up.checksum_algorithm
+            objext::check_read_key(
+                up.ext.as_ref(),
+                input.sse_customer_algorithm.as_deref(),
+                input.sse_customer_key.as_deref(),
+                input.sse_customer_key_md5.as_deref(),
+            )?;
+            let algorithm = up
+                .checksum_algorithm
                 .clone()
-                .unwrap_or_else(|| ChecksumAlgorithm::from_static(ChecksumAlgorithm::CRC64NVME))
+                .unwrap_or_else(|| ChecksumAlgorithm::from_static(ChecksumAlgorithm::CRC64NVME));
+            (algorithm, objext::sse_out(up.ext.as_ref()))
         };
         // The part shares the source's buffers; only its digests have to be computed.
         let segments = src.data.slice(range);
@@ -1710,7 +1863,7 @@ impl S3 for FakeS3 {
                 checksum: checksum.clone(),
             },
         );
-        Ok(S3Response::new(UploadPartCopyOutput {
+        let mut out = UploadPartCopyOutput {
             copy_part_result: Some(with_checksum!(
                 CopyPartResult {
                     e_tag: Some(ETag::Strong(hex::encode(md5))),
@@ -1720,7 +1873,9 @@ impl S3 for FakeS3 {
             )),
             copy_source_version_id: src_versioned.then(|| src_v.id.clone()),
             ..Default::default()
-        }))
+        };
+        apply_sse!(out, sse);
+        Ok(S3Response::new(out))
     }
 
     async fn list_parts(&self, req: S3Request<ListPartsInput>) -> S3Result<S3Response<ListPartsOutput>> {
@@ -1926,29 +2081,35 @@ impl S3 for FakeS3 {
                 ));
             }
             let has_checksum = slot(&checksum, alg_idx).is_some();
+            let mut ext = up.ext.clone();
+            ext.get_or_insert_default().part_checksums = Some(checksums.iter().map(|(c, _)| (*c).clone()).collect());
+            let now = self.clock.now();
+            let ext = objext::finish(ext, &b, now);
             let obj = StoreObject {
                 data: ObjectData::from_segments(segments),
                 meta: up.meta.clone(),
                 e_tag: multipart_etag(&md5s),
-                last_modified: self.clock.now(),
+                last_modified: now,
                 checksum: checksum.clone(),
                 checksum_type: has_checksum.then(|| up.checksum_type.clone()),
                 parts_count: Some(md5s.len() as i32),
                 part_sizes: Some(sizes.into()),
                 tags: up.tags.clone(),
+                ext,
                 acl: up.acl.clone(),
             };
             (obj, checksum)
         };
         let ctype = obj.checksum_type.clone();
         let e_tag = obj.e_tag.clone();
+        let sse = objext::sse_out(obj.ext.as_deref());
         let version_id = {
             let mut objects = b.objects.write();
             check_write_conditions(objects.get(&input.key), input.if_match.as_ref(), input.if_none_match.as_ref())?;
             b.put(&mut objects, input.key.clone(), obj)
         };
         b.uploads.write().remove(&id);
-        Ok(S3Response::new(with_checksum!(
+        let mut out = with_checksum!(
             CompleteMultipartUploadOutput {
                 bucket: Some(input.bucket.clone()),
                 key: Some(input.key.clone()),
@@ -1958,7 +2119,60 @@ impl S3 for FakeS3 {
                 checksum_type: ctype,
             },
             checksum
-        )))
+        );
+        out.server_side_encryption = sse.algorithm;
+        out.ssekms_key_id = sse.kms_key_id;
+        out.bucket_key_enabled = sse.bucket_key;
+        Ok(S3Response::new(out))
+    }
+
+    async fn put_object_lock_configuration(
+        &self,
+        req: S3Request<PutObjectLockConfigurationInput>,
+    ) -> S3Result<S3Response<PutObjectLockConfigurationOutput>> {
+        self.do_put_object_lock_configuration(req).await
+    }
+
+    async fn get_object_lock_configuration(
+        &self,
+        req: S3Request<GetObjectLockConfigurationInput>,
+    ) -> S3Result<S3Response<GetObjectLockConfigurationOutput>> {
+        self.do_get_object_lock_configuration(req).await
+    }
+
+    async fn put_object_retention(&self, req: S3Request<PutObjectRetentionInput>) -> S3Result<S3Response<PutObjectRetentionOutput>> {
+        self.do_put_object_retention(req).await
+    }
+
+    async fn get_object_retention(&self, req: S3Request<GetObjectRetentionInput>) -> S3Result<S3Response<GetObjectRetentionOutput>> {
+        self.do_get_object_retention(req).await
+    }
+
+    async fn put_object_legal_hold(&self, req: S3Request<PutObjectLegalHoldInput>) -> S3Result<S3Response<PutObjectLegalHoldOutput>> {
+        self.do_put_object_legal_hold(req).await
+    }
+
+    async fn get_object_legal_hold(&self, req: S3Request<GetObjectLegalHoldInput>) -> S3Result<S3Response<GetObjectLegalHoldOutput>> {
+        self.do_get_object_legal_hold(req).await
+    }
+
+    async fn put_bucket_encryption(&self, req: S3Request<PutBucketEncryptionInput>) -> S3Result<S3Response<PutBucketEncryptionOutput>> {
+        self.do_put_bucket_encryption(req).await
+    }
+
+    async fn get_bucket_encryption(&self, req: S3Request<GetBucketEncryptionInput>) -> S3Result<S3Response<GetBucketEncryptionOutput>> {
+        self.do_get_bucket_encryption(req).await
+    }
+
+    async fn delete_bucket_encryption(
+        &self,
+        req: S3Request<DeleteBucketEncryptionInput>,
+    ) -> S3Result<S3Response<DeleteBucketEncryptionOutput>> {
+        self.do_delete_bucket_encryption(req).await
+    }
+
+    async fn get_object_attributes(&self, req: S3Request<GetObjectAttributesInput>) -> S3Result<S3Response<GetObjectAttributesOutput>> {
+        self.do_get_object_attributes(req).await
     }
 
     async fn abort_multipart_upload(&self, req: S3Request<AbortMultipartUploadInput>) -> S3Result<S3Response<AbortMultipartUploadOutput>> {
@@ -2069,6 +2283,7 @@ mod tests {
                             parts_count: None,
                             part_sizes: None,
                             tags: Vec::new(),
+                            ext: None,
                             acl: None,
                         }),
                         last_modified: now,

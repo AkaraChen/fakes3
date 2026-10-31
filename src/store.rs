@@ -16,6 +16,7 @@ use bytes::Bytes;
 use parking_lot::RwLock;
 
 use crate::memory::{LimitExceeded, MemoryTracker, Reservation, Tracked};
+use crate::objext::{BucketCfg, ObjectExt};
 
 #[derive(Clone, Default)]
 pub struct ObjectData {
@@ -77,6 +78,8 @@ pub struct Object {
     /// Sizes of the parts a multipart object was assembled from, for `?partNumber=` reads.
     pub part_sizes: Option<Arc<[u64]>>,
     pub tags: Vec<(String, String)>,
+    /// Storage class, encryption, Object Lock...; `None` for a plain object.
+    pub ext: Option<Arc<ObjectExt>>,
     /// `None` is the default `private` ACL.
     pub acl: Option<Arc<crate::acl::Acl>>,
 }
@@ -128,6 +131,7 @@ pub struct Part {
 pub struct Upload {
     pub meta: ObjectMeta,
     pub tags: Vec<(String, String)>,
+    pub ext: Option<ObjectExt>,
     pub acl: Option<Arc<crate::acl::Acl>>,
     pub initiated: SystemTime,
     pub checksum_algorithm: Option<s3s::dto::ChecksumAlgorithm>,
@@ -145,6 +149,7 @@ pub struct Bucket {
     pub tags: RwLock<Option<Vec<(String, String)>>>,
     pub objects: RwLock<Index>,
     pub uploads: RwLock<BTreeMap<(String, String), Upload>>,
+    pub cfg: BucketCfg,
     pub config: crate::bucket_config::BucketConfig,
 }
 
@@ -168,6 +173,7 @@ impl Bucket {
             tags: RwLock::default(),
             objects: RwLock::default(),
             uploads: RwLock::default(),
+            cfg: BucketCfg::default(),
             config: Default::default(),
         }
     }
@@ -354,6 +360,7 @@ mod tests {
             parts_count: None,
             part_sizes: None,
             tags: Vec::new(),
+            ext: None,
             acl: None,
         }
     }
@@ -435,6 +442,7 @@ mod tests {
             Upload {
                 meta: ObjectMeta::default(),
                 tags: Vec::new(),
+                ext: None,
                 acl: None,
                 initiated: SystemTime::UNIX_EPOCH,
                 checksum_algorithm: None,
