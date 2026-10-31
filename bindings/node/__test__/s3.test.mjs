@@ -94,3 +94,39 @@ test('start fails with a readable error when the port is taken', async () => {
     await server.stop()
   }
 })
+
+test('memoryLimit caps object data and memory() reports it', async () => {
+  const server = await start({ memoryLimit: '1MiB' })
+  try {
+    assert.deepEqual(server.memory(), { used: 0, limit: 1024 * 1024 })
+    const s3 = client(server)
+    await s3.send(new CreateBucketCommand({ Bucket: 'bucket' }))
+    await s3.send(new PutObjectCommand({ Bucket: 'bucket', Key: 'small', Body: Buffer.alloc(1000) }))
+    assert.ok(server.memory().used >= 1000)
+    await assert.rejects(
+      s3.send(new PutObjectCommand({ Bucket: 'bucket', Key: 'big', Body: Buffer.alloc(2 * 1024 * 1024) })),
+      (e) => e.$metadata.httpStatusCode === 507,
+    )
+    s3.destroy()
+  } finally {
+    await server.stop()
+  }
+})
+
+test('memoryLimit accepts bytes and "unlimited"; rejects garbage', async () => {
+  const bytes = await start({ memoryLimit: 4096 })
+  const open = await start({ memoryLimit: 'unlimited' })
+  try {
+    assert.equal(bytes.memory().limit, 4096)
+    assert.equal(open.memory().limit, null)
+    await assert.rejects(start({ memoryLimit: 'lots' }), /invalid memoryLimit/)
+  } finally {
+    await Promise.all([bytes.stop(), open.stop()])
+  }
+})
+
+test('memory() fails after stop', async () => {
+  const server = await start()
+  await server.stop()
+  assert.throws(() => server.memory(), /stopped/)
+})

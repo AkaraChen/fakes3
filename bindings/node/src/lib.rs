@@ -25,6 +25,19 @@ pub struct StartOptions {
     /// Objects and parts at or above this many bytes are stored in a memfd instead of on the heap.
     /// Default 1 MiB.
     pub inline_threshold: Option<u32>,
+    /// Cap on the object data held in memory: a number of bytes, or a string such as `"512MiB"`,
+    /// `"2GiB"`, `"unlimited"` or `"auto"`. Writes past it fail with HTTP 507. Default `"auto"`,
+    /// which is 75% of the container's or machine's memory.
+    pub memory_limit: Option<Either<f64, String>>,
+}
+
+/// A reading of the server's memory accounting.
+#[napi(object)]
+pub struct MemoryStats {
+    /// Bytes of object data currently held.
+    pub used: f64,
+    /// The configured limit in bytes, or `null` when unlimited.
+    pub limit: Option<f64>,
 }
 
 /// A running in-process server.
@@ -70,6 +83,16 @@ impl FakeS3Server {
         self.secret_key.clone()
     }
 
+    /// Object data currently held in memory, and the limit it is checked against.
+    #[napi]
+    pub fn memory(&self) -> Result<MemoryStats> {
+        let stats = self.server(|s| s.memory())?;
+        Ok(MemoryStats {
+            used: stats.used as f64,
+            limit: stats.limit.map(|n| n as f64),
+        })
+    }
+
     /// Stops accepting connections and releases the port. Idempotent.
     #[napi]
     pub fn stop<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, ()>> {
@@ -86,7 +109,6 @@ impl FakeS3Server {
 
 impl FakeS3Server {
     /// The running server, for wrappers around `fakes3::Server` methods. Fails once stopped.
-    #[allow(dead_code)]
     fn server<T>(&self, f: impl FnOnce(&fakes3::Server) -> T) -> Result<T> {
         let guard = self.server.lock().map_err(poisoned)?;
         match guard.as_ref() {
@@ -111,6 +133,7 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         secret_key: None,
         no_auth: None,
         inline_threshold: None,
+        memory_limit: None,
     });
     let config = fakes3::Config {
         host: options.host.unwrap_or(defaults.host),
@@ -119,6 +142,14 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         secret_key: options.secret_key.unwrap_or(defaults.secret_key),
         auth: !options.no_auth.unwrap_or(false),
         inline_threshold: options.inline_threshold.map_or(defaults.inline_threshold, |n| n as usize),
+        memory_limit: match options.memory_limit {
+            None => defaults.memory_limit,
+            Some(Either::A(n)) if n.is_finite() && n >= 0.0 => fakes3::MemoryLimit::Bytes(n as u64),
+            Some(Either::A(n)) => return Err(Error::new(Status::InvalidArg, format!("invalid memoryLimit: {n}"))),
+            Some(Either::B(s)) => s
+                .parse()
+                .map_err(|e| Error::new(Status::InvalidArg, format!("invalid memoryLimit {s:?}: {e}")))?,
+        },
     };
     let server = fakes3::Server::start(config.clone()).await.map_err(|e| {
         Error::new(
