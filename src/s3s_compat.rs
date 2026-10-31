@@ -45,7 +45,12 @@ pub fn date_to_amz_date(headers: &mut http::HeaderMap) {
     let Some(date) = headers.get(http::header::DATE).and_then(|v| v.to_str().ok()) else {
         return;
     };
-    let Ok(t) = s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::HttpDate, date) else {
+    // botocore writes the zone as `-0000`, not `GMT`.
+    let date = match date.strip_suffix("-0000").or_else(|| date.strip_suffix("+0000")) {
+        Some(rest) => std::borrow::Cow::Owned(format!("{rest}GMT")),
+        None => std::borrow::Cow::Borrowed(date),
+    };
+    let Ok(t) = s3s::dto::Timestamp::parse(s3s::dto::TimestampFormat::HttpDate, &date) else {
         return;
     };
     let t = time::OffsetDateTime::from(t);
@@ -182,6 +187,8 @@ mod tests {
         let date = ("date", "Wed, 02 Jan 2030 03:04:05 GMT");
         let auth = ("authorization", "AWS4-HMAC-SHA256 Credential=a/20300102/us-east-1/s3/aws4_request");
         assert_eq!(run(&[date, auth]).as_deref(), Some("20300102T030405Z"));
+        let zoned = ("date", "Wed, 02 Jan 2030 03:04:05 -0000");
+        assert_eq!(run(&[zoned, auth]).as_deref(), Some("20300102T030405Z"));
         assert_eq!(
             run(&[date, auth, ("x-amz-date", "20300102T030406Z")]).as_deref(),
             Some("20300102T030406Z")

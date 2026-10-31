@@ -156,7 +156,8 @@ pub async fn send(addr: SocketAddr, r: Req<'_>) -> Resp {
     if r.signed {
         headers.push(("x-amz-content-sha256".into(), payload_hash.clone()));
         if r.date_header {
-            headers.push(("date".into(), http_date(SystemTime::now())));
+            // The zone as botocore writes it.
+            headers.push(("date".into(), http_date(SystemTime::now()).replace("GMT", "-0000")));
         } else {
             headers.push(("x-amz-date".into(), date.clone()));
         }

@@ -58,7 +58,7 @@ fakes3 的协议层（路由、XML、签名校验）由 [s3s](https://github.com
 | | |
 |---|---|
 | s3s | SigV4 的请求时间只从 `x-amz-date` 取，缺失就是 400 `InvalidRequest` |
-| S3 | `x-amz-date` 或 `Date` 任一个都行。botocore 在请求里有 `Date` 头时会删掉 `x-amz-date`，用 `Date`（RFC 1123）发请求，签名里的时间仍是紧凑格式 |
+| S3 | `x-amz-date` 或 `Date` 任一个都行。botocore 在请求里有 `Date` 头时会删掉 `x-amz-date`，用 `Date` 发请求（`Wed, 02 Jan 2030 03:04:05 -0000`，时区写成 `-0000` 而不是 `GMT`），签名里的时间仍是紧凑格式 |
 | fakes3 | 请求带 `Authorization`、有 `Date`、没有 `x-amz-date` 时，按 `Date` 补一个紧凑格式的 `x-amz-date`。签名通过 StringToSign 绑定了这个时间，编造的值验证不过。s3s 还要求 `x-amz-*` 头都在 SignedHeaders 里，所以配置里把 `x-amz-date` 加进了 s3s 的 `unsigned_amz_header_allowlist`（同样安全：它被签名覆盖） |
 | 代价 | 每个 SigV4 请求多一次 `x-amz-date` 头查找（存在就立刻返回） |
 | 何时可以删 | s3s 在没有 `x-amz-date` 时回退到 `Date` |
