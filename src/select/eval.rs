@@ -287,7 +287,7 @@ impl Env {
                 // CSV: `s._3`, the record itself has no value
                 return match steps.split_first() {
                     Some((Step::Field(f), rest)) => {
-                        let v = self.field(f, rec)?.unwrap_or(Value::Missing);
+                        let v = self.field(f, rec, true)?.unwrap_or(Value::Missing);
                         Ok(follow(v, rest))
                     }
                     _ => Err(err("UnsupportedSqlOperation", "A CSV record can only be used through its columns")),
@@ -295,7 +295,8 @@ impl Env {
             };
             return Ok(follow(Value::Json(j), steps));
         }
-        if let Some(v) = self.field(name, rec)? {
+        // `"_3"` in double quotes is a string, not the third column
+        if let Some(v) = self.field(name, rec, !quoted)? {
             return Ok(follow(v, steps));
         }
         if let Some((_, ex)) = self.aliases.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)) {
@@ -330,7 +331,7 @@ impl Env {
     }
 
     /// A column of the record by name; `None` if the record has no such thing.
-    fn field<'a>(&'a self, name: &str, rec: Rec<'a>) -> R<Option<Value<'a>>> {
+    fn field<'a>(&'a self, name: &str, rec: Rec<'a>, positional: bool) -> R<Option<Value<'a>>> {
         match rec {
             Rec::None => Err(err(
                 "UnsupportedSqlOperation",
@@ -340,7 +341,7 @@ impl Env {
             Rec::Csv(fields) => {
                 if let Some(n) = name
                     .strip_prefix('_')
-                    .filter(|d| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()))
+                    .filter(|d| positional && !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()))
                 {
                     return match n.parse::<usize>() {
                         Ok(n) if (1..=MAX_COLUMN).contains(&n) => {

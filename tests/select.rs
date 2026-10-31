@@ -189,6 +189,10 @@ async fn functions_and_cast() {
     // a double-quoted name that is no column is a string, as in Ceph's s3select
     assert_eq!(q("select lower(\"AB12cd$$\") from s3object limit 1").await.unwrap(), "ab12cd$$\n");
     assert_eq!(q("select _1 from s3object where _2 = \"bob\"").await.unwrap(), "2\n");
+    assert_eq!(
+        q("select _1 from s3object where _1 like \"_\" and \"_3\" = '_3'").await.unwrap(),
+        "1\n2\n3\n4\n"
+    );
 }
 
 #[tokio::test]
