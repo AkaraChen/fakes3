@@ -18,7 +18,8 @@
 - [ ] 版本控制补全：删除标记响应头以外的边角（MFA delete、ListObjectVersions 与 AWS 的逐字节差分）
 - [ ] Object Lock：retention、legal hold、governance bypass
 - [x] 分段上传对象的 composite 校验和（CRC32 / CRC32C / SHA1 / SHA256）
-- [ ] 分段上传的 FULL_OBJECT 校验和（需要 CRC combine）
+- [x] 分段上传的 FULL_OBJECT 校验和（CRC32 / CRC32C / CRC64NVME，用 crc-fast 合并各 part 的 CRC）
+- [x] 未指定算法时默认计算 CRC64NVME（与 2024 年 12 月之后的 S3 一致）
 - [x] UploadPartCopy（零拷贝，共享源对象的 buffer）
 - [x] GET/HEAD `?partNumber=`、HEAD 的 Range
 - [x] `encoding-type=url`
@@ -38,6 +39,8 @@
 - [ ] 单流 PUT 吞吐的瓶颈在 MD5（约 460 MB/s）。md5-asm 实测没有提升；openssl 的汇编实现快约 25%；
       另一个方向是把 MD5 计算放到独立线程，与接收数据流水线并行
 - [ ] 内存上限和超出上限时的明确报错
+- [ ] 根据 `small_put_c64` / `versioned` 基准决定是否把每 bucket 的 `RwLock<BTreeMap>` 换成 `scc::TreeIndex`
+      （读不加锁）或 `im::OrdMap`（O(1) 快照，测试控制面也需要）
 
 ## 一致性验证
 

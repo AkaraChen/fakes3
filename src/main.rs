@@ -40,17 +40,24 @@ struct Opt {
 
 fn main() -> std::io::Result<()> {
     let opt = Opt::parse();
-    tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(run(opt))
 }
 
 async fn run(opt: Opt) -> std::io::Result<()> {
-    let fake = s3impl::FakeS3 { store: store::Store::default(), inline_threshold: opt.inline_threshold };
+    let fake = s3impl::FakeS3 {
+        store: store::Store::default(),
+        inline_threshold: opt.inline_threshold,
+    };
     let mut b = S3ServiceBuilder::new(fake);
     // Legacy clients (s3fs/aiobotocore presigning, old SDKs) still sign with SigV2.
     let mut config = s3s::config::S3Config::default();
     config.enable_sig_v2 = true;
-    b.set_config(std::sync::Arc::new(s3s::config::StaticConfigProvider::new(std::sync::Arc::new(config))));
+    b.set_config(std::sync::Arc::new(s3s::config::StaticConfigProvider::new(std::sync::Arc::new(
+        config,
+    ))));
     if !opt.no_auth {
         b.set_auth(SimpleAuth::from_single(opt.access_key, opt.secret_key));
     }

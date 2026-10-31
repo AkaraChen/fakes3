@@ -38,6 +38,8 @@ os.environ.setdefault("S3BENCH_PORT_OFFSET", "1000")
 WARP = {
     "small_put": (["put", "--obj.size", "4KiB", "--concurrent", "16"], "PUT"),
     "small_get": (["get", "--obj.size", "4KiB", "--objects", "1000", "--concurrent", "16"], "GET"),
+    # Many writers on one bucket: shows contention on the per-bucket index.
+    "small_put_c64": (["put", "--obj.size", "4KiB", "--concurrent", "64"], "PUT"),
     "small_get_c1": (["get", "--obj.size", "4KiB", "--objects", "200", "--concurrent", "1"], "GET"),
     "stat": (["stat", "--obj.size", "4KiB", "--objects", "1000", "--concurrent", "16"], "STAT"),
     "list": (["list", "--obj.size", "1KiB", "--objects", "1000", "--concurrent", "8"], "LIST"),
@@ -47,6 +49,7 @@ WARP = {
     "large_get": (["get", "--obj.size", "64MiB", "--objects", "16", "--concurrent", "4", "--disable-multipart"], "GET"),
     # warp uploads the parts during preparation, then benchmarks GET ?partNumber= reads.
     "multipart": (["multipart", "--part.size", "5MiB", "--parts", "40", "--concurrent", "8"], "GET"),
+    "versioned": (["versioned", "--obj.size", "4KiB", "--objects", "1000", "--concurrent", "16"], None),
     "mixed": (["mixed", "--obj.size", "64KiB", "--objects", "1000", "--concurrent", "16"], None),
 }
 

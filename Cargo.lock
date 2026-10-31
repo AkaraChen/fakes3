@@ -383,6 +383,7 @@ dependencies = [
  "base64-simd",
  "bytes",
  "clap",
+ "crc-fast",
  "form_urlencoded",
  "futures",
  "hex",

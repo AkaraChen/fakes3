@@ -1,0 +1,79 @@
+name: matrix
+
+# Unit tests, then the SDK compatibility matrix (matrix/SPEC.md) against the chosen servers.
+# The rendered MATRIX.md is shown in the job summary and uploaded with the raw results.
+on:
+  workflow_dispatch:
+    inputs:
+      servers:
+        description: "Comma- or space-separated servers (fakes3,minio,localstack,moto,s3mock,juicefs)"
+        default: "fakes3"
+      langs:
+        description: "Space-separated languages"
+        default: "python js go rust java dotnet ruby php"
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            matrix/rust
+
+      - name: Unit tests
+        run: cargo test --release --locked
+
+      - name: Build fakes3
+        run: cargo build --release --locked
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: matrix/go/go.mod
+          cache-dependency-path: matrix/go/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Run matrix
+        env:
+          SERVERS: ${{ inputs.servers }}
+          LANGS: ${{ inputs.langs }}
+        run: |
+          rm -rf matrix/results
+          SERVERS="${SERVERS//,/ }" matrix/run.sh
+
+      - name: Render report
+        if: always()
+        run: |
+          python3 matrix/report.py
+          cat matrix/MATRIX.md >> "$GITHUB_STEP_SUMMARY"
+          echo "fakes3 failures:"
+          python3 - <<'EOF'
+          import json, pathlib
+          for f in sorted(pathlib.Path("matrix/results/fakes3").glob("*.json")):
+              d = json.loads(f.read_text())
+              for r in d["results"]:
+                  if r["status"] == "fail":
+                      print(f"  {d['sdk']}: {r['scenario']}: {r.get('error', '')[:200]}")
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: matrix-${{ github.run_id }}
+          path: |
+            matrix/MATRIX.md
+            matrix/results/
+          include-hidden-files: true
+          if-no-files-found: ignore

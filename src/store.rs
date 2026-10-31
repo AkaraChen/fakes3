@@ -24,7 +24,10 @@ pub struct ObjectData {
 impl ObjectData {
     pub fn from_segments(segments: Vec<Bytes>) -> Self {
         let size = segments.iter().map(|s| s.len() as u64).sum();
-        Self { segments: segments.into(), size }
+        Self {
+            segments: segments.into(),
+            size,
+        }
     }
 
     /// Returns the segments covering `range`, sliced without copying.
@@ -67,6 +70,7 @@ pub struct Object {
     pub e_tag: String,
     pub last_modified: SystemTime,
     pub checksum: s3s::dto::Checksum,
+    pub checksum_type: Option<s3s::dto::ChecksumType>,
     pub parts_count: Option<i32>,
     /// Sizes of the parts a multipart object was assembled from, for `?partNumber=` reads.
     pub part_sizes: Option<Arc<[u64]>>,
@@ -120,6 +124,8 @@ pub struct Upload {
     pub tags: Vec<(String, String)>,
     pub initiated: SystemTime,
     pub checksum_algorithm: Option<s3s::dto::ChecksumAlgorithm>,
+    /// Effective checksum type (explicit, or the default for the algorithm).
+    pub checksum_type: s3s::dto::ChecksumType,
     pub parts: BTreeMap<i32, Part>,
 }
 
@@ -171,7 +177,11 @@ impl Bucket {
             }
         };
         let last_modified = obj.last_modified;
-        entry.versions.push(Arc::new(Version { id: id.clone(), obj: Some(obj), last_modified }));
+        entry.versions.push(Arc::new(Version {
+            id: id.clone(),
+            obj: Some(obj),
+            last_modified,
+        }));
         (mode != Versioning::Unversioned).then_some(id)
     }
 
@@ -189,7 +199,11 @@ impl Bucket {
             entry.versions.retain(|v| v.id != "null");
             "null".to_owned()
         };
-        entry.versions.push(Arc::new(Version { id: id.clone(), obj: None, last_modified: SystemTime::now() }));
+        entry.versions.push(Arc::new(Version {
+            id: id.clone(),
+            obj: None,
+            last_modified: SystemTime::now(),
+        }));
         Some(id)
     }
 
@@ -217,7 +231,11 @@ pub struct BlobWriter {
 
 impl BlobWriter {
     pub fn new(threshold: usize, size_hint: Option<u64>) -> std::io::Result<Self> {
-        let mut w = Self { threshold, mem: BytesMut::new(), file: None };
+        let mut w = Self {
+            threshold,
+            mem: BytesMut::new(),
+            file: None,
+        };
         match size_hint {
             Some(n) if n as usize >= threshold => w.file = Some(new_memfd(n)?),
             Some(n) => w.mem.reserve(n as usize),
