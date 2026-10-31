@@ -28,10 +28,16 @@ struct Opt {
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     #[arg(long, default_value_t = 1 << 20)]
     inline_threshold: usize,
+
+    /// Copy large response bodies through the socket instead of using sendfile(2).
+    #[arg(long)]
+    no_sendfile: bool,
 }
 
 fn main() -> std::io::Result<()> {
     let opt = Opt::parse();
+    // Each large object keeps its memfd open so it can be sent with sendfile.
+    fakes3::raise_fd_limit();
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -42,6 +48,7 @@ fn main() -> std::io::Result<()> {
         secret_key: opt.secret_key,
         auth: !opt.no_auth,
         inline_threshold: opt.inline_threshold,
+        sendfile: !opt.no_sendfile,
     };
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
         let server = fakes3::Server::start(config).await?;

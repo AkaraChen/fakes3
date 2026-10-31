@@ -15,12 +15,13 @@
 mod clock;
 mod digest;
 mod s3impl;
+mod sendfile;
 mod store;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::rt::TokioExecutor;
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
 use s3s::auth::SimpleAuth;
 use s3s::service::S3ServiceBuilder;
@@ -29,6 +30,11 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 pub use clock::Clock;
+
+pub use sendfile::raise_fd_limit;
+/// Total bytes sent with `sendfile(2)` by this process; lets tests check the zero-copy path ran.
+#[doc(hidden)]
+pub use sendfile::sent_bytes as sendfile_bytes;
 
 /// Server settings. `Default` listens on a random localhost port with the default credentials.
 #[derive(Clone, Debug)]
@@ -42,6 +48,9 @@ pub struct Config {
     pub auth: bool,
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     pub inline_threshold: usize,
+    /// Send large memfd-backed response bodies with `sendfile(2)` instead of copying them
+    /// through the socket (Linux, plain TCP only).
+    pub sendfile: bool,
 }
 
 impl Default for Config {
@@ -53,6 +62,7 @@ impl Default for Config {
             secret_key: "fakes3secret".into(),
             auth: true,
             inline_threshold: 1 << 20,
+            sendfile: true,
         }
     }
 }
@@ -74,6 +84,7 @@ impl Server {
         let clock = Arc::new(Clock::default());
         let (stop, mut stopped) = oneshot::channel();
         let service = service(&config, clock.clone());
+        let sendfile = config.sendfile;
         let task = tokio::spawn(async move {
             let http = ConnBuilder::new(TokioExecutor::new());
             loop {
@@ -88,7 +99,9 @@ impl Server {
                     _ = &mut stopped => break,
                 };
                 let _ = socket.set_nodelay(true);
-                let conn = http.serve_connection(TokioIo::new(socket), service.clone()).into_owned();
+                let conn = http
+                    .serve_connection(sendfile::Io::new(socket, sendfile), service.clone())
+                    .into_owned();
                 tokio::spawn(async move {
                     let _ = conn.await;
                 });

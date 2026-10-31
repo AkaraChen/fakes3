@@ -19,7 +19,7 @@ memmap2 = "0.9.12"
 mimalloc = "0.1.52"
 openssl-sys = { version = "0.9.117", features = ["vendored"] }
 parking_lot = "0.13.0"
-rustix = { version = "1.1.6", features = ["fs"] }
+rustix = { version = "1.1.6", features = ["fs", "net", "process"] }
 s3s = "0.17"
 tokio = { version = "1.54.1", features = ["full"] }
 tracing = "0.1.44"

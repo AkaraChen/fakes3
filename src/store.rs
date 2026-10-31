@@ -265,7 +265,7 @@ impl BlobWriter {
         }
         // SAFETY: the memfd is private to this process and never written again.
         let map = unsafe { memmap2::Mmap::map(&f)? };
-        Ok(Bytes::from_owner(map))
+        Ok(Bytes::from_owner(crate::sendfile::Mapped::new(f, map)))
     }
 }
 
