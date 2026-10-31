@@ -1,31 +1,33 @@
 //! Authorization: bucket policies and ACLs applied to requests.
 //!
 //! s3s calls [`S3Access::check`] for every request when an auth provider is configured, signed or
-//! not (fakes3 always configures one). The model is the one S3 uses inside a single account:
+//! not (fakes3 always configures one). Who a request acts as is an [`Identity`]: anonymous, or one
+//! of the accounts of [`crate::users`]. The rules (`docs/multi-user.md` has the reasoning):
 //!
-//! * A signed request is the account root. It is allowed unless a bucket policy explicitly denies
-//!   it (the policy-management operations are exempt, so a Deny-everyone policy cannot lock the
-//!   owner out of fixing it).
-//! * An anonymous request is allowed only if an Allow statement for everyone in the bucket policy
-//!   or a public ACL grant says so, and no statement denies it. Block Public Access settings
-//!   (`IgnorePublicAcls`, `RestrictPublicBuckets`) are honored.
+//! * A bucket policy's explicit Deny always wins (the policy-management operations are exempt for
+//!   the bucket owner, so a Deny-everyone policy cannot lock them out of fixing it).
+//! * The bucket owner may do anything to its bucket and to the objects it owns. Objects another
+//!   account owns (uploaded under `ObjectWriter` ownership) are theirs: the bucket owner needs an
+//!   ACL grant to read them, and a policy Allow does not cover them.
+//! * Any other signed account, and the anonymous caller, needs an Allow from the bucket policy or
+//!   a grant in the ACL (to its canonical id, to `AuthenticatedUsers`, or for everyone to
+//!   `AllUsers`). Block Public Access (`IgnorePublicAcls`, `RestrictPublicBuckets`) is honored.
+//! * An object's owner can always use its own object (the default ACL) and read and write its ACL.
 //!
 //! What "signed" means depends on the mode, and [`identify`] is the only place that decides: with
 //! `--auth` s3s verified a signature and hands over credentials; without it the signature was
 //! stripped unverified before s3s saw the request (see [`crate::noauth`]) and left a
-//! [`Signed`] extension behind. Either way the caller is the account owner; a later per-user
-//! identity table would be looked up in [`identify`], by the access key.
+//! [`Signed`] extension behind. Either way the access key picks the identity.
 //!
-//! Until some bucket has had a policy attached, a signed request returns from `check` after one
-//! atomic load, so deployments that never use policies pay nothing. Anonymous requests are rare
-//! and always take the full path.
+//! With a single identity and no bucket policy anywhere, a signed request returns from `check`
+//! after one atomic load, so deployments that never use policies or several users pay nothing.
+//! Anonymous requests are rare and always take the full path.
 
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use s3s::access::{S3Access, S3AccessContext};
-use s3s::auth::Credentials;
 use s3s::dto::{CopySource, DeleteObjectsInput, PostObjectInput};
 use s3s::path::S3Path;
 use s3s::{S3Error, S3ErrorCode, S3Request, S3Result};
@@ -35,6 +37,7 @@ use crate::clock::Clock;
 use crate::noauth::Signed;
 use crate::policy::{Context, Verdict};
 use crate::store::{Bucket, Store};
+use crate::users::{UserId, Users};
 
 /// The client address, recorded by the server only while some policy has an `aws:SourceIp` condition.
 #[derive(Clone, Copy)]
@@ -47,14 +50,15 @@ pub struct Denied(pub Vec<(String, Option<String>)>);
 pub struct Access {
     pub store: Arc<Store>,
     pub clock: Arc<Clock>,
+    pub users: Arc<Users>,
 }
 
 /// Who a request acts as.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Identity {
     Anonymous,
-    /// The account owner, the only account there is.
-    Owner {
+    User {
+        id: UserId,
         /// The signature was in the query string.
         presigned: bool,
     },
@@ -66,27 +70,42 @@ impl Identity {
     }
 
     pub fn presigned(self) -> bool {
-        self == Self::Owner { presigned: true }
+        matches!(self, Self::User { presigned: true, .. })
+    }
+
+    pub fn user(self) -> Option<UserId> {
+        match self {
+            Self::Anonymous => None,
+            Self::User { id, .. } => Some(id),
+        }
     }
 }
 
 /// The identity of a request, from the credentials s3s verified (`--auth`) or the [`Signed`]
 /// marker left by a signature that was dropped unverified (default). Every authorization entry
-/// point goes through here.
-fn identify(credentials: Option<&Credentials>, query: &str, extensions: &http::Extensions) -> Identity {
-    identify_with(credentials.is_some(), query.contains("X-Amz-Signature"), extensions)
+/// point and every handler that needs to know who is asking goes through here.
+pub fn identify<T>(users: &Users, req: &S3Request<T>) -> Identity {
+    identify_with(
+        req.credentials.as_ref().map(|c| users.resolve(Some(&c.access_key))),
+        req.uri.query().is_some_and(|q| q.contains("X-Amz-Signature")),
+        &req.extensions,
+    )
 }
 
-/// [`identify`] for callers that cannot hold `credentials` and `query` while borrowing the
-/// extensions mutably.
-fn identify_with(verified: bool, presigned_query: bool, extensions: &http::Extensions) -> Identity {
-    if verified {
-        return Identity::Owner {
+/// [`identify`] for callers that cannot hold the request while borrowing its extensions mutably:
+/// `verified` is the identity of the credentials s3s verified, if any.
+fn identify_with(verified: Option<UserId>, presigned_query: bool, extensions: &http::Extensions) -> Identity {
+    if let Some(id) = verified {
+        return Identity::User {
+            id,
             presigned: presigned_query,
         };
     }
     match extensions.get::<Signed>() {
-        Some(s) => Identity::Owner { presigned: s.presigned },
+        Some(s) => Identity::User {
+            id: s.user,
+            presigned: s.presigned,
+        },
         None => Identity::Anonymous,
     }
 }
@@ -95,22 +114,8 @@ pub fn denied() -> S3Error {
     S3Error::with_message(S3ErrorCode::AccessDenied, "Access Denied")
 }
 
-/// The response for a request whose `x-amz-expected-bucket-owner` (or, for copies,
-/// `x-amz-source-expected-bucket-owner`) names an account other than the only one there is
-/// ([`crate::policy::ACCOUNT_ID`]): 403 `AccessDenied`, before the operation runs.
-pub fn expected_owner_mismatch(headers: &http::HeaderMap) -> Option<s3s::HttpResponse> {
-    let mismatch = ["x-amz-expected-bucket-owner", "x-amz-source-expected-bucket-owner"]
-        .iter()
-        .filter_map(|h| headers.get(*h))
-        .any(|v| v.as_bytes() != crate::policy::ACCOUNT_ID.as_bytes());
-    mismatch.then(|| {
-        denied().to_http_response().unwrap_or_else(|_| {
-            let mut r = s3s::HttpResponse::new(s3s::Body::empty());
-            *r.status_mut() = http::StatusCode::FORBIDDEN;
-            r
-        })
-    })
-}
+const EXPECTED_OWNER: &str = "x-amz-expected-bucket-owner";
+const SOURCE_EXPECTED_OWNER: &str = "x-amz-source-expected-bucket-owner";
 
 /// The IAM action a request needs, as bucket policies spell it.
 fn action_of(op: &str, version: bool) -> String {
@@ -204,42 +209,134 @@ fn query_param(query: &str, name: &str) -> Option<String> {
         .map(|(_, v)| v.into_owned())
 }
 
+/// Whether the key of `upload_id` was started by `me`.
+fn initiated_by(bucket: &Bucket, key: &str, query: &str, me: UserId) -> bool {
+    query_param(query, "uploadId").is_some_and(|id| bucket.uploads.read().get(&(key.to_owned(), id)).is_some_and(|u| u.initiator == me))
+}
+
+/// Operations tied to a multipart upload that its initiator may always continue or abandon.
+fn is_upload_op(op: &str) -> bool {
+    matches!(
+        op,
+        "UploadPart" | "UploadPartCopy" | "CompleteMultipartUpload" | "AbortMultipartUpload" | "ListParts"
+    )
+}
+
 impl Access {
+    fn user_of(&self, who: Identity) -> Option<&crate::users::User> {
+        who.user().map(|id| self.users.get(id))
+    }
+
+    /// Whether the bucket's ACL gives `who` `perm`. The owner never gets here.
+    fn bucket_acl_allows(&self, bucket: &Bucket, who: Identity, perm: Perm, public: bool) -> bool {
+        if !bucket.config.acls_enabled() {
+            return false;
+        }
+        let acl = bucket.config.acl.read();
+        let Some(acl) = acl.as_ref() else { return false };
+        match self.user_of(who) {
+            Some(u) => acl.allows_user(&u.canonical_id, perm, public),
+            None => public && acl.allows_anonymous(perm),
+        }
+    }
+
+    /// Whether `who` may do `perm` to an object that `owner` owns and `acl` describes.
+    fn object_acl_allows(&self, acl: Option<&crate::acl::Acl>, owner: UserId, who: Identity, perm: Perm, public: bool) -> bool {
+        match (acl, self.user_of(who)) {
+            // The default ACL: full control for the owner, nothing for anybody else.
+            (None, Some(_)) => who.user() == Some(owner),
+            (None, None) => false,
+            (Some(a), Some(u)) => {
+                a.allows_user(&u.canonical_id, perm, public)
+                    // The owner can always read and replace the ACL, whatever it says.
+                    || (matches!(perm, Perm::ReadAcp | Perm::WriteAcp) && who.user() == Some(owner))
+            }
+            (Some(a), None) => public && a.allows_anonymous(perm),
+        }
+    }
+
     /// Whether the request may perform `op` on `key` (`None` for bucket-level operations).
-    fn permit(&self, bucket: &Bucket, name: &str, op: &str, key: Option<&str>, version_id: Option<&str>, ctx: &Context<'_>) -> bool {
+    #[allow(clippy::too_many_arguments)]
+    fn permit(
+        &self,
+        bucket: &Bucket,
+        name: &str,
+        op: &str,
+        key: Option<&str>,
+        version_id: Option<&str>,
+        who: Identity,
+        ctx: &Context<'_>,
+    ) -> bool {
         let policy = bucket.config.policy.read().clone();
         let pab = bucket.config.public_access_block.read().unwrap_or_default();
-        let mut allowed_by_policy = false;
+        let owner = who.user() == Some(bucket.owner);
+        let mut by_policy = false;
         if let Some(p) = &policy {
             match p.evaluate(&action_of(op, version_id.is_some()), &arn(name, key), ctx) {
-                Verdict::Deny if !(ctx.signed && is_policy_admin(op)) => return false,
-                Verdict::Allow => allowed_by_policy = !(pab.restrict_public_buckets && p.public),
+                Verdict::Deny if !(owner && is_policy_admin(op)) => return false,
+                Verdict::Allow => by_policy = !(pab.restrict_public_buckets && p.public && !owner),
                 _ => {}
             }
         }
-        if ctx.signed || allowed_by_policy {
-            return true;
+        let public = !pab.ignore_public_acls;
+        let need = acl_need(op);
+        let object_scope = key.is_some() && !matches!(need, Some((Scope::Bucket, _)));
+        let initiator = || {
+            is_upload_op(op)
+                && who
+                    .user()
+                    .zip(key)
+                    .is_some_and(|(me, key)| initiated_by(bucket, key, ctx.query, me))
+        };
+        if !object_scope {
+            return owner || by_policy || need.is_some_and(|(_, perm)| self.bucket_acl_allows(bucket, who, perm, public)) || initiator();
         }
-        if !bucket.config.acls_enabled() || pab.ignore_public_acls {
-            return false;
-        }
-        let Some((scope, perm)) = acl_need(op) else { return false };
-        let bucket_allows = |perm| bucket.config.acl.read().allows_anonymous(perm);
-        match scope {
-            Scope::Bucket => bucket_allows(perm),
-            Scope::Object => {
-                let objects = bucket.objects.read();
-                let version = key.and_then(|k| objects.get(k)).and_then(|e| match version_id {
+        let perm = need.map_or(Perm::FullControl, |(_, p)| p);
+        let key = key.expect("object-scoped operations have a key");
+        let version = {
+            let objects = bucket.objects.read();
+            objects
+                .get(key)
+                .and_then(|e| match version_id {
                     Some(id) => e.find(id),
                     None => e.latest(),
-                });
-                match version.and_then(|v| v.obj.as_ref()) {
-                    Some(o) => o.acl.as_ref().is_some_and(|a| a.allows_anonymous(perm)),
-                    // Nothing to read: listing permission decides between 404 and 403.
-                    None => perm == Perm::Read && bucket_allows(Perm::Read),
+                })
+                .cloned()
+        };
+        match version.as_ref().and_then(|v| v.obj.as_ref().map(|o| (v, o))) {
+            Some((v, o)) => {
+                // With ACLs disabled the bucket owner owns everything.
+                let acls = bucket.config.acls_enabled();
+                let object_owner = if acls { v.owner } else { bucket.owner };
+                if object_owner == bucket.owner && (owner || by_policy) {
+                    return true;
                 }
+                (acls && self.object_acl_allows(o.acl.as_deref(), object_owner, who, perm, public)) || initiator()
+            }
+            // Nothing to read: permission to list decides between 404 and 403.
+            None => {
+                owner
+                    || by_policy
+                    || (perm == Perm::Read
+                        && (self.bucket_acl_allows(bucket, who, Perm::Read, public) || self.may_list(&policy, name, key, who, &pab, ctx)))
+                    || initiator()
             }
         }
+    }
+
+    /// Whether a policy Allow for `s3:ListBucket` covers `key` as the listing prefix.
+    fn may_list(
+        &self,
+        policy: &Option<Arc<crate::policy::Policy>>,
+        name: &str,
+        key: &str,
+        who: Identity,
+        pab: &crate::bucket_config::PublicAccessBlock,
+        ctx: &Context<'_>,
+    ) -> bool {
+        let Some(p) = policy else { return false };
+        let ctx = Context { prefix: Some(key), ..*ctx };
+        p.evaluate("s3:ListBucket", &arn(name, None), &ctx) == Verdict::Allow && !(pab.restrict_public_buckets && p.public && !who.signed())
     }
 
     fn peer(&self, ext: &mut http::Extensions) -> Option<IpAddr> {
@@ -255,18 +352,28 @@ impl Access {
             Err(S3Error::new(S3ErrorCode::NoSuchBucket))
         }
     }
+
+    /// 403 when `header` names an account other than the one that owns `bucket`. A bucket that
+    /// does not exist belongs to nobody, so only the requester's own account id passes.
+    fn expected_owner_ok(&self, headers: &http::HeaderMap, header: &str, owner: Option<UserId>, who: Identity) -> bool {
+        let Some(v) = headers.get(header) else { return true };
+        let want = owner.or(who.user()).map(|id| self.users.get(id));
+        want.is_some_and(|u| v.as_bytes() == u.account_id.as_bytes())
+    }
 }
 
 #[async_trait::async_trait]
 impl S3Access for Access {
     async fn check(&self, cx: &mut S3AccessContext<'_>) -> S3Result<()> {
+        let verified = cx.credentials().map(|c| self.users.resolve(Some(&c.access_key)));
         let identity = identify_with(
-            cx.credentials().is_some(),
+            verified,
             cx.uri().query().is_some_and(|q| q.contains("X-Amz-Signature")),
             cx.extensions_mut(),
         );
         let signed = identity.signed();
-        if signed && !self.store.access.any_policy.load(Ordering::Relaxed) {
+        let expected = cx.headers().contains_key(EXPECTED_OWNER) || cx.headers().contains_key(SOURCE_EXPECTED_OWNER);
+        if signed && !expected && !self.users.multi() && !self.store.access.any_policy.load(Ordering::Relaxed) {
             return Ok(());
         }
         let peer = self.peer(cx.extensions_mut());
@@ -276,11 +383,19 @@ impl S3Access for Access {
             S3Path::Object { bucket, key } => (bucket.to_string(), Some(key.to_string())),
         };
         let op = cx.s3_op().name();
+        let bucket = self.store.bucket(&name);
+        if !self.expected_owner_ok(cx.headers(), EXPECTED_OWNER, bucket.as_ref().map(|b| b.owner), identity) {
+            return Err(denied());
+        }
+        // The name is taken or free, whoever asks: the operation tells those apart.
+        if op == "CreateBucket" {
+            return if signed { Ok(()) } else { Err(denied()) };
+        }
         // Their keys are in the body or form; `delete_objects` / `post_object` below decide.
         if matches!(op, "DeleteObjects" | "PostObject") {
             return Ok(());
         }
-        let Some(bucket) = self.store.bucket(&name) else {
+        let Some(bucket) = bucket else {
             return Self::missing_bucket(signed, op);
         };
         let query = cx.uri().query().unwrap_or("");
@@ -289,11 +404,12 @@ impl S3Access for Access {
             headers: cx.headers(),
             query,
             now: self.clock.now(),
-            signed,
+            user: self.user_of(identity),
             presigned: identity.presigned(),
             peer,
+            prefix: None,
         };
-        if !self.permit(&bucket, &name, op, key.as_deref(), version_id.as_deref(), &ctx) {
+        if !self.permit(&bucket, &name, op, key.as_deref(), version_id.as_deref(), identity, &ctx) {
             return Err(denied());
         }
         if matches!(op, "CopyObject" | "UploadPartCopy")
@@ -303,32 +419,39 @@ impl S3Access for Access {
                 key: src_key,
                 version_id,
             }) = CopySource::parse(src)
-            && let Some(sb) = self.store.bucket(&src_bucket)
-            && !self.permit(&sb, &src_bucket, "GetObject", Some(&src_key), version_id.as_deref(), &ctx)
         {
-            return Err(denied());
+            let sb = self.store.bucket(&src_bucket);
+            if !self.expected_owner_ok(ctx.headers, SOURCE_EXPECTED_OWNER, sb.as_ref().map(|b| b.owner), identity) {
+                return Err(denied());
+            }
+            if let Some(sb) = sb
+                && !self.permit(&sb, &src_bucket, "GetObject", Some(&src_key), version_id.as_deref(), identity, &ctx)
+            {
+                return Err(denied());
+            }
         }
         Ok(())
     }
 
     async fn delete_objects(&self, req: &mut S3Request<DeleteObjectsInput>) -> S3Result<()> {
-        let query = req.uri.query().unwrap_or("");
-        let identity = identify(req.credentials.as_ref(), query, &req.extensions);
+        let identity = identify(&self.users, req);
         let signed = identity.signed();
-        if signed && !self.store.access.any_policy.load(Ordering::Relaxed) {
+        if signed && !self.users.multi() && !self.store.access.any_policy.load(Ordering::Relaxed) {
             return Ok(());
         }
         let Some(bucket) = self.store.bucket(&req.input.bucket) else {
             return Self::missing_bucket(signed, "DeleteObjects");
         };
+        let query = req.uri.query().unwrap_or("");
         let peer = self.peer(&mut req.extensions);
         let ctx = Context {
             headers: &req.headers,
             query,
             now: self.clock.now(),
-            signed,
+            user: self.user_of(identity),
             presigned: identity.presigned(),
             peer,
+            prefix: None,
         };
         let denied: Vec<_> = req
             .input
@@ -342,6 +465,7 @@ impl S3Access for Access {
                     "DeleteObjects",
                     Some(&o.key),
                     o.version_id.as_deref(),
+                    identity,
                     &ctx,
                 )
             })
@@ -354,9 +478,9 @@ impl S3Access for Access {
     }
 
     async fn post_object(&self, req: &mut S3Request<PostObjectInput>) -> S3Result<()> {
-        let identity = identify(req.credentials.as_ref(), "", &req.extensions);
+        let identity = identify(&self.users, req);
         let signed = identity.signed();
-        if signed && !self.store.access.any_policy.load(Ordering::Relaxed) {
+        if signed && !self.users.multi() && !self.store.access.any_policy.load(Ordering::Relaxed) {
             return Ok(());
         }
         let Some(bucket) = self.store.bucket(&req.input.bucket) else {
@@ -367,11 +491,12 @@ impl S3Access for Access {
             headers: &req.headers,
             query: "",
             now: self.clock.now(),
-            signed,
+            user: self.user_of(identity),
             presigned: identity.presigned(),
             peer,
+            prefix: None,
         };
-        if self.permit(&bucket, &req.input.bucket, "PostObject", Some(&req.input.key), None, &ctx) {
+        if self.permit(&bucket, &req.input.bucket, "PostObject", Some(&req.input.key), None, identity, &ctx) {
             Ok(())
         } else {
             Err(denied())

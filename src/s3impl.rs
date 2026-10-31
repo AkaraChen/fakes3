@@ -10,6 +10,7 @@ use s3s::checksum::ChecksumHasher;
 use s3s::dto::*;
 use s3s::{S3, S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 
+use crate::access::{self, Identity};
 use crate::acl;
 use crate::bucket_config::Ownership;
 use crate::bucket_defaults::BucketDefaults;
@@ -23,6 +24,7 @@ use crate::store::{
     BlobError, BlobWriter, Bucket as StoreBucket, Entry, Index, Object as StoreObject, ObjectData, ObjectMeta, Part, Store, Upload,
     Version, Versioning,
 };
+use crate::users::{UserId, Users};
 
 pub struct FakeS3 {
     pub store: Arc<Store>,
@@ -30,9 +32,54 @@ pub struct FakeS3 {
     pub memory: Arc<MemoryTracker>,
     pub clock: Arc<Clock>,
     pub defaults: BucketDefaults,
+    pub users: Arc<Users>,
 }
 
 impl FakeS3 {
+    /// Who sent the request. With a single account nothing a handler does depends on it (the one
+    /// account owns everything, whoever asks), so it is not looked up.
+    fn who<T>(&self, req: &S3Request<T>) -> Identity {
+        if !self.users.multi() {
+            return Identity::User {
+                id: UserId::DEFAULT,
+                presigned: false,
+            };
+        }
+        access::identify(&self.users, req)
+    }
+
+    /// The account that will own an object `who` writes into `bucket`. `canned` is the request's
+    /// canned ACL: under `BucketOwnerPreferred`, `bucket-owner-full-control` hands ownership to the
+    /// bucket owner. Anonymous writers (a public bucket) leave the object to the bucket owner.
+    fn object_owner(&self, bucket: &StoreBucket, who: Identity, canned: Option<&str>) -> UserId {
+        if !self.users.multi() {
+            return bucket.owner;
+        }
+        let writer = who.user().unwrap_or(bucket.owner);
+        match *bucket.config.ownership.read() {
+            Some(Ownership::Enforced) => bucket.owner,
+            Some(Ownership::Preferred) if canned == Some("bucket-owner-full-control") => bucket.owner,
+            _ => writer,
+        }
+    }
+
+    /// The accounts an ACL on something `owner` owns in `bucket` refers to.
+    fn parties(&self, bucket: &StoreBucket, owner: UserId) -> acl::Parties<'_> {
+        acl::Parties {
+            users: &self.users,
+            owner,
+            bucket_owner: bucket.owner,
+        }
+    }
+
+    fn initiator(&self, id: UserId) -> Initiator {
+        let o = self.users.owner(id);
+        Initiator {
+            display_name: o.display_name,
+            id: o.id,
+        }
+    }
+
     fn sink<'a>(&'a self, headers: &http::HeaderMap) -> Sink<'a> {
         Sink {
             threshold: self.inline_threshold,
@@ -709,7 +756,8 @@ where
     (prefixes, false, None)
 }
 
-fn list(objects: &Index, prefix: &str, delimiter: Option<&str>, after: Option<&str>, max_keys: usize) -> Listing {
+/// `owners` is given when the listing reports an `Owner` per key.
+fn list(objects: &Index, prefix: &str, delimiter: Option<&str>, after: Option<&str>, max_keys: usize, owners: Option<&Users>) -> Listing {
     // Growing a 1000-entry page by doubling copies it about once more.
     let mut contents = Vec::with_capacity(max_keys.min(objects.len()));
     // Keys whose latest version is a delete marker are invisible to plain listings.
@@ -725,6 +773,7 @@ fn list(objects: &Index, prefix: &str, delimiter: Option<&str>, after: Option<&s
                 Some(c) => ObjectStorageClass::from(c.as_str().to_owned()),
                 None => ObjectStorageClass::from_static(ObjectStorageClass::STANDARD),
             }),
+            owner: owners.zip(entry.latest()).map(|(users, v)| users.owner(v.owner)),
             ..Default::default()
         });
         1
@@ -768,27 +817,21 @@ fn multipart_etag(md5s: &[[u8; 16]]) -> String {
     format!("{}-{}", hex::encode(digest::md5(md5s)), md5s.len())
 }
 
-fn owner() -> Owner {
-    Owner {
-        display_name: Some("fakes3".into()),
-        id: Some("fakes3".into()),
-    }
-}
-
 #[async_trait::async_trait]
 impl S3 for FakeS3 {
     async fn create_bucket(&self, req: S3Request<CreateBucketInput>) -> S3Result<S3Response<CreateBucketOutput>> {
+        let owner = self.who(&req).user().unwrap_or(UserId::DEFAULT);
         let input = req.input;
         let name = input.bucket.clone();
-        let bucket = StoreBucket::new(self.clock.now());
+        let bucket = StoreBucket::new(self.clock.now(), owner);
         self.defaults.apply(&bucket.config);
         bucket.cfg.set_encryption(self.defaults.default_encryption());
         if let Some(o) = &input.object_ownership {
             let o = Ownership::parse(o.as_str()).ok_or_else(|| s3_error!(InvalidArgument, "Invalid x-amz-object-ownership"))?;
             *bucket.config.ownership.write() = Some(o);
         }
-        if let Some(acl) = acl::resolve_for_new_bucket(&bucket.config, &acl::acl_args!(&input, bucket))? {
-            *bucket.config.acl.write() = acl;
+        if let Some(acl) = acl::resolve_for_new_bucket(&bucket.config, &acl::acl_args!(&input, bucket), self.parties(&bucket, owner))? {
+            *bucket.config.acl.write() = Some(acl);
         }
         if input.object_lock_enabled_for_bucket == Some(true) {
             // Object Lock needs versioning, which it keeps on for good.
@@ -798,7 +841,13 @@ impl S3 for FakeS3 {
         let mut buckets = self.store.buckets.write();
         // us-east-1 answers 200 for a bucket the caller already owns and leaves it as it is (the
         // legacy behaviour in the CreateBucket error list); other regions say BucketAlreadyOwnedByYou.
-        buckets.entry(name.clone()).or_insert_with(|| Arc::new(bucket));
+        match buckets.entry(name.clone()) {
+            std::collections::btree_map::Entry::Occupied(e) if e.get().owner != owner => return Err(s3_error!(BucketAlreadyExists)),
+            std::collections::btree_map::Entry::Occupied(_) => {}
+            std::collections::btree_map::Entry::Vacant(e) => {
+                e.insert(Arc::new(bucket));
+            }
+        }
         Ok(S3Response::new(CreateBucketOutput {
             location: Some(format!("/{name}")),
             ..Default::default()
@@ -828,12 +877,15 @@ impl S3 for FakeS3 {
         Ok(S3Response::new(GetBucketLocationOutput::default()))
     }
 
-    async fn list_buckets(&self, _req: S3Request<ListBucketsInput>) -> S3Result<S3Response<ListBucketsOutput>> {
+    async fn list_buckets(&self, req: S3Request<ListBucketsInput>) -> S3Result<S3Response<ListBucketsOutput>> {
+        // Only the caller's own buckets.
+        let me = self.who(&req).user().unwrap_or(UserId::DEFAULT);
         let buckets = self
             .store
             .buckets
             .read()
             .iter()
+            .filter(|(_, b)| b.owner == me)
             .map(|(name, b)| Bucket {
                 name: Some(name.clone()),
                 creation_date: Some(ts(b.created)),
@@ -843,7 +895,7 @@ impl S3 for FakeS3 {
             .collect();
         Ok(S3Response::new(ListBucketsOutput {
             buckets: Some(buckets),
-            owner: Some(owner()),
+            owner: Some(self.users.owner(me)),
             ..Default::default()
         }))
     }
@@ -1050,10 +1102,12 @@ impl S3 for FakeS3 {
     }
 
     async fn put_object(&self, req: S3Request<PutObjectInput>) -> S3Result<S3Response<PutObjectOutput>> {
+        let who = self.who(&req);
         let input = req.input;
         let bucket = self.bucket(&input.bucket)?;
         let tags = parse_tagging_header(input.tagging.as_deref())?;
-        let acl = acl::resolve(&bucket.config, &acl::acl_args!(&input), false)?.map(Arc::new);
+        let owner = self.object_owner(&bucket, who, input.acl.as_ref().map(|a| a.as_str()));
+        let acl = acl::resolve(&bucket.config, &acl::acl_args!(&input), false, self.parties(&bucket, owner))?.map(Arc::new);
         let expected = checksum_from!(&input);
         let ext = objext::resolve(object_opts!(input), &bucket, &self.clock)?;
         let ing = ingest(
@@ -1094,7 +1148,7 @@ impl S3 for FakeS3 {
         let version_id = {
             let mut objects = bucket.objects.write();
             check_write_conditions(objects.get(&input.key), input.if_match.as_ref(), input.if_none_match.as_ref())?;
-            bucket.put(&mut objects, input.key, obj)
+            bucket.put(&mut objects, input.key, obj, owner)
         };
         let mut out = with_checksum!(
             PutObjectOutput {
@@ -1263,6 +1317,7 @@ impl S3 for FakeS3 {
     }
 
     async fn delete_object(&self, req: S3Request<DeleteObjectInput>) -> S3Result<S3Response<DeleteObjectOutput>> {
+        let who = self.who(&req);
         let input = req.input;
         let b = self.bucket(&input.bucket)?;
         let mut objects = b.objects.write();
@@ -1288,7 +1343,7 @@ impl S3 for FakeS3 {
                     ..Default::default()
                 }
             }
-            None => match b.delete_current(&mut objects, &input.key, self.clock.now()) {
+            None => match b.delete_current(&mut objects, &input.key, self.clock.now(), who.user().unwrap_or(b.owner)) {
                 Some(id) => DeleteObjectOutput {
                     version_id: Some(id),
                     delete_marker: Some(true),
@@ -1301,6 +1356,7 @@ impl S3 for FakeS3 {
     }
 
     async fn delete_objects(&self, req: S3Request<DeleteObjectsInput>) -> S3Result<S3Response<DeleteObjectsOutput>> {
+        let who = self.who(&req);
         let b = self.bucket(&req.input.bucket)?;
         if req.input.delete.objects.len() > 1000 {
             return Err(s3_error!(
@@ -1347,7 +1403,7 @@ impl S3 for FakeS3 {
                             delete_marker_version_id: marker.filter(|m| *m).map(|_| vid),
                         }
                     }
-                    None => match b.delete_current(&mut objects, &id.key, self.clock.now()) {
+                    None => match b.delete_current(&mut objects, &id.key, self.clock.now(), who.user().unwrap_or(b.owner)) {
                         Some(mid) => DeletedObject {
                             key: Some(id.key),
                             delete_marker: Some(true),
@@ -1373,6 +1429,7 @@ impl S3 for FakeS3 {
     }
 
     async fn copy_object(&self, req: S3Request<CopyObjectInput>) -> S3Result<S3Response<CopyObjectOutput>> {
+        let who = self.who(&req);
         let input = req.input;
         let (src_v, src_versioned) = self.source_object(&input.copy_source)?;
         let src = obj(&src_v);
@@ -1398,7 +1455,8 @@ impl S3 for FakeS3 {
             }
         })?;
         let dst_bucket = self.bucket(&input.bucket)?;
-        let acl = acl::resolve(&dst_bucket.config, &acl::acl_args!(&input), false)?.map(Arc::new);
+        let owner = self.object_owner(&dst_bucket, who, input.acl.as_ref().map(|a| a.as_str()));
+        let acl = acl::resolve(&dst_bucket.config, &acl::acl_args!(&input), false, self.parties(&dst_bucket, owner))?.map(Arc::new);
         let opts = object_opts!(input);
         let changes_attributes = !opts.is_empty();
         let mut ext = objext::resolve(opts, &dst_bucket, &self.clock)?;
@@ -1465,7 +1523,7 @@ impl S3 for FakeS3 {
         };
         let version_id = {
             let mut objects = dst_bucket.objects.write();
-            dst_bucket.put(&mut objects, input.key, new)
+            dst_bucket.put(&mut objects, input.key, new, owner)
         };
         let mut out = CopyObjectOutput {
             copy_object_result: Some(CopyObjectResult {
@@ -1512,6 +1570,7 @@ impl S3 for FakeS3 {
             id: id.clone(),
             obj: Some(o),
             last_modified: v.last_modified,
+            owner: v.owner,
         });
         Ok(S3Response::new(PutObjectTaggingOutput {
             version_id: versioned.then_some(id),
@@ -1557,7 +1616,8 @@ impl S3 for FakeS3 {
             None => None,
         };
         let after = token.as_deref().or(input.start_after.as_deref());
-        let l = list(&b.objects.read(), &prefix, input.delimiter.as_deref(), after, max_keys);
+        let owners = (input.fetch_owner == Some(true)).then_some(&*self.users);
+        let l = list(&b.objects.read(), &prefix, input.delimiter.as_deref(), after, max_keys, owners);
         let key_count = (l.contents.len() + l.prefixes.len()) as i32;
         let mut out = ListObjectsV2Output {
             name: Some(input.bucket),
@@ -1574,9 +1634,6 @@ impl S3 for FakeS3 {
             encoding_type: input.encoding_type,
             ..Default::default()
         };
-        if input.fetch_owner == Some(true) {
-            out.contents.iter_mut().flatten().for_each(|o| o.owner = Some(owner()));
-        }
         if input
             .optional_object_attributes
             .iter()
@@ -1607,6 +1664,8 @@ impl S3 for FakeS3 {
             input.delimiter.as_deref(),
             input.marker.as_deref(),
             max_keys,
+            // ListObjects (v1) returns the owner of every key.
+            Some(&self.users),
         );
         let next_marker = if input.delimiter.as_deref().is_some_and(|d| !d.is_empty()) {
             l.next
@@ -1627,8 +1686,6 @@ impl S3 for FakeS3 {
             encoding_type: input.encoding_type,
             ..Default::default()
         };
-        // ListObjects (v1) returns the owner of every key.
-        out.contents.iter_mut().flatten().for_each(|o| o.owner = Some(owner()));
         if wants_url(&out.encoding_type) {
             enc(&mut out.prefix);
             enc(&mut out.delimiter);
@@ -1709,7 +1766,7 @@ impl S3 for FakeS3 {
                                 Some(c) => ObjectVersionStorageClass::from(c.as_str().to_owned()),
                                 None => ObjectVersionStorageClass::from_static(ObjectVersionStorageClass::STANDARD),
                             }),
-                            owner: Some(owner()),
+                            owner: Some(self.users.owner(v.owner)),
                             ..Default::default()
                         }),
                         None => markers.push(DeleteMarkerEntry {
@@ -1717,7 +1774,7 @@ impl S3 for FakeS3 {
                             version_id: Some(v.id.clone()),
                             is_latest,
                             last_modified: Some(ts(v.last_modified)),
-                            owner: Some(owner()),
+                            owner: Some(self.users.owner(v.owner)),
                         }),
                     }
                     emitted += 1;
@@ -1771,16 +1828,20 @@ impl S3 for FakeS3 {
         &self,
         req: S3Request<CreateMultipartUploadInput>,
     ) -> S3Result<S3Response<CreateMultipartUploadOutput>> {
+        let who = self.who(&req);
         let input = req.input;
         let b = self.bucket(&input.bucket)?;
         let tags = parse_tagging_header(input.tagging.as_deref())?;
         let ty = upload_checksum_type(input.checksum_algorithm.as_ref(), input.checksum_type.as_ref())?;
-        let acl = acl::resolve(&b.config, &acl::acl_args!(&input), false)?.map(Arc::new);
+        let owner = self.object_owner(&b, who, input.acl.as_ref().map(|a| a.as_str()));
+        let acl = acl::resolve(&b.config, &acl::acl_args!(&input), false, self.parties(&b, owner))?.map(Arc::new);
         let ext = objext::resolve(object_opts!(input), &b, &self.clock)?;
         let upload_id = uuid::Uuid::new_v4().simple().to_string();
         b.uploads.write().insert(
             (input.key.clone(), upload_id.clone()),
             Upload {
+                initiator: who.user().unwrap_or(b.owner),
+                owner,
                 meta: meta_from(
                     input.content_type,
                     input.content_encoding,
@@ -1996,11 +2057,8 @@ impl S3 for FakeS3 {
             parts: Some(parts),
             checksum_algorithm: up.checksum_algorithm.clone(),
             checksum_type: up.checksum_algorithm.is_some().then(|| up.checksum_type.clone()),
-            owner: Some(owner()),
-            initiator: Some(Initiator {
-                display_name: Some("fakes3".into()),
-                id: Some("fakes3".into()),
-            }),
+            owner: Some(self.users.owner(up.owner)),
+            initiator: Some(self.initiator(up.initiator)),
             storage_class: Some(StorageClass::from_static(StorageClass::STANDARD)),
             ..Default::default()
         }))
@@ -2045,11 +2103,8 @@ impl S3 for FakeS3 {
                 upload_id: Some(id.clone()),
                 initiated: Some(ts(up.initiated)),
                 storage_class: Some(StorageClass::from_static(StorageClass::STANDARD)),
-                owner: Some(owner()),
-                initiator: Some(Initiator {
-                    display_name: Some("fakes3".into()),
-                    id: Some("fakes3".into()),
-                }),
+                owner: Some(self.users.owner(up.owner)),
+                initiator: Some(self.initiator(up.initiator)),
                 checksum_algorithm: up.checksum_algorithm.clone(),
                 checksum_type: up.checksum_algorithm.is_some().then(|| up.checksum_type.clone()),
             });
@@ -2101,7 +2156,7 @@ impl S3 for FakeS3 {
             ));
         }
         let id = (input.key.clone(), input.upload_id.clone());
-        let (obj, checksum) = {
+        let (obj, owner, checksum) = {
             let uploads = b.uploads.read();
             let up = uploads.get(&id).ok_or_else(|| s3_error!(NoSuchUpload))?;
             let mut segments = Vec::new();
@@ -2174,7 +2229,7 @@ impl S3 for FakeS3 {
                 ext,
                 acl: up.acl.clone(),
             };
-            (obj, checksum)
+            (obj, up.owner, checksum)
         };
         let ctype = obj.checksum_type.clone();
         let e_tag = obj.e_tag.clone();
@@ -2182,7 +2237,7 @@ impl S3 for FakeS3 {
         let version_id = {
             let mut objects = b.objects.write();
             check_write_conditions(objects.get(&input.key), input.if_match.as_ref(), input.if_none_match.as_ref())?;
-            b.put(&mut objects, input.key.clone(), obj)
+            b.put(&mut objects, input.key.clone(), obj, owner)
         };
         b.uploads.write().remove(&id);
         let mut out = with_checksum!(
@@ -2398,6 +2453,7 @@ mod tests {
                             acl: None,
                         }),
                         last_modified: now,
+                        owner: UserId::DEFAULT,
                     })
                 })
                 .collect(),
@@ -2411,16 +2467,16 @@ mod tests {
         m.insert("b/1".to_owned(), entry(vec![None, Some("y")]));
         m.insert("c".to_owned(), entry(vec![None]));
         m.insert("d".to_owned(), entry(vec![Some("z")]));
-        let l = list(&m, "", Some("/"), None, 1000);
+        let l = list(&m, "", Some("/"), None, 1000, None);
         let prefixes: Vec<_> = l.prefixes.iter().map(|p| p.prefix.clone().unwrap()).collect();
         let keys: Vec<_> = l.contents.iter().map(|o| o.key.clone().unwrap()).collect();
         assert_eq!(prefixes, ["b/"]);
         assert_eq!(keys, ["d"]);
 
-        let page = list(&m, "", None, None, 1);
+        let page = list(&m, "", None, None, 1, None);
         assert!(page.truncated);
         assert_eq!(page.contents[0].key.as_deref(), Some("b/1"));
-        let rest = list(&m, "", None, page.next.as_deref(), 1);
+        let rest = list(&m, "", None, page.next.as_deref(), 1, None);
         assert_eq!(rest.contents[0].key.as_deref(), Some("d"));
         assert!(!rest.truncated);
     }

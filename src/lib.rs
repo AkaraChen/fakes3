@@ -19,10 +19,12 @@
 //! runtime and stops it when the returned handle is dropped.
 //!
 //! Clients need path-style addressing. By default any credentials work: a signed request is
-//! accepted without checking the signature and acts as the bucket owner, an unsigned one is
+//! accepted without checking the signature and acts as the account its access key belongs to (the
+//! default account, the owner of everything, for keys nobody configured), an unsigned one is
 //! anonymous and subject to ACLs, bucket policies and Block Public Access. With `auth` on, requests
-//! must be signed with the credentials from [`Config`] (`fakes3` / `fakes3secret` unless changed).
-//! Any region works. See `examples/aws_sdk.rs` for a complete setup with `aws-sdk-s3`.
+//! must be signed with the credentials from [`Config`] (`fakes3` / `fakes3secret` unless changed)
+//! or those of [`Config::users`]. Any region works. See `examples/aws_sdk.rs` for a complete setup
+//! with `aws-sdk-s3`, and `docs/multi-user.md` for several accounts.
 
 mod access;
 mod acl;
@@ -48,6 +50,7 @@ mod reqlog;
 mod s3impl;
 mod snapshot;
 mod store;
+mod users;
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -55,7 +58,6 @@ use std::sync::Arc;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
 use memory::MemoryTracker;
-use s3s::auth::SimpleAuth;
 use s3s::service::S3ServiceBuilder;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -68,6 +70,7 @@ pub use control::{Control, ControlError, ResetOptions, SnapshotInfo};
 pub use memory::{MemoryLimit, MemoryStats};
 pub use reqlog::{DEFAULT_CAPACITY as DEFAULT_REQUEST_LOG_CAPACITY, RequestFilter, RequestRecord, StatusFilter};
 pub use snapshot::Counts;
+pub use users::{User, UserConfig, UserId, Users};
 
 /// Server settings. `Default` listens on a random localhost port with the default credentials.
 #[derive(Clone, Debug)]
@@ -76,13 +79,17 @@ pub struct Config {
     pub host: String,
     /// 0 picks a free port.
     pub port: u16,
-    /// Credentials clients must sign with when `auth` is on.
+    /// Credentials clients must sign with when `auth` is on. They belong to the first account
+    /// (`fakes3`, account id `000000000000`), which owns everything that other accounts do not.
     pub access_key: String,
     pub secret_key: String,
-    /// Verify request signatures (SigV4 and SigV2) against `access_key` / `secret_key`. Off by
-    /// default: a request signed with any access key and secret is accepted unverified and acts
-    /// as the bucket owner, and an unsigned request is anonymous. Authorization (ACLs, bucket
-    /// policies, Block Public Access) applies either way.
+    /// More accounts, for cross-account ACL, policy and ownership behaviour: each is a separate
+    /// owner with its own credentials. See `docs/multi-user.md`.
+    pub users: Vec<UserConfig>,
+    /// Verify request signatures (SigV4 and SigV2) against the credentials of the accounts. Off by
+    /// default: a request signed with any access key and secret is accepted unverified and acts as
+    /// the account its access key belongs to (the first one if none does), and an unsigned request
+    /// is anonymous. Authorization (ACLs, bucket policies, Block Public Access) applies either way.
     pub auth: bool,
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     pub inline_threshold: usize,
@@ -110,6 +117,7 @@ impl Default for Config {
             port: 0,
             access_key: "fakes3".into(),
             secret_key: "fakes3secret".into(),
+            users: Vec::new(),
             auth: false,
             inline_threshold: 1 << 20,
             domains: vec!["localhost".into()],
@@ -141,6 +149,10 @@ impl Server {
             Some(n) => tracing::info!("memory limit: {} ({:?})", memory::human(n), config.memory_limit),
             None => tracing::info!("memory limit: none"),
         }
+        let users = Arc::new(
+            Users::new(&config.access_key, &config.secret_key, &config.users)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?,
+        );
         let control = Arc::new(Control::new(
             Arc::default(),
             Arc::default(),
@@ -148,6 +160,7 @@ impl Server {
             reqlog::RequestLog::new(config.request_log, config.request_log_capacity),
             config.bucket_defaults,
             config.auth,
+            users.clone(),
         ));
         let (stop, mut stopped) = oneshot::channel();
         let service = service(&config, control.clone());
@@ -222,6 +235,12 @@ impl Server {
         self.control.requests(filter)
     }
 
+    /// The accounts, the default one first, with the ids that were generated for those configured
+    /// without them.
+    pub fn users(&self) -> &Users {
+        &self.control.users
+    }
+
     /// Bytes of object data currently held, and the limit in force.
     pub fn memory(&self) -> MemoryStats {
         self.control.memory.stats()
@@ -262,6 +281,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
         memory: control.memory.clone(),
         clock: control.clock.clone(),
         defaults: config.bucket_defaults,
+        users: control.users.clone(),
     };
     let mut b = S3ServiceBuilder::new(fake);
     // Legacy clients (s3fs/aiobotocore presigning, old SDKs) still sign with SigV2.
@@ -274,10 +294,11 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
     }
     // s3s runs the access hook only when an auth provider is set. Without `auth` it never consults
     // it for the requests it sees (see [`noauth`]), but a signed POST form still reaches it.
-    b.set_auth(SimpleAuth::from_single(config.access_key.clone(), config.secret_key.clone()));
+    b.set_auth(control.users.auth());
     b.set_access(access::Access {
         store: control.store.clone(),
         clock: control.clock.clone(),
+        users: control.users.clone(),
     });
     let shared = Arc::new(Shared {
         s3: b.build(),
@@ -312,15 +333,16 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 let expired = control.clock.is_virtual() && req.uri().query().is_some_and(|q| presign::is_expired(q, control.clock.now()));
                 let mut resp = if expired {
                     presign::expired_response()
-                } else if let Some(refused) =
-                    access::expected_owner_mismatch(req.headers()).or_else(|| digest::empty_content_md5(req.headers()))
-                {
+                } else if let Some(refused) = digest::empty_content_md5(req.headers()) {
                     refused
                 } else if sh.auth {
                     hyper::service::Service::call(&sh.s3, req).await?
                 } else {
                     let mut req = req.map(s3s::Body::from);
-                    if let (Some(key), Some(p)) = (noauth::accept_any(&mut req).and_then(|s| s.access_key.clone()), logged.as_mut()) {
+                    if let (Some(key), Some(p)) = (
+                        noauth::accept_any(&mut req, &control.users).and_then(|s| s.access_key.clone()),
+                        logged.as_mut(),
+                    ) {
                         p.set_access_key(key);
                     }
                     sh.s3.call(req).await?

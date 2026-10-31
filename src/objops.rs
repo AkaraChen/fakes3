@@ -52,6 +52,7 @@ impl FakeS3 {
             id: v.id.clone(),
             obj: Some(o),
             last_modified: v.last_modified,
+            owner: v.owner,
         });
         Ok(())
     }
