@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       servers:
-        description: "Comma- or space-separated servers (fakes3,minio,localstack,moto,s3mock,juicefs)"
+        description: "Comma- or space-separated servers (fakes3,fakes3-aws,minio,localstack,moto,s3mock,juicefs); fakes3-aws = fakes3 --bucket-defaults aws"
         default: "fakes3,minio,localstack"
       marker:
         description: "pytest -m expression, e.g. 'not fails_on_aws and not lifecycle' (default: everything)"
@@ -35,7 +35,7 @@ jobs:
     steps:
       - id: plan
         env:
-          SERVERS: ${{ inputs.servers || 'fakes3,minio,localstack' }}
+          SERVERS: ${{ inputs.servers || 'fakes3,fakes3-aws,minio,localstack' }}
         run: |
           list=$(echo "${SERVERS//,/ }" | xargs -n1 | jq -R . | jq -sc .)
           echo "servers=$list" >> "$GITHUB_OUTPUT"
@@ -52,9 +52,9 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v4
-        if: matrix.server == 'fakes3'
+        if: startsWith(matrix.server, 'fakes3')
       - name: Build fakes3 image
-        if: matrix.server == 'fakes3'
+        if: startsWith(matrix.server, 'fakes3')
         uses: docker/build-push-action@v7
         with:
           context: .

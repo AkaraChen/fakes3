@@ -3,6 +3,9 @@
 #
 #   conformance/s3-tests/run.sh <server> [pytest args...]
 #
+#   <server> is a bench/servers.sh name, or `fakes3-aws`: fakes3 started with --bucket-defaults aws
+#   (AWS's 2023+ defaults for new buckets: ACLs disabled, Block Public Access, default SSE-S3).
+#
 #   S3TESTS_REF   ceph/s3-tests commit to test (default: the pin below)
 #   S3T_WORKERS   pytest-xdist workers, 1 = serial (default 4)
 #   S3T_MARKER    pytest -m expression, e.g. 'not fails_on_aws'          (default: everything)
@@ -23,6 +26,12 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 SERVER=${1:?usage: run.sh <server> [pytest args...]}
 shift
+# `fakes3-aws` is a variant of the fakes3 container, not another server.
+SERVER_NAME=$SERVER
+if [ "$SERVER" = fakes3-aws ]; then
+  SERVER_NAME=fakes3
+  export FAKES3_RUN_ARGS="-e FAKES3_BUCKET_DEFAULTS=aws"
+fi
 
 S3TESTS_REPO=${S3TESTS_REPO:-https://github.com/ceph/s3-tests.git}
 S3TESTS_REF=${S3TESTS_REF:-5b3987116eca0b4b8fa57d6b10f3db57bab196b6} # master, 2026-10-12
@@ -52,14 +61,14 @@ uv pip install -q --python "$VENV/bin/python" -r "$WORK/requirements.txt" -c "$H
   pytest-xdist pytest-timeout
 
 # --- server
-PORT=${S3T_PORT:-$("$ROOT/bench/servers.sh" port "$SERVER")}
+PORT=${S3T_PORT:-$("$ROOT/bench/servers.sh" port "$SERVER_NAME")}
 if [ -z "${S3T_NO_SERVER:-}" ]; then
-  "$ROOT/bench/servers.sh" stop "$SERVER" 2>/dev/null || true
-  "$ROOT/bench/servers.sh" start "$SERVER"
+  "$ROOT/bench/servers.sh" stop "$SERVER_NAME" 2>/dev/null || true
+  "$ROOT/bench/servers.sh" start "$SERVER_NAME"
   cleanup() {
     mkdir -p "$OUT"
-    docker logs "${S3BENCH_PREFIX:-s3bench}-$SERVER" > "$OUT/server.log" 2>&1 || true
-    "$ROOT/bench/servers.sh" stop "$SERVER" 2>/dev/null || true
+    docker logs "${S3BENCH_PREFIX:-s3bench}-$SERVER_NAME" > "$OUT/server.log" 2>&1 || true
+    "$ROOT/bench/servers.sh" stop "$SERVER_NAME" 2>/dev/null || true
   }
   trap cleanup EXIT
 fi
