@@ -10,6 +10,7 @@ name: release
 on:
   push:
     tags: ["v*"]
+    branches: [feat/distribution] # TEMPORARY: dry runs before this workflow reaches main
   workflow_dispatch:
     inputs:
       publish:
@@ -22,7 +23,7 @@ permissions:
 
 env:
   IMAGE: ghcr.io/akarachen/fakes3
-  PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish }}
 
 jobs:
   build:
@@ -153,7 +154,7 @@ jobs:
   # Joins the two per-architecture images into one multi-arch tag set.
   manifest:
     needs: build
-    if: github.event_name == 'push' || inputs.publish
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
     runs-on: ubuntu-24.04
     permissions:
       contents: read
