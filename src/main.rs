@@ -28,12 +28,18 @@ struct Opt {
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     #[arg(long, default_value_t = 1 << 20)]
     inline_threshold: usize,
+
+    /// Most object data fakes3 will hold; a write beyond it fails with HTTP 507 instead of the
+    /// process being OOM-killed. A size like `512MiB` or `2GiB`, `unlimited`, or `auto` (75% of the
+    /// container's or machine's memory).
+    #[arg(long, default_value = "auto", env = "FAKES3_MEMORY_LIMIT")]
+    memory_limit: fakes3::MemoryLimit,
 }
 
 fn main() -> std::io::Result<()> {
     let opt = Opt::parse();
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()))
         .init();
     let config = fakes3::Config {
         host: opt.host,
@@ -42,6 +48,7 @@ fn main() -> std::io::Result<()> {
         secret_key: opt.secret_key,
         auth: !opt.no_auth,
         inline_threshold: opt.inline_threshold,
+        memory_limit: opt.memory_limit,
     };
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
         let server = fakes3::Server::start(config).await?;
