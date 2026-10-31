@@ -4,6 +4,8 @@ use fakes3::{Config, MemoryLimit, Server};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
+mod common;
+
 const KIB: usize = 1024;
 
 struct Resp {
@@ -14,7 +16,10 @@ struct Resp {
 /// One request on a fresh connection. `chunked` sends the body without a Content-Length.
 async fn send(server: &Server, method: &str, path: &str, headers: &[(&str, &str)], body: &[u8], chunked: bool) -> Resp {
     let mut s = TcpStream::connect(server.addr()).await.unwrap();
-    let mut req = format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n");
+    let mut req = format!(
+        "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nAuthorization: {}\r\n",
+        common::UNVERIFIED_AUTH
+    );
     for (k, v) in headers {
         req += &format!("{k}: {v}\r\n");
     }
@@ -48,7 +53,6 @@ async fn send(server: &Server, method: &str, path: &str, headers: &[(&str, &str)
 
 async fn start(limit: MemoryLimit, inline_threshold: usize) -> Server {
     let server = Server::start(Config {
-        auth: false,
         memory_limit: limit,
         inline_threshold,
         ..Config::default()

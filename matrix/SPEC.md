@@ -25,6 +25,9 @@ matrix/
 | `MATRIX_SERVER` | server 名，例如 `fakes3`，用于决定结果路径 |
 | `MATRIX_OUT` | 结果目录，即 `matrix/results/$MATRIX_SERVER` |
 
+fakes3 默认不校验签名（任意凭证都可以），而 `bad_credentials` 之类的场景要求服务器拒绝错误签名，
+所以 `bench/servers.sh` 用 `--auth` 启动 fakes3；其他实现本来就校验签名。
+
 一律使用 path-style 寻址。依赖安装（`npm ci`、`uv sync`、`cargo build`、`mvn package`）要幂等、可缓存，
 第二次运行不能重新下载依赖。
 

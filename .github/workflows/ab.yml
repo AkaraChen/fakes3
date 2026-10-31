@@ -14,6 +14,9 @@ on:
       rounds:
         description: "Interleaved rounds"
         default: "6"
+      auth:
+        description: "1: both verify signatures (--auth); 0: neither does (--no-auth on A, the default on B)"
+        default: "1"
       workloads:
         description: "Comma-separated: small_get,small_get_c1,small_put,stat,list,versioned,large_get"
         default: "small_get,small_get_c1,small_put,stat,list,versioned"
@@ -47,6 +50,7 @@ jobs:
         env:
           ROUNDS: ${{ inputs.rounds }}
           WORKLOADS: ${{ inputs.workloads }}
+          AUTH: ${{ inputs.auth }}
           BASE: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
         run: |

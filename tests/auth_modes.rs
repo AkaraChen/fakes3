@@ -1,5 +1,8 @@
-//! `auth: false` accepts requests signed with any credentials, in every signing flavour, and still
-//! validates the data-integrity checks that travel with them.
+//! The two authentication modes. By default (`auth: false`) a request signed with any credentials,
+//! in every signing flavour, is accepted unverified and acts as the bucket owner, an unsigned
+//! request is anonymous and goes through ACLs, bucket policies and Block Public Access, and the
+//! data-integrity checks that travel with a signature still apply. With `auth: true` signatures are
+//! verified.
 
 mod common;
 
@@ -18,8 +21,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 async fn start() -> Server {
+    Server::start(Config::default()).await.unwrap()
+}
+
+async fn start_strict() -> Server {
     Server::start(Config {
-        auth: false,
+        auth: true,
         ..Config::default()
     })
     .await
@@ -302,7 +309,7 @@ fn v4_authorization(access: &str) -> String {
 async fn signatures_are_not_checked() {
     let server = start().await;
     let addr = server.addr();
-    assert_eq!(send(addr, req("PUT", "/bkt").anon()).await.status, 200);
+    assert_eq!(send(addr, req("PUT", "/bkt").unverified()).await.status, 200);
 
     // SigV4 header auth with a signature that cannot be right, and a skewed date.
     let auth = v4_authorization("SOMEKEY");
@@ -342,10 +349,11 @@ async fn signatures_are_not_checked() {
     let r = send(addr, req("GET", "/bkt/v4").query(&q).anon()).await;
     assert_eq!((r.status, r.body.as_str()), (200, "v4"));
 
-    // Unsigned requests keep working.
+    // Unsigned requests are anonymous: not accepted on a private bucket.
     let r = send(addr, req("PUT", "/bkt/anon").body(b"anon").anon()).await;
-    assert_eq!(r.status, 200, "{}", r.body);
-    assert_eq!(send(addr, req("GET", "/bkt/anon").anon()).await.body, "anon");
+    assert_eq!((r.status, r.code()), (403, "AccessDenied"), "{}", r.body);
+    let r = send(addr, req("GET", "/bkt/v4").anon()).await;
+    assert_eq!((r.status, r.code()), (403, "AccessDenied"), "{}", r.body);
     server.shutdown().await;
 }
 
@@ -400,7 +408,7 @@ async fn put_chunked(addr: SocketAddr, key: &str, mode: &str, body: &[u8], decod
 async fn streaming_payload_modes_with_trailing_checksums() {
     let server = start().await;
     let addr = server.addr();
-    send(addr, req("PUT", "/bkt").anon()).await;
+    send(addr, req("PUT", "/bkt").unverified()).await;
     let (hello, world) = (&b"hello "[..], &b"world"[..]);
     let want = b64_sha256(b"hello world");
     let good = [format!("x-amz-checksum-sha256:{want}")];
@@ -420,7 +428,9 @@ async fn streaming_payload_modes_with_trailing_checksums() {
         assert_eq!(r.status, 200, "{mode}: {}", r.body);
         let got = send(
             addr,
-            req("GET", &format!("/bkt/{key}")).header("x-amz-checksum-mode", "ENABLED").anon(),
+            req("GET", &format!("/bkt/{key}"))
+                .header("x-amz-checksum-mode", "ENABLED")
+                .unverified(),
         )
         .await;
         assert_eq!(got.body, "hello world", "{mode}");
@@ -439,7 +449,11 @@ async fn streaming_payload_modes_with_trailing_checksums() {
             let body = aws_chunked(&[hello, world], signed, &bad);
             let r = put_chunked(addr, &key, mode, &body, 11, name).await;
             assert_eq!((r.status, r.code()), (400, "BadDigest"), "{mode}: {}", r.body);
-            assert_eq!(send(addr, req("GET", &format!("/bkt/{key}")).anon()).await.status, 404, "{mode}");
+            assert_eq!(
+                send(addr, req("GET", &format!("/bkt/{key}")).unverified()).await.status,
+                404,
+                "{mode}"
+            );
         }
 
         // Fewer bytes than x-amz-decoded-content-length announced.
@@ -447,14 +461,22 @@ async fn streaming_payload_modes_with_trailing_checksums() {
         let body = aws_chunked(&[hello, world], signed, trailer);
         let r = put_chunked(addr, &key, mode, &body, 12, name).await;
         assert!(r.status >= 400, "{mode}: {}", r.body);
-        assert_eq!(send(addr, req("GET", &format!("/bkt/{key}")).anon()).await.status, 404, "{mode}");
+        assert_eq!(
+            send(addr, req("GET", &format!("/bkt/{key}")).unverified()).await.status,
+            404,
+            "{mode}"
+        );
 
         // Truncated in the middle of a chunk.
         let key = format!("{key}-cut");
         let body = aws_chunked(&[hello, world], signed, trailer);
         let r = put_chunked(addr, &key, mode, &body[..body.len() / 2], 11, name).await;
         assert!(r.status >= 400, "{mode}: {}", r.body);
-        assert_eq!(send(addr, req("GET", &format!("/bkt/{key}")).anon()).await.status, 404, "{mode}");
+        assert_eq!(
+            send(addr, req("GET", &format!("/bkt/{key}")).unverified()).await.status,
+            404,
+            "{mode}"
+        );
     }
     server.shutdown().await;
 }
@@ -498,22 +520,401 @@ async fn request_log_shows_the_access_key() {
     server.shutdown().await;
 }
 
-#[tokio::test]
-async fn authorization_is_not_applied() {
-    let server = start().await;
-    let s3 = client(server.endpoint());
-    s3.create_bucket().bucket("bkt").send().await.unwrap();
+// ---- authorization in the default mode ----------------------------------------------------------
+
+use aws_sdk_s3::types::{BucketCannedAcl, ObjectCannedAcl, PublicAccessBlockConfiguration};
+
+const PUBLIC_READ_POLICY: &str =
+    r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::bkt/*"}]}"#;
+
+async fn put(s3: &aws_sdk_s3::Client, key: &str, body: &'static [u8]) {
     s3.put_object()
         .bucket("bkt")
-        .key("k")
-        .body(ByteStream::from_static(b"v"))
+        .key(key)
+        .body(ByteStream::from_static(body))
         .send()
         .await
         .unwrap();
-    let deny = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Deny","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::bkt/*"}]}"#;
-    s3.put_bucket_policy().bucket("bkt").policy(deny).send().await.unwrap();
-    // Neither signed nor anonymous requests are held to the bucket's policy or ACLs.
+}
+
+/// A server with a bucket `bkt` holding `k`, and an SDK client signing with random credentials.
+async fn with_object() -> (Server, aws_sdk_s3::Client) {
+    let server = start().await;
+    let s3 = client(server.endpoint());
+    s3.create_bucket().bucket("bkt").send().await.unwrap();
+    put(&s3, "k", b"v").await;
+    (server, s3)
+}
+
+fn anon_get(server: &Server, path: &str) -> impl std::future::Future<Output = Resp> {
+    send(server.addr(), req("GET", path).anon())
+}
+
+fn code(err: &aws_sdk_s3::error::SdkError<impl aws_sdk_s3::error::ProvideErrorMetadata, impl std::fmt::Debug>) -> String {
+    use aws_sdk_s3::error::ProvideErrorMetadata;
+    err.code().unwrap_or("").to_owned()
+}
+
+#[tokio::test]
+async fn signed_requests_with_any_credentials_are_the_owner() {
+    let (server, s3) = with_object().await;
+    // Owner-only operations work for credentials the server has never seen.
+    s3.put_bucket_policy()
+        .bucket("bkt")
+        .policy(PUBLIC_READ_POLICY)
+        .send()
+        .await
+        .unwrap();
+    assert!(s3.get_bucket_policy().bucket("bkt").send().await.is_ok());
+    s3.put_bucket_acl()
+        .bucket("bkt")
+        .acl(BucketCannedAcl::PublicRead)
+        .send()
+        .await
+        .unwrap();
+    s3.put_object_acl()
+        .bucket("bkt")
+        .key("k")
+        .acl(ObjectCannedAcl::Private)
+        .send()
+        .await
+        .unwrap();
+    s3.put_public_access_block()
+        .bucket("bkt")
+        .public_access_block_configuration(PublicAccessBlockConfiguration::builder().block_public_policy(true).build())
+        .send()
+        .await
+        .unwrap();
+    s3.delete_bucket_policy().bucket("bkt").send().await.unwrap();
+    // A different random identity is the same owner.
+    let other = client(server.endpoint());
+    assert_eq!(other.list_buckets().send().await.unwrap().buckets().len(), 1);
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn unsigned_requests_are_anonymous() {
+    let (server, s3) = with_object().await;
+    for path in ["/", "/bkt", "/bkt/k"] {
+        let r = anon_get(&server, path).await;
+        assert_eq!((r.status, r.code()), (403, "AccessDenied"), "{path}: {}", r.body);
+    }
+    // Anonymous callers cannot create buckets, nor manage a bucket's policy, ACL or ownership.
+    let r = send(server.addr(), req("PUT", "/anon-made").anon()).await;
+    assert_eq!((r.status, r.code()), (403, "AccessDenied"));
+    for (query, body) in [
+        ("policy", PUBLIC_READ_POLICY),
+        ("acl", ""),
+        (
+            "ownershipControls",
+            "<OwnershipControls><Rule><ObjectOwnership>BucketOwnerPreferred</ObjectOwnership></Rule></OwnershipControls>",
+        ),
+    ] {
+        let r = send(
+            server.addr(),
+            req("PUT", "/bkt")
+                .query(query)
+                .body(body.as_bytes())
+                .header("x-amz-acl", "public-read-write")
+                .anon(),
+        )
+        .await;
+        assert_eq!((r.status, r.code()), (403, "AccessDenied"), "{query}: {}", r.body);
+    }
+    let r = anon_get(&server, "/missing/k").await;
+    assert_eq!((r.status, r.code()), (404, "NoSuchBucket"));
+    assert!(s3.get_bucket_policy().bucket("bkt").send().await.is_err(), "nothing was attached");
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn public_read_policy_or_acl_opens_the_bucket_to_unsigned_requests() {
+    let (server, s3) = with_object().await;
+    assert_eq!(anon_get(&server, "/bkt/k").await.status, 403);
+
+    s3.put_bucket_policy()
+        .bucket("bkt")
+        .policy(PUBLIC_READ_POLICY)
+        .send()
+        .await
+        .unwrap();
+    let r = anon_get(&server, "/bkt/k").await;
+    assert_eq!((r.status, r.body.as_str()), (200, "v"));
+    // The policy grants GetObject only.
+    assert_eq!(anon_get(&server, "/bkt").await.status, 403);
+    s3.delete_bucket_policy().bucket("bkt").send().await.unwrap();
+    assert_eq!(anon_get(&server, "/bkt/k").await.status, 403);
+
+    // The legacy ACL route: an object ACL, then a bucket ACL that allows listing.
+    s3.put_object_acl()
+        .bucket("bkt")
+        .key("k")
+        .acl(ObjectCannedAcl::PublicRead)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon_get(&server, "/bkt/k").await.status, 200);
+    assert_eq!(anon_get(&server, "/bkt").await.status, 403);
+    s3.put_bucket_acl()
+        .bucket("bkt")
+        .acl(BucketCannedAcl::PublicRead)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon_get(&server, "/bkt").await.status, 200);
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn block_public_access_still_blocks() {
+    let (server, s3) = with_object().await;
+    let block = |config: PublicAccessBlockConfiguration| {
+        s3.put_public_access_block()
+            .bucket("bkt")
+            .public_access_block_configuration(config)
+            .send()
+    };
+
+    s3.put_object_acl()
+        .bucket("bkt")
+        .key("k")
+        .acl(ObjectCannedAcl::PublicRead)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon_get(&server, "/bkt/k").await.status, 200);
+    block(PublicAccessBlockConfiguration::builder().ignore_public_acls(true).build())
+        .await
+        .unwrap();
+    assert_eq!(anon_get(&server, "/bkt/k").await.status, 403, "IgnorePublicAcls");
+    // The owner is not affected.
     assert!(s3.get_object().bucket("bkt").key("k").send().await.is_ok());
-    assert_eq!(send(server.addr(), req("GET", "/bkt/k").anon()).await.status, 200);
+
+    // Back to a private object, so that only the policy can open it.
+    s3.put_object_acl()
+        .bucket("bkt")
+        .key("k")
+        .acl(ObjectCannedAcl::Private)
+        .send()
+        .await
+        .unwrap();
+    block(PublicAccessBlockConfiguration::builder().ignore_public_acls(false).build())
+        .await
+        .unwrap();
+    s3.put_bucket_policy()
+        .bucket("bkt")
+        .policy(PUBLIC_READ_POLICY)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon_get(&server, "/bkt/k").await.status, 200);
+    block(PublicAccessBlockConfiguration::builder().restrict_public_buckets(true).build())
+        .await
+        .unwrap();
+    assert_eq!(anon_get(&server, "/bkt/k").await.status, 403, "RestrictPublicBuckets");
+    assert!(s3.get_object().bucket("bkt").key("k").send().await.is_ok());
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn explicit_deny_applies_to_anonymous_requests() {
+    let (server, s3) = with_object().await;
+    put(&s3, "secret/k", b"s").await;
+    let policy = r#"{"Version":"2012-10-17","Statement":[
+        {"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::bkt/*"},
+        {"Effect":"Deny","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::bkt/secret/*"}]}"#;
+    s3.put_bucket_policy().bucket("bkt").policy(policy).send().await.unwrap();
+    assert_eq!(anon_get(&server, "/bkt/k").await.status, 200);
+    assert_eq!(anon_get(&server, "/bkt/secret/k").await.status, 403);
+    // A public-read ACL does not get around the Deny.
+    s3.put_object_acl()
+        .bucket("bkt")
+        .key("secret/k")
+        .acl(ObjectCannedAcl::PublicRead)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon_get(&server, "/bkt/secret/k").await.status, 403);
+    // Signed requests are held to it as well, except for managing the policy itself.
+    let err = s3.get_object().bucket("bkt").key("secret/k").send().await.unwrap_err();
+    assert_eq!(code(&err), "AccessDenied");
+    s3.delete_bucket_policy().bucket("bkt").send().await.unwrap();
+    assert_eq!(anon_get(&server, "/bkt/secret/k").await.status, 200);
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn presigned_urls_are_query_string_auth_for_policy_conditions() {
+    let (server, s3) = with_object().await;
+    let policy = r#"{"Version":"2012-10-17","Statement":[
+        {"Effect":"Deny","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::bkt/*","Condition":{"StringEquals":{"s3:authType":"REST-QUERY-STRING"}}}]}"#;
+    s3.put_bucket_policy().bucket("bkt").policy(policy).send().await.unwrap();
+    let url = s3
+        .get_object()
+        .bucket("bkt")
+        .key("k")
+        .presigned(PresigningConfig::expires_in(Duration::from_secs(60)).unwrap())
+        .await
+        .unwrap();
+    let (path, query) = split_url(url.uri());
+    assert_eq!(send(server.addr(), req("GET", &path).query(&query).anon()).await.status, 403);
+    assert!(s3.get_object().bucket("bkt").key("k").send().await.is_ok());
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn every_authorization_entry_point_sees_unsigned_requests_as_anonymous() {
+    let (server, s3) = with_object().await;
+    s3.put_bucket_acl()
+        .bucket("bkt")
+        .acl(BucketCannedAcl::PublicReadWrite)
+        .send()
+        .await
+        .unwrap();
+    s3.create_bucket().bucket("priv").send().await.unwrap();
+    put_to(&s3, "priv", "src", b"private").await;
+    let addr = server.addr();
+
+    // Anonymous writes are allowed by the bucket's public-write ACL.
+    let r = send(addr, req("PUT", "/bkt/anon").body(b"anon").anon()).await;
+    assert_eq!(r.status, 200, "{}", r.body);
+
+    // CopyObject checks the source too: a private one cannot be read by an anonymous caller.
+    let r = send(addr, req("PUT", "/bkt/stolen").header("x-amz-copy-source", "/priv/src").anon()).await;
+    assert_eq!((r.status, r.code()), (403, "AccessDenied"), "{}", r.body);
+    let r = send(addr, req("PUT", "/bkt/copied").header("x-amz-copy-source", "/bkt/k").anon()).await;
+    assert_eq!(r.status, 403, "reading k needs a grant the ACL does not give: {}", r.body);
+
+    // DeleteObjects is judged per key.
+    let policy = r#"{"Version":"2012-10-17","Statement":[
+        {"Effect":"Deny","Principal":"*","Action":"s3:DeleteObject","Resource":"arn:aws:s3:::bkt/k"}]}"#;
+    s3.put_bucket_policy().bucket("bkt").policy(policy).send().await.unwrap();
+    let body = b"<Delete><Object><Key>k</Key></Object><Object><Key>anon</Key></Object></Delete>";
+    let sum = b64_sha256(body);
+    let r = send(
+        addr,
+        req("POST", "/bkt")
+            .query("delete")
+            .header("x-amz-checksum-sha256", &sum)
+            .body(body)
+            .anon(),
+    )
+    .await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert!(r.body.contains("<Key>anon</Key></Deleted>"), "{}", r.body);
+    assert!(r.body.contains("<Code>AccessDenied</Code><Key>k</Key>"), "{}", r.body);
+    // Signed requests are held to the Deny too (it is a Deny for everyone).
+    let r = send(
+        addr,
+        req("POST", "/bkt")
+            .query("delete")
+            .header("x-amz-checksum-sha256", &sum)
+            .body(body)
+            .unverified(),
+    )
+    .await;
+    assert!(r.body.contains("<Code>AccessDenied</Code><Key>k</Key>"), "{}", r.body);
+
+    // PostObject forms: allowed into the public-write bucket, refused into the private one.
+    let form = |bucket: &str| {
+        let body = "--B\r\nContent-Disposition: form-data; name=\"key\"\r\n\r\nposted\r\n--B\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f\"\r\n\r\ndata\r\n--B--\r\n".to_owned();
+        (format!("/{bucket}"), body)
+    };
+    for (bucket, want) in [("bkt", 204), ("priv", 403)] {
+        let (path, body) = form(bucket);
+        let r = send(
+            addr,
+            req("POST", &path)
+                .header("content-type", "multipart/form-data; boundary=B")
+                .body(body.as_bytes())
+                .anon(),
+        )
+        .await;
+        assert_eq!(r.status, want, "{bucket}: {}", r.body);
+    }
+    server.shutdown().await;
+}
+
+async fn put_to(s3: &aws_sdk_s3::Client, bucket: &str, key: &str, body: &'static [u8]) {
+    s3.put_object()
+        .bucket(bucket)
+        .key(key)
+        .body(ByteStream::from_static(body))
+        .send()
+        .await
+        .unwrap();
+}
+
+// ---- `auth: true` -------------------------------------------------------------------------------
+
+fn strict_client(server: &Server, secret: &str) -> aws_sdk_s3::Client {
+    let config = Config::default();
+    aws_sdk_s3::Client::from_conf(
+        aws_sdk_s3::Config::builder()
+            .behavior_version(BehaviorVersion::latest())
+            .endpoint_url(server.endpoint())
+            .region(Region::new("us-east-1"))
+            .credentials_provider(Credentials::new(&config.access_key, secret, None, None, "test"))
+            .force_path_style(true)
+            .build(),
+    )
+}
+
+#[tokio::test]
+async fn strict_mode_rejects_bad_signatures() {
+    let server = start_strict().await;
+    let good = strict_client(&server, &Config::default().secret_key);
+    good.create_bucket().bucket("bkt").send().await.unwrap();
+    put(&good, "k", b"v").await;
+
+    let err = strict_client(&server, "wrong").list_buckets().send().await.unwrap_err();
+    assert_eq!(code(&err), "SignatureDoesNotMatch");
+    // An access key nobody configured.
+    let err = client(server.endpoint()).list_buckets().send().await.unwrap_err();
+    assert_eq!(code(&err), "NotSignedUp");
+    // Hand-written signatures, in header and query form, are checked as well.
+    let r = send(
+        server.addr(),
+        req("GET", "/bkt/k")
+            .anon()
+            .header("authorization", &v4_authorization("fakes3"))
+            .header("x-amz-date", "20240101T000000Z"),
+    )
+    .await;
+    assert_eq!(r.status, 403, "{}", r.body);
+    let q = format!(
+        "X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=fakes3%2F20240101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240101T000000Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature={FAKE_SIG}"
+    );
+    assert_eq!(send(server.addr(), req("GET", "/bkt/k").query(&q).anon()).await.status, 403);
+    // A made-up Authorization header is no longer enough to be the owner.
+    assert_eq!(send(server.addr(), req("GET", "/bkt/k").unverified()).await.status, 403);
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn strict_mode_authorizes_like_the_default_mode() {
+    let server = start_strict().await;
+    let s3 = strict_client(&server, &Config::default().secret_key);
+    s3.create_bucket().bucket("bkt").send().await.unwrap();
+    put(&s3, "k", b"v").await;
+    let r = anon_get(&server, "/bkt/k").await;
+    assert_eq!((r.status, r.code()), (403, "AccessDenied"));
+    s3.put_bucket_policy()
+        .bucket("bkt")
+        .policy(PUBLIC_READ_POLICY)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon_get(&server, "/bkt/k").await.status, 200);
+    // Verified presigned URLs work and keep their query-string auth type.
+    let url = s3
+        .get_object()
+        .bucket("bkt")
+        .key("k")
+        .presigned(PresigningConfig::expires_in(Duration::from_secs(60)).unwrap())
+        .await
+        .unwrap();
+    let (path, query) = split_url(url.uri());
+    assert_eq!(send(server.addr(), req("GET", &path).query(&query).anon()).await.status, 200);
     server.shutdown().await;
 }

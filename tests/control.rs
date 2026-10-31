@@ -1,5 +1,5 @@
 //! End-to-end tests of the control plane: HTTP API, `fakes3 ctl` and the Rust methods, against
-//! a real in-process server (signature checks off, so plain HTTP requests are enough).
+//! a real in-process server (signatures are not verified, so a made-up `Authorization` header is enough).
 
 use std::time::Duration;
 
@@ -10,12 +10,14 @@ use hyper_util::rt::TokioIo;
 use serde_json::{Value, json};
 use tokio::net::TcpStream;
 
+mod common;
+
 async fn start() -> Server {
     start_with(Config::default()).await
 }
 
 async fn start_with(config: Config) -> Server {
-    Server::start(Config { auth: false, ..config }).await.unwrap()
+    Server::start(config).await.unwrap()
 }
 
 struct Reply {
@@ -41,7 +43,8 @@ async fn send_with(s: &Server, method: &str, path: &str, body: &str, headers: &[
     let mut req = http::Request::builder()
         .method(method)
         .uri(path)
-        .header("host", s.addr().to_string());
+        .header("host", s.addr().to_string())
+        .header("authorization", common::UNVERIFIED_AUTH);
     for (k, v) in headers {
         req = req.header(*k, *v);
     }
@@ -380,6 +383,13 @@ async fn api_edges() {
     let s = start().await;
     let st = send(&s, "GET", "/_fakes3", "").await.json();
     assert_eq!(st["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(st["auth"], "any-credentials");
+    let strict = start_with(Config {
+        auth: true,
+        ..Config::default()
+    })
+    .await;
+    assert_eq!(send(&strict, "GET", "/_fakes3", "").await.json()["auth"], "strict");
     assert_eq!(send(&s, "GET", "/_fakes3/", "").await.status, 200);
     assert_eq!(send(&s, "GET", "/_fakes3/nope", "").await.status, 404);
     assert_eq!(send(&s, "POST", "/_fakes3/clock/nope", "").await.status, 404);

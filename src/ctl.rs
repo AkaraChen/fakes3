@@ -252,6 +252,7 @@ fn print_human(command: &Command, v: &Value) {
                 s["buckets"], s["objects"], s["uploads"]
             );
             println!("new buckets    {} defaults", text(v, "bucket_defaults"));
+            println!("auth           {}", text(v, "auth"));
             println!("snapshots      {}", v["snapshots"]);
             print_log_config(&v["request_log"]);
         }

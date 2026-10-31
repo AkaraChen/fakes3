@@ -19,7 +19,7 @@ fakes3 ctl requests list --op PutObject --status error
 
 ## 安全
 
-**控制面没有认证**，不管服务有没有开 SigV4（`--no-auth` 与此无关）。任何连得上端口的人都能清空数据。
+**控制面没有认证**，不管服务有没有开 `--auth`（S3 接口的签名校验与此无关）。任何连得上端口的人都能清空数据。
 这是一个测试服务，默认只监听 `127.0.0.1`；Docker 镜像监听 `0.0.0.0`，请不要把端口暴露到不可信的网络。
 
 唯一的防护：带 `Origin` 头的非 GET 请求会被拒绝（403），防止用户浏览器里打开的网页向 `localhost` 发跨站 POST 把服务清空。
@@ -219,7 +219,7 @@ Lifecycle 的转换在时钟跨过 UTC 日期后的第一次访问 bucket 时执
 | `latency_us` | 从收到请求到响应头就绪的微秒数（不含响应体的流式发送） |
 | `bytes_in` | 请求负载大小：优先 `x-amz-decoded-content-length`，否则 `Content-Length` |
 | `bytes_out` | 响应的 `Content-Length`，未知时为 0 |
-| `access_key` | 请求签名用的 access key；只在 `--no-auth` 时记录（认证模式下总是配置的那个），没有则为 `null` |
+| `access_key` | 请求签名用的 access key；默认模式（不校验签名）下记录，未签名的请求为 `null`；`--auth` 时总是配置的那个，所以不记录（`null`） |
 
 `operation` 是根据请求的形状（方法、路径、查询参数、是否有 `x-amz-copy-source`）推断的，不是 s3s 报告的：s3s 只在开启签名校验时
 才把操作名交给我们，而且签名失败的请求根本到不了那一步。覆盖 fakes3 实现的全部操作和常见的 bucket 子资源；
@@ -266,7 +266,7 @@ $ curl localhost:9000/_fakes3/stats
 ```
 
 `memory.used` 是服务器持有的对象数据字节数（含分段上传的 part，以及仍被快照或进行中的读取引用的数据），`limit` 是
-`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本、时钟和 `bucket_defaults`（`"legacy"` 或 `"aws"`，见 [README](../README.md#新建-bucket-的默认值)），`fakes3 ctl status` 显示的就是它。
+`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本、时钟、`bucket_defaults`（`"legacy"` 或 `"aws"`，见 [README](../README.md#新建-bucket-的默认值)）和 `auth`（认证模式：`"any-credentials"` 是默认的不校验签名，`"strict"` 是 `--auth`，见 [README](../README.md#认证模式)），`fakes3 ctl status` 显示的就是它。
 
 **内存与重置、快照的关系。** 数据缓冲区按引用计数在最后一个引用消失时释放并归还额度，所以：
 
