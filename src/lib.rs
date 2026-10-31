@@ -49,7 +49,9 @@ mod presign;
 mod reqid;
 mod reqlog;
 mod s3impl;
+mod s3s_compat;
 mod select;
+mod sigv2;
 mod snapshot;
 mod store;
 mod users;
@@ -297,6 +299,9 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
     // Legacy clients (s3fs/aiobotocore presigning, old SDKs) still sign with SigV2.
     let mut s3_config = s3s::config::S3Config::default();
     s3_config.enable_sig_v2 = true;
+    // A request signed with a `Date` header gets an `x-amz-date` that is not in its signed
+    // headers (see [`s3s_compat::date_to_amz_date`]); the signature covers the time anyway.
+    s3_config.unsigned_amz_header_allowlist.push("x-amz-date".to_owned());
     b.set_config(Arc::new(s3s::config::StaticConfigProvider::new(Arc::new(s3_config))));
     let domains = host::Domains::new(&config.domains);
     if !config.domains.is_empty() {
@@ -339,6 +344,8 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                     .contains_key(http::header::ORIGIN)
                     .then(|| cors::RequestInfo::of(&req, &sh.domains));
                 let head = req.method() == http::Method::HEAD;
+                let mut req = req.map(s3s::Body::from);
+                let signed_form = req.method() == http::Method::POST && s3s_compat::signed_form(&mut req).await;
                 // s3s judges presigned-URL expiry by the host clock; honor a moved server clock first.
                 let expired = control.clock.is_virtual() && req.uri().query().is_some_and(|q| presign::is_expired(q, control.clock.now()));
                 let mut resp = if expired {
@@ -346,9 +353,8 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 } else if let Some(refused) = digest::empty_content_md5(req.headers()) {
                     refused
                 } else if sh.auth {
-                    hyper::service::Service::call(&sh.s3, req).await?
+                    call_verified(&sh.s3, req).await?
                 } else {
-                    let mut req = req.map(s3s::Body::from);
                     if let (Some(key), Some(p)) = (
                         noauth::accept_any(&mut req, &control.users).and_then(|s| s.access_key.clone()),
                         logged.as_mut(),
@@ -360,6 +366,9 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 // s3s always answers HEAD with 200; a ?partNumber= HEAD is a partial response.
                 if head && resp.status() == http::StatusCode::OK && resp.headers().contains_key(http::header::CONTENT_RANGE) {
                     *resp.status_mut() = http::StatusCode::PARTIAL_CONTENT;
+                }
+                if signed_form && resp.status() == http::StatusCode::BAD_REQUEST {
+                    s3s_compat::policy_violation(&mut resp);
                 }
                 if let Some(archive::StatusOverride(status)) = resp.extensions().get().copied() {
                     *resp.status_mut() = status;
@@ -404,6 +413,30 @@ impl hyper::service::Service<http::Request<hyper::body::Incoming>> for ServiceFn
     fn call(&self, req: http::Request<hyper::body::Incoming>) -> Self::Future {
         (self.0)(req, self.1)
     }
+}
+
+/// Calls s3s with signature verification on, after repairing what it gets wrong (see
+/// [`sigv2`] and [`s3s_compat`]). A request that is neither SigV2 nor unsized goes straight in.
+async fn call_verified(s3: &s3s::service::S3Service, mut req: http::Request<s3s::Body>) -> Result<s3s::HttpResponse, s3s::HttpError> {
+    if let Some(kind) = sigv2::kind(&req) {
+        if kind == sigv2::Kind::Header
+            && let Some(refused) = sigv2::bad_date(req.headers(), std::time::SystemTime::now())
+        {
+            return Ok(refused);
+        }
+        if sigv2::is_bucket_level(&req) {
+            return sigv2::call_retrying(s3, req).await;
+        }
+    } else {
+        s3s_compat::date_to_amz_date(req.headers_mut());
+        if s3s_compat::is_unsized(req.headers()) {
+            return match s3s_compat::with_length(req).await {
+                Ok(req) => s3.call(req).await,
+                Err(refused) => Ok(refused),
+            };
+        }
+    }
+    s3.call(req).await
 }
 
 /// Folds repeated headers into one comma-separated value, which is how HTTP defines their
