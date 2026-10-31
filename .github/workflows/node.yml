@@ -79,7 +79,9 @@ jobs:
       - name: Build and test (Alpine)
         if: ${{ matrix.alpine }}
         run: |
-          docker run --rm -v "$PWD/../..:/work" -w /work/bindings/node node:24-alpine sh -euxc '
+          # napi defaults to a cross linker name on aarch64 musl; Alpine's native cc is the right one.
+          docker run --rm -e CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=cc \
+            -v "$PWD/../..:/work" -w /work/bindings/node node:24-alpine sh -euxc '
             apk add --no-cache build-base perl linux-headers rustup
             rustup-init -y --profile minimal --default-toolchain stable
             . "$HOME/.cargo/env"

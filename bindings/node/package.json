@@ -37,7 +37,7 @@
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
     "artifacts": "napi artifacts",
-    "test": "node --test __test__/"
+    "test": "node --test __test__/s3.test.mjs"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1000.0",
