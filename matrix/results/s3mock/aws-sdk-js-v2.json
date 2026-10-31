@@ -1,0 +1,229 @@
+{
+  "sdk": "aws-sdk-js-v2",
+  "lang": "js",
+  "version": "2.1693.0",
+  "server": "s3mock",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 23.7
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 6.4
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 8
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 13.7
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 21.4
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 15.2
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 117.7
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 60
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 144.4
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 24.1
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 9.7
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 8.1
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 11.2
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 12.3
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 17.6
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 18.7
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 6.5
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 50.3
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 26.1
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 28.9
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 57.6
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 33.5
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 34.1
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 25.8
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "fail",
+      "ms": 21.4,
+      "error": "AssertionError: ContentType: expected \"application/x-new\", got \"application/x-old\""
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 171.9
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 30.6
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 61.5
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 31.2
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 221.8
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 43.7
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 20.6
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "fail",
+      "ms": 23.2,
+      "error": "AssertionError: ChecksumCRC32: expected \"4v3zTA==\", got undefined"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "fail",
+      "ms": 10,
+      "error": "AssertionError: ChecksumCRC32C: expected \"zeM+6A==\", got undefined"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "fail",
+      "ms": 8.9,
+      "error": "AssertionError: ChecksumSHA1: expected \"l8qdJbpHWWceFPUOCHKpp1St5SE=\", got undefined"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "ms": 10.1,
+      "error": "AssertionError: ChecksumSHA256: expected \"4HsSgmHwAlVHcDX0wIoVSsJLQ21NvOsWoDsPETdQC8E=\", got undefined"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "aws-sdk v2 API model has no CRC64NVME checksum (ChecksumCRC64NVME member absent)"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 8.2
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "ms": 4.1,
+      "error": "AssertionError: operation: expected error SignatureDoesNotMatch/InvalidAccessKeyId/403, but it succeeded"
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 9.3
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 30.1
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 21.4
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 35.7
+    }
+  ]
+}

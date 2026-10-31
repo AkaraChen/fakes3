@@ -1,0 +1,224 @@
+{
+  "sdk": "minio-go",
+  "lang": "go",
+  "version": "7.4.1",
+  "server": "minio",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 2.06
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 0.732
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 0.658
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 0.622
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 2.149
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 1.493
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 63.664
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 3.235,
+      "error": "XMinioInvalidObjectName: Object name contains unsupported characters. (HTTP 400)"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 1.688
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 2.761
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 1.706
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 0.754
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 1.41
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 1.499
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 1.487
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 1.974
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 0.498
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 4.242
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 3.323
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 4.364
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 21.961
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 4.672
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 6.069
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 2.344
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 2.405
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 86.987
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 3.983
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 42.857
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 5.053
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 106.033
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 2.615
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 1.409
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "pass",
+      "ms": 1.817
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "pass",
+      "ms": 1.616
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "pass",
+      "ms": 1.598
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "pass",
+      "ms": 2.144
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "pass",
+      "ms": 1.5
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 0.742
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 0.651
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 1.484
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 5.244
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 3.054
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 12.377
+    }
+  ]
+}

@@ -1,0 +1,225 @@
+{
+  "sdk": "s3fs",
+  "lang": "python",
+  "version": "2026.9.0",
+  "server": "moto",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 378.2
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 12.1
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 11.7
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 13.6
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 56.0
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 45.7
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 141.2
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 174.4
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 45.3
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 98.4
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 51.7
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 48.4
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "skip",
+      "error": "s3fs cat/open have no conditional-read (If-None-Match) option"
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "skip",
+      "error": "s3fs cat/open have no conditional-read (If-Match) option"
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 105.9
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 41.2
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 36.5
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 97.3
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 51.9
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 56.6
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "skip",
+      "error": "s3fs paginates listings internally; no MaxKeys/continuation-token control"
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "skip",
+      "error": "s3fs listing has no StartAfter option"
+    },
+    {
+      "scenario": "list_v1",
+      "status": "skip",
+      "error": "s3fs only uses ListObjectsV2"
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 140.1
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 126.7
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 347.1
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 91.3
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "s3fs has no ListParts API"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "skip",
+      "error": "s3fs has no API to complete a multipart upload with chosen part sizes (S3File enforces >= 5 MiB blocks)"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 447.8
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 27.3
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 32.1
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "pass",
+      "ms": 36.2
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "pass",
+      "ms": 20.8
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "pass",
+      "ms": 35.3
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "pass",
+      "ms": 25.3
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "pass",
+      "ms": 34.2
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "fail",
+      "ms": 8.0,
+      "error": "AssertionFailed: operation: expected error OSError, but it succeeded"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "ms": 106.4,
+      "error": "AssertionFailed: operation: expected error SignatureDoesNotMatch/InvalidAccessKeyId/403/PermissionError, but it succeeded"
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 11.1
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 168.5
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 21.3
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 52.4
+    }
+  ]
+}

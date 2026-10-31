@@ -1,0 +1,232 @@
+{
+  "sdk": "aws-sdk-go-v2",
+  "lang": "go",
+  "version": "1.114.6",
+  "server": "s3mock",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 3.217
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 0.712
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 1.136
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 1.001
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 3.005
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 2.573
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 68.39
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 10.38
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "ms": 2.648,
+      "error": "AssertionError: Content-Type: got \"text/x-matrix;charset=utf-8\", want \"text/x-matrix; charset=utf-8\""
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 4.462
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 2.477
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 0.9
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 2.224
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 2.095
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 2.233
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 3.179
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 0.762
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 6.984
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 4.41
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 6.984
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 25.005
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 5.91
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 6.737
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 3.744
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "fail",
+      "ms": 3.287,
+      "error": "AssertionError: Content-Type: got \"text/x-old\", want \"text/x-new\""
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 118.885
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 6.838
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 50.934
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 8.046
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "fail",
+      "ms": 110.795,
+      "error": "BadRequest: The upload was created using a crc32 checksum. The complete request must include the checksum for each part. It was missing for part 1 in the request. (HTTP 400)"
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 3.599
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 4.077
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "fail",
+      "ms": 2.274,
+      "error": "AssertionError: GET checksum CRC32: got \"\", want \"fq5Ozg==\""
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "fail",
+      "ms": 2.981,
+      "error": "AssertionError: GET checksum CRC32C: got \"\", want \"vVoBqw==\""
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "fail",
+      "ms": 2.31,
+      "error": "AssertionError: GET checksum SHA1: got \"\", want \"vFswkxBv7OkdQQIM3fyP3KUBrXk=\""
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "ms": 1.901,
+      "error": "AssertionError: GET checksum SHA256: got \"\", want \"pEP6p9Ngvflw0+c9ajLGEGeW0lP34Yd56ZrWvtH5n2E=\""
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "fail",
+      "ms": 2.003,
+      "error": "AssertionError: GET checksum CRC64NVME: got \"\", want \"JGIwLOqxo9M=\""
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 1.093
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "ms": 1.347,
+      "error": "AssertionError: ListBuckets: expected error ([403] [SignatureDoesNotMatch InvalidAccessKeyId]), got success"
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 1.985
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 7.705
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 3.86
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 56.288
+    }
+  ]
+}

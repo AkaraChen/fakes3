@@ -1,0 +1,228 @@
+{
+  "sdk": "minio-js",
+  "lang": "js",
+  "version": "8.0.7",
+  "server": "juicefs",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 18.5
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 2
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 1.8
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 5.4
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 24.7
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 14
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 105.5
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 31.7,
+      "error": "AssertionError: key \"a//b\" missing from list"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "ms": 8.9,
+      "error": "AssertionError: content-encoding: expected \"gzip\", got undefined"
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 9.2
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 12
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 1.4
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "skip",
+      "error": "minio-js getObject has no conditional-request (If-None-Match) option"
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "skip",
+      "error": "minio-js getObject has no conditional-request (If-Match) option"
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "fail",
+      "ms": 12.5,
+      "error": "AssertionError: operation: expected error PreconditionFailed/412, but it succeeded"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 9.4
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 0.9
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 30.3
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 27.9
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 44.3
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 73.2
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 30.8
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 47.2
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 36.9
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 27.9
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 121.9
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 19
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 65.5
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "fail",
+      "ms": 36.2,
+      "error": "AssertionError: operation: expected error EntityTooSmall, but it succeeded"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 272.8
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 30.5
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 17
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "minio-js putObject has no Content-MD5 option (non-allowlisted metadata keys become x-amz-meta-*)"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 2
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 11.8
+    },
+    {
+      "scenario": "versioning",
+      "status": "fail",
+      "ms": 12.2,
+      "error": "S3Error(NotImplemented): A header you provided implies functionality that is not implemented"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 25.7
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 47.8
+    }
+  ]
+}

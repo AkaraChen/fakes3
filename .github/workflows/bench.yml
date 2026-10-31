@@ -1,0 +1,76 @@
+name: bench
+
+# Runs bench/run.py (fakes3 vs MinIO, LocalStack, moto, S3Mock, JuiceFS) on demand.
+# The report is shown in the job summary and uploaded as an artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      servers:
+        description: "Comma-separated servers (default: all)"
+        default: "fakes3,minio,localstack,moto,s3mock,juicefs"
+      only:
+        description: "Comma-separated measurements, e.g. startup,suite,footprint,small_get (default: all)"
+        default: ""
+      duration:
+        description: "Duration of each warp workload"
+        default: "15s"
+      startup_runs:
+        description: "Cold starts per server"
+        default: "5"
+      runner:
+        description: "Runner label (hosted runners are shared VMs; use a larger or self-hosted runner for steadier numbers)"
+        default: "ubuntu-24.04"
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: bench/suite/go.mod
+          cache-dependency-path: bench/suite/go.sum
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Prepare binaries and images
+        run: bench/setup.sh
+
+      - name: Run benchmarks
+        env:
+          SERVERS: ${{ inputs.servers }}
+          ONLY: ${{ inputs.only }}
+          DURATION: ${{ inputs.duration }}
+          STARTUP_RUNS: ${{ inputs.startup_runs }}
+        run: |
+          uv run bench/run.py \
+            --servers "$SERVERS" \
+            --only "$ONLY" \
+            --duration "$DURATION" \
+            --startup-runs "$STARTUP_RUNS" \
+            --out bench/results/ci.json
+
+      - name: Render report
+        if: always()
+        run: |
+          if [ -f bench/results/ci.json ]; then
+            python3 bench/report.py bench/results/ci.json
+            cat bench/RESULTS.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-${{ github.run_id }}
+          path: |
+            bench/results/ci.json
+            bench/RESULTS.md
+          if-no-files-found: ignore

@@ -1,0 +1,235 @@
+{
+  "sdk": "boto3",
+  "lang": "python",
+  "version": "1.43.123",
+  "server": "juicefs",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 15.2
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 3.3
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 5.7
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 3.4
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 27.4
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 7.8
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 78.1
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 45.9,
+      "error": "AssertionFailed: key 'a//b' missing from list"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "ms": 11.8,
+      "error": "AssertionFailed: ContentEncoding: expected 'gzip', got None"
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 17.8
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 8.4
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 3.4
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 8.9
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 8.2
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "fail",
+      "ms": 11.4,
+      "error": "AssertionFailed: operation: expected error PreconditionFailed/412, but it succeeded"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 12.2
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 2.4
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "fail",
+      "ms": 26.5,
+      "error": "ClientError: An error occurred (MissingContentMD5) when calling the DeleteObjects operation: Missing required header for this request: Content-Md5."
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 32.8
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 40.8
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 222.2
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 79.2
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 47.1
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 21.6
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 29.0
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 131.1
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 25.5
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 79.5
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "fail",
+      "ms": 66.7,
+      "error": "AssertionFailed: operation: expected error EntityTooSmall, but it succeeded"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 193.4
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 16.0
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 13.0
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "fail",
+      "ms": 14.0,
+      "error": "AssertionFailed: ChecksumCRC32: expected 'pjCA0Q==', got None"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "fail",
+      "ms": 14.4,
+      "error": "AssertionFailed: ChecksumCRC32C: expected 't550lw==', got None"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "fail",
+      "ms": 12.5,
+      "error": "AssertionFailed: ChecksumSHA1: expected 'xr9NSRGAspBqM/2kPBTUuohmbDA=', got None"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "ms": 10.9,
+      "error": "AssertionFailed: ChecksumSHA256: expected 'B2VN7BqMFIYNJbxgjEgEEsOySo30fL+CPP0A25OW9u0=', got None"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "fail",
+      "ms": 12.7,
+      "error": "AssertionFailed: ChecksumCRC64NVME: expected '8km1svMcNI8=', got None"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 540.6
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 9.8
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 12.7
+    },
+    {
+      "scenario": "versioning",
+      "status": "fail",
+      "ms": 12.7,
+      "error": "ClientError: An error occurred (NotImplemented) when calling the PutBucketVersioning operation: A header you provided implies functionality that is not implemented"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 19.5
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "fail",
+      "ms": 34.7,
+      "error": "ClientError: An error occurred (MissingContentMD5) when calling the DeleteObjects operation: Missing required header for this request: Content-Md5."
+    }
+  ]
+}

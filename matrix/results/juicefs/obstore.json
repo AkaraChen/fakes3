@@ -1,0 +1,231 @@
+{
+  "sdk": "obstore",
+  "lang": "python",
+  "version": "0.12.1",
+  "server": "juicefs",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "skip",
+      "error": "obstore has no bucket-level API (a store is bound to one existing bucket)"
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "skip",
+      "error": "obstore has no bucket-level API (a store is bound to one existing bucket)"
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "skip",
+      "error": "obstore has no bucket-level API (a store is bound to one existing bucket)"
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "skip",
+      "error": "obstore has no bucket-level API (a store is bound to one existing bucket)"
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 11.6
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 7.9
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 84.7
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 10.7,
+      "error": "ValueError: Could not parse path: Path \"a//b\" contained empty path segment"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "ms": 8.9,
+      "error": "AssertionFailed: Content-Encoding: expected 'gzip', got None"
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 35.6
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 8.6
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 3.4
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 7.7
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 6.5
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "fail",
+      "ms": 13.8,
+      "error": "AssertionFailed: operation: expected error AlreadyExistsError/PreconditionError, but it succeeded"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "fail",
+      "ms": 6.2,
+      "error": "GenericError: Generic S3 error: Got invalid DeleteObjects response: missing field `Key`"
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "fail",
+      "ms": 2.3,
+      "error": "GenericError: Generic S3 error: Got invalid DeleteObjects response: missing field `Key`"
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "fail",
+      "ms": 24.3,
+      "error": "GenericError: Generic S3 error: Got invalid DeleteObjects response: missing field `Key`"
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 15.3
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 127.7
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "skip",
+      "error": "obstore paginates internally; no MaxKeys/continuation-token control"
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 69.8
+    },
+    {
+      "scenario": "list_v1",
+      "status": "skip",
+      "error": "obstore only uses ListObjectsV2"
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 23.6
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "skip",
+      "error": "obstore copy has no metadata options (always COPY directive)"
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 105.3
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "skip",
+      "error": "obstore has no low-level multipart API (only transparent multipart via put/open_writer)"
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "obstore has no low-level multipart API (only transparent multipart via put/open_writer)"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "skip",
+      "error": "obstore has no low-level multipart API (only transparent multipart via put/open_writer)"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 132.7
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 14.0
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 13.0
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "obstore S3 checksum_algorithm supports only SHA256 and CRC64NVME"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "obstore S3 checksum_algorithm supports only SHA256 and CRC64NVME"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "obstore S3 checksum_algorithm supports only SHA256 and CRC64NVME"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "ms": 120.1,
+      "error": "AssertionFailed: ChecksumSHA256 (verified via HeadObject): expected 'bpM4ADxf2spByWNsBRZWlZr0Cz4Zih/ecVe9WNVgRo8=', got None"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "fail",
+      "ms": 78.1,
+      "error": "AssertionFailed: ChecksumCRC64NVME (verified via HeadObject): expected 'zeS8xOq1lRA=', got None"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "obstore has no Content-MD5 option"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 4.5
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "skip",
+      "error": "obstore has no bucket-level API (a store is bound to one existing bucket)"
+    },
+    {
+      "scenario": "versioning",
+      "status": "skip",
+      "error": "obstore has no PutBucketVersioning / ListObjectVersions API"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "skip",
+      "error": "obstore can set tags on put but has no GetObjectTagging API"
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "skip",
+      "error": "obstore has no bucket-level API (a store is bound to one existing bucket)"
+    }
+  ]
+}

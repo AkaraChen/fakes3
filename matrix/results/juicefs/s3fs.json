@@ -1,0 +1,234 @@
+{
+  "sdk": "s3fs",
+  "lang": "python",
+  "version": "2026.9.0",
+  "server": "juicefs",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 103.4
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 3.1
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 2.8
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 3.5
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 28.5
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 17.9
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 86.7
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 53.7,
+      "error": "AssertionFailed: key 'a//b' missing from list"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "ms": 18.3,
+      "error": "AssertionFailed: ContentEncoding: expected 'gzip', got None"
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 20.5
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 11.9
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 3.9
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "skip",
+      "error": "s3fs cat/open have no conditional-read (If-None-Match) option"
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "skip",
+      "error": "s3fs cat/open have no conditional-read (If-Match) option"
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "fail",
+      "ms": 19.1,
+      "error": "AssertionFailed: operation: expected error FileExistsError/OSError, but it succeeded"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 17.8
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 2.1
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "fail",
+      "ms": 35.7,
+      "error": "OSError: [Errno 5] An error occurred (MissingContentMD5) when calling the DeleteObjects operation: Missing required header for this request: Content-Md5."
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 38.8
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 45.7
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "skip",
+      "error": "s3fs paginates listings internally; no MaxKeys/continuation-token control"
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "skip",
+      "error": "s3fs listing has no StartAfter option"
+    },
+    {
+      "scenario": "list_v1",
+      "status": "skip",
+      "error": "s3fs only uses ListObjectsV2"
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 56.6
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 50.6
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 154.1
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 52.7
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "s3fs has no ListParts API"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "skip",
+      "error": "s3fs has no API to complete a multipart upload with chosen part sizes (S3File enforces >= 5 MiB blocks)"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 223.0
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 16.8
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 15.6
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "fail",
+      "ms": 31.0,
+      "error": "AssertionFailed: ChecksumCRC32: expected '+38uqQ==', got None"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "fail",
+      "ms": 37.4,
+      "error": "AssertionFailed: ChecksumCRC32C: expected '++Z7IQ==', got None"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "fail",
+      "ms": 36.8,
+      "error": "AssertionFailed: ChecksumSHA1: expected 'LIU71Rm9JyZSYTQyHvd99vUISH0=', got None"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "ms": 25.1,
+      "error": "AssertionFailed: ChecksumSHA256: expected 'pGTSDnBDsATIN8k/M/fRloiS9PydaksyaIiHOS4Pg2Q=', got None"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "fail",
+      "ms": 23.2,
+      "error": "AssertionFailed: ChecksumCRC64NVME: expected '7CwYZrNAFXo=', got None"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 617.0
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 122.8
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 10.5
+    },
+    {
+      "scenario": "versioning",
+      "status": "fail",
+      "ms": 77.4,
+      "error": "OSError: [Errno 38] A header you provided implies functionality that is not implemented"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 16.7
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "fail",
+      "ms": 39.7,
+      "error": "OSError: [Errno 5] An error occurred (MissingContentMD5) when calling the DeleteObjects operation: Missing required header for this request: Content-Md5."
+    }
+  ]
+}

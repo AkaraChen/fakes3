@@ -1,0 +1,33 @@
+[package]
+name = "s3matrix"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1.0.104"
+aws-config = "1.13.0"
+aws-credential-types = "1.3.1"
+aws-sdk-s3 = { version = "1.157.0", features = ["behavior-version-latest"] }
+aws-sdk-s3-transfer-manager = "0.3.1"
+aws-smithy-runtime-api = "1.19.2"
+aws-smithy-types = "1.9.1"
+base64 = "0.23.1"
+bytes = "1.12.1"
+crc32c = "0.6.8"
+crc32fast = "1.5.3"
+crc64fast-nvme = "1.2.1"
+futures = "0.3.34"
+hex = "0.4.3"
+http = "1"
+md-5 = "0.11.0"
+object_store = { version = "0.14.2", features = ["aws"] }
+opendal = { version = "0.59.5", features = ["services-s3"] }
+reqwest = "0.13.5"
+rust-s3 = "0.38.0"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+sha1 = "0.11.0"
+sha2 = "0.11.1"
+tokio = { version = "1.54.1", features = ["full"] }

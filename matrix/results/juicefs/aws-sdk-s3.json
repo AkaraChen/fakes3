@@ -1,0 +1,234 @@
+{
+  "sdk": "aws-sdk-s3",
+  "lang": "rust",
+  "version": "1.157.0",
+  "server": "juicefs",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 7.64
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 1.01
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 0.9
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 1.25
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 8.7
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 4.9
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 59.81
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 23.8,
+      "error": "AssertionError: key \"a//b\" not in listing"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "ms": 4.93,
+      "error": "AssertionError: Content-Encoding None"
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 7.89
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 3.98
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 0.89
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 4.52
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 5.87
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "fail",
+      "ms": 7.77,
+      "error": "AssertionError: expected error []/[412], got success"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 5.53
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 0.65
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "fail",
+      "ms": 10.61,
+      "error": "MissingContentMD5: Missing required header for this request: Content-Md5. (HTTP 400)"
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 13.85
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 33.4
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 46.14
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 17.53
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 19.22
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 10.08
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 10.16
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 91.01
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 9.8
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 45.45
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "fail",
+      "ms": 17.25,
+      "error": "AssertionError: expected error [\"EntityTooSmall\"]/[], got success"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 86.75
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 9.98
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 8.61
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "fail",
+      "ms": 6.05,
+      "error": "AssertionError: checksum None != 7QA4hw=="
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "fail",
+      "ms": 6.46,
+      "error": "AssertionError: checksum None != 3dQPwA=="
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "fail",
+      "ms": 6.85,
+      "error": "AssertionError: checksum None != ukNteJ7G+Xk3NrhkLZGJqghEIwk="
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "ms": 6.06,
+      "error": "AssertionError: checksum None != ZAsQos2FbefCp3GNI6IHO/RdA5j2glDqTQbw41IuoIY="
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "fail",
+      "ms": 8.86,
+      "error": "AssertionError: checksum None != 3bcRay42faM="
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 3.43
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 1.18
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 4.43
+    },
+    {
+      "scenario": "versioning",
+      "status": "fail",
+      "ms": 10.09,
+      "error": "NotImplemented: A header you provided implies functionality that is not implemented (HTTP 501)"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 6.13
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 93.73
+    }
+  ]
+}

@@ -1,0 +1,231 @@
+{
+  "sdk": "aws-sdk-s3",
+  "lang": "rust",
+  "version": "1.157.0",
+  "server": "s3mock",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 3.69
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 1.66
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 1.65
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 1.91
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 3.34
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 3.57
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 52.13
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 18.07
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 4.46
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 7.71
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 4.22
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 1.34
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 3.43
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 3.49
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 8.31
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 3.67
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 1.02
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 12.85
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 6.2
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 20.37
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 20.42
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 8.9
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 11.82
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 8.02
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "fail",
+      "ms": 6.44,
+      "error": "AssertionError: Content-Type Some(\"text/x-old\")"
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 103.14
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 9.27
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 40.5
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 11.38
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 201.58
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 8.27
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 6.42
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "fail",
+      "ms": 3.39,
+      "error": "AssertionError: checksum None != /wa9rQ=="
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "fail",
+      "ms": 3.09,
+      "error": "AssertionError: checksum None != kqHcig=="
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "fail",
+      "ms": 3.44,
+      "error": "AssertionError: checksum None != 77+/kZJ5H0UDKKw7FXa7ObO9Nkw="
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "ms": 3.27,
+      "error": "AssertionError: checksum None != +XVpzdL4xzKl1xLW8nx13HytEDLmEDtpCp/ub0T0CZQ="
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "fail",
+      "ms": 3.45,
+      "error": "AssertionError: checksum None != 8w3vYoGHqIk="
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 2.49
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "ms": 1.94,
+      "error": "AssertionError: expected error [\"SignatureDoesNotMatch\", \"InvalidAccessKeyId\"]/[403], got success"
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 3.01
+    },
+    {
+      "scenario": "versioning",
+      "status": "fail",
+      "ms": 162.08,
+      "error": "HttpError: HTTP 200 service error: unhandled error: error parsing XML: encountered invalid XML root: expected ListVersionsResult but got StartEl { name: Name { prefix: \"\", local: \"ListBucketResult\" }, attributes: [Attr { name: Name { prefix: \"\", local: \"xmlns\" }, value: \"http://s3.amazonaws.com/doc/"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 5.64
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 91.23
+    }
+  ]
+}

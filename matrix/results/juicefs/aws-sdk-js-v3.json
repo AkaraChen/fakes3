@@ -1,0 +1,235 @@
+{
+  "sdk": "aws-sdk-js-v3",
+  "lang": "js",
+  "version": "3.1161.0",
+  "server": "juicefs",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 34
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 2.7
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 9.9
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 6.6
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 24.6
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 9.2
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 74.9
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 82.5,
+      "error": "AssertionError: key \"a//b\" missing from list"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "ms": 16,
+      "error": "AssertionError: ContentEncoding: expected \"gzip\", got undefined"
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 17.4
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 12.1
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 2.4
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 7.7
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 10.6
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "fail",
+      "ms": 15.3,
+      "error": "AssertionError: operation: expected error PreconditionFailed/412, but it succeeded"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 9.8
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 1.6
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "fail",
+      "ms": 32,
+      "error": "MissingContentMD5: Missing required header for this request: Content-Md5."
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 41.2
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 100.8
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 76.3
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 28.8
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 26.6
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 21.5
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 65.6
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 129.1
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 17.5
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 71.2
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "fail",
+      "ms": 46,
+      "error": "AssertionError: operation: expected error EntityTooSmall, but it succeeded"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 168.4
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 40.9
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 21.7
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "fail",
+      "ms": 17.5,
+      "error": "AssertionError: ChecksumCRC32: expected \"va9kOg==\", got undefined"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "fail",
+      "ms": 16.2,
+      "error": "AssertionError: ChecksumCRC32C: expected \"CzSU/Q==\", got undefined"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "fail",
+      "ms": 15.5,
+      "error": "AssertionError: ChecksumSHA1: expected \"woTkt06INzeaiSuC6KSTphuU3PI=\", got undefined"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "ms": 21.2,
+      "error": "AssertionError: ChecksumSHA256: expected \"Qbtg6bPPrx6FDb8NJJaVx095uJiZV51184MH5i2NXig=\", got undefined"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "fail",
+      "ms": 16.4,
+      "error": "AssertionError: ChecksumCRC64NVME: expected \"Ngx80eKhXUo=\", got undefined"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 12.6
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 9.9
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 17.8
+    },
+    {
+      "scenario": "versioning",
+      "status": "fail",
+      "ms": 15.6,
+      "error": "NotImplemented: A header you provided implies functionality that is not implemented"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 29.3
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "fail",
+      "ms": 39.8,
+      "error": "MissingContentMD5: Missing required header for this request: Content-Md5."
+    }
+  ]
+}

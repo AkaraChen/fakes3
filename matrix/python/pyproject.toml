@@ -1,0 +1,8 @@
+[project]
+name = "s3-matrix-python"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = ["boto3[crt]", "minio", "obstore"]
+
+[tool.uv]
+package = false

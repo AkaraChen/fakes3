@@ -1,0 +1,224 @@
+{
+  "sdk": "s3fs",
+  "lang": "python",
+  "version": "2026.9.0",
+  "server": "minio",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 102.0
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 3.7
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 4.3
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 3.6
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 12.6
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 8.7
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 90.0
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 12.5,
+      "error": "OSError: [Errno 5] An error occurred (XMinioInvalidObjectName) when calling the PutObject operation: Object name contains unsupported characters."
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 9.8
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 9.3
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 4.8
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 4.3
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "skip",
+      "error": "s3fs cat/open have no conditional-read (If-None-Match) option"
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "skip",
+      "error": "s3fs cat/open have no conditional-read (If-Match) option"
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 9.2
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 8.9
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 1.8
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 18.1
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 12.2
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 11.4
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "skip",
+      "error": "s3fs paginates listings internally; no MaxKeys/continuation-token control"
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "skip",
+      "error": "s3fs listing has no StartAfter option"
+    },
+    {
+      "scenario": "list_v1",
+      "status": "skip",
+      "error": "s3fs only uses ListObjectsV2"
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 20.8
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 20.9
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 122.7
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 46.3
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "s3fs has no ListParts API"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "skip",
+      "error": "s3fs has no API to complete a multipart upload with chosen part sizes (S3File enforces >= 5 MiB blocks)"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 157.9
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 9.3
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 7.0
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "pass",
+      "ms": 7.4
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "pass",
+      "ms": 6.9
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "pass",
+      "ms": 6.2
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "pass",
+      "ms": 6.2
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "pass",
+      "ms": 7.0
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 199.4
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 96.3
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 6.2
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 87.0
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 8.9
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 26.5
+    }
+  ]
+}

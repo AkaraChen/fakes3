@@ -1,0 +1,224 @@
+{
+  "sdk": "minio-js",
+  "lang": "js",
+  "version": "8.0.7",
+  "server": "minio",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 15.1
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 2.7
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 2.7
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 4.5
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 18.4
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 6
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 86.6
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 6.4,
+      "error": "S3Error(XMinioInvalidObjectName): Object name contains unsupported characters."
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 2.7
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 3.8
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 3.3
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 1.5
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "skip",
+      "error": "minio-js getObject has no conditional-request (If-None-Match) option"
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "skip",
+      "error": "minio-js getObject has no conditional-request (If-Match) option"
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 4.7
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 3.5
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 1.3
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 13.5
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 8.1
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 9.6
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 33.8
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 7.4
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 10.1
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 14.2
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 7.1
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 107.2
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 6.4
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 38
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 9.7
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 210.1
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 19.9
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 10.6
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "minio-js has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "minio-js putObject has no Content-MD5 option (non-allowlisted metadata keys become x-amz-meta-*)"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 1.6
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 5.1
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 13.2
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 13.3
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 13
+    }
+  ]
+}

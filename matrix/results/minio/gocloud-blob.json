@@ -1,0 +1,224 @@
+{
+  "sdk": "gocloud-blob",
+  "lang": "go",
+  "version": "0.47.0",
+  "server": "minio",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "skip",
+      "error": "gocloud blob has no bucket management API (create/list/delete buckets)"
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 1.278
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 1.731
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "skip",
+      "error": "gocloud blob has no bucket management API (create/list/delete buckets)"
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 3.145
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 2.031
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 97.377
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 4.965,
+      "error": "XMinioInvalidObjectName: Object name contains unsupported characters. (HTTP 400)"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 2.671
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 4.515
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 2.476
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 1.089
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 3.125
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 2.472
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 2.755
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 4.239
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "skip",
+      "error": "gocloud Delete HEADs the key first and returns NotFound by contract; it never issues DELETE for a missing key"
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "skip",
+      "error": "gocloud blob has no batch delete API"
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 4.781
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 8.104
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 31.051
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 7.061
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 9.293
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 4.49
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 3.142
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "skip",
+      "error": "gocloud blob has no multipart upload primitives (only the streaming Writer)"
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "skip",
+      "error": "gocloud blob has no multipart upload primitives (only the streaming Writer)"
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "gocloud blob has no multipart upload primitives (only the streaming Writer)"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "skip",
+      "error": "gocloud blob has no multipart upload primitives (only the streaming Writer)"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 136.483
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 3.761
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 2.442
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "gocloud blob has no flexible-checksum API"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "gocloud blob has no flexible-checksum API"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "gocloud blob has no flexible-checksum API"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "gocloud blob has no flexible-checksum API"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "gocloud blob has no flexible-checksum API"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "s3blob ignores WriterOptions.ContentMD5 (no way to send Content-MD5)"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 1.039
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "skip",
+      "error": "gocloud blob has no bucket management API (create/list/delete buckets)"
+    },
+    {
+      "scenario": "versioning",
+      "status": "skip",
+      "error": "gocloud blob has no versioning API"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "skip",
+      "error": "gocloud blob has no object tagging API"
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "skip",
+      "error": "gocloud blob has no bucket management API (create/list/delete buckets)"
+    }
+  ]
+}

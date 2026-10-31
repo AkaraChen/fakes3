@@ -1,0 +1,224 @@
+{
+  "sdk": "rust-s3",
+  "lang": "rust",
+  "version": "0.38.0",
+  "server": "minio",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 12.05
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "skip",
+      "error": "rust-s3 has no HeadBucket API (Bucket::exists uses ListBuckets)"
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "skip",
+      "error": "rust-s3 has no HeadBucket API (Bucket::exists uses ListBuckets)"
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 10.85
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 2.28
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 1.55
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 56.45
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 3.57,
+      "error": "XMinioInvalidObjectName: Object name contains unsupported characters. (HTTP 400)"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 1.59
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 2.59
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 1.26
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 0.37
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 1.14
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 1.24
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 2.95
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 1.91
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 0.43
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 3.72
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 3.15
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 22.49
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 7.82
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 4.96
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 5.21
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 3.15
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 2.74
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 74.97
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "skip",
+      "error": "rust-s3 has no ListParts API to verify the abort"
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "rust-s3 has no ListParts API"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 4.58
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 125.57
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 5.38
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 4.32
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "rust-s3 always overwrites Content-MD5 with the computed digest"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 13.32
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 2.76
+    },
+    {
+      "scenario": "versioning",
+      "status": "skip",
+      "error": "rust-s3 has no bucket versioning / ListObjectVersions API"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 2.38
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 24.31
+    }
+  ]
+}

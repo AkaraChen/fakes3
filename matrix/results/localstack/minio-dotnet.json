@@ -1,0 +1,230 @@
+{
+  "sdk": "minio-dotnet",
+  "lang": "dotnet",
+  "version": "7.0.0",
+  "server": "localstack",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 18.3
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 4
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 5.2
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 35.6
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 25.6
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 8.7
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 87.6
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "error": "AssertionFailed: \"a//b\" missing from listing",
+      "ms": 38.9
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "error": "UnexpectedMinioException: MinIO API responded with message=Unsupported signed header: (content-disposition: attachment; filename=\"meta.txt\"",
+      "ms": 1.8
+    },
+    {
+      "scenario": "get_range",
+      "status": "fail",
+      "error": "PartialContentException: Exception of type 'Minio.Exceptions.PartialContentException' was thrown.",
+      "ms": 8.1
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "fail",
+      "error": "NullReferenceException: Object reference not set to an instance of an object.",
+      "ms": 8
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 3.3
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "fail",
+      "error": "AssertionFailed: expected 304, but the call succeeded",
+      "ms": 9.9
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "fail",
+      "error": "AssertionFailed: expected PreconditionFailed/412, but the call succeeded",
+      "ms": 9.4
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "skip",
+      "error": "minio-dotnet PutObject cannot send If-None-Match (WithHeaders rewrites it to x-amz-meta-if-none-match)"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 10.1
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 2.7
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 41.5
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 14.1
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 15.3
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "skip",
+      "error": "minio-dotnet ListObjects has no MaxKeys/ContinuationToken; pagination is internal"
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "skip",
+      "error": "minio-dotnet ListObjectsArgs has no StartAfter"
+    },
+    {
+      "scenario": "list_v1",
+      "status": "skip",
+      "error": "minio-dotnet ListObjectsArgs has no Marker (WithListObjectsV1 only switches the API version)"
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 34.1
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 18.5
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "skip",
+      "error": "minio-dotnet does not expose low-level multipart APIs (Create/UploadPart/ListParts/Complete/Abort)"
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "skip",
+      "error": "minio-dotnet does not expose low-level multipart APIs (Create/UploadPart/ListParts/Complete/Abort)"
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "minio-dotnet does not expose low-level multipart APIs (Create/UploadPart/ListParts/Complete/Abort)"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "skip",
+      "error": "minio-dotnet does not expose low-level multipart APIs (Create/UploadPart/ListParts/Complete/Abort)"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 194.7
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 11.9
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 11.6
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "minio-dotnet has no ChecksumAlgorithm / ChecksumMode support"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "minio-dotnet has no ChecksumAlgorithm / ChecksumMode support"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "minio-dotnet has no ChecksumAlgorithm / ChecksumMode support"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "minio-dotnet has no ChecksumAlgorithm / ChecksumMode support"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "minio-dotnet has no ChecksumAlgorithm / ChecksumMode support"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "minio-dotnet PutObject cannot send Content-MD5 (WithHeaders rewrites it to x-amz-meta-content-md5)"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "error": "AssertionFailed: expected SignatureDoesNotMatch/InvalidAccessKeyId/403, but the call succeeded",
+      "ms": 3.2
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 12.4
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 33.1
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 35.9
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 59.6
+    }
+  ]
+}

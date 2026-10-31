@@ -1,0 +1,231 @@
+{
+  "sdk": "boto3",
+  "lang": "python",
+  "version": "1.43.123",
+  "server": "s3mock",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 11.0
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 210.2
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 8.6
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 7.0
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 14.9
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 13.1
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 92.2
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 68.4
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 17.2
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 32.7
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 15.3
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 5.0
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 17.2
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 13.8
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 20.1
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 18.8
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 9.5
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 151.7
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 35.7
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 33.4
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 249.6
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 97.9
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 69.8
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 26.2
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "fail",
+      "ms": 161.6,
+      "error": "AssertionFailed: ContentType: expected 'application/x-new', got 'application/x-old'"
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 158.8
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 28.9
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 73.6
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 34.9
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "fail",
+      "ms": 328.2,
+      "error": "ClientError: An error occurred (BadRequest) when calling the CompleteMultipartUpload operation: The upload was created using a crc32 checksum. The complete request must include the checksum for each part. It was missing for part 1 in the request."
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 10.9
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 10.4
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "fail",
+      "ms": 9.6,
+      "error": "AssertionFailed: ChecksumCRC32: expected '7iE9VA==', got None"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "fail",
+      "ms": 10.2,
+      "error": "AssertionFailed: ChecksumCRC32C: expected 'uELBvQ==', got None"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "fail",
+      "ms": 11.0,
+      "error": "AssertionFailed: ChecksumSHA1: expected '/HGX6pGv44gELh+IbbhHUWztzJ8=', got None"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "ms": 8.5,
+      "error": "AssertionFailed: ChecksumSHA256: expected '4G7AqpUiX9BhcBHfCdbD6wwBbDtvslxDeiIOsBNH5rU=', got None"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "fail",
+      "ms": 9.0,
+      "error": "AssertionFailed: ChecksumCRC64NVME: expected 'FhL100WSaTY=', got None"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 3.9
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "ms": 10.9,
+      "error": "AssertionFailed: operation: expected error SignatureDoesNotMatch/InvalidAccessKeyId/403, but it succeeded"
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 9.1
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 28.6
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 17.5
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 37.7
+    }
+  ]
+}

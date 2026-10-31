@@ -1,0 +1,256 @@
+{
+  "sdk": "aws-dotnet",
+  "lang": "dotnet",
+  "version": "4.0.104.8",
+  "server": "juicefs",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 171
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 8.6
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 23.5
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 12.2
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 26.8
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 29.7
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 8.2
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 4.4
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 5.1
+    },
+    {
+      "scenario": "get_range",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 7.2
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 3.5
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 3.9
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 3.2
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 2.9
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 3.3
+    },
+    {
+      "scenario": "delete_object",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 3.2
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 4.1
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 3.5
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 6.4
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 12.3
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 6
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 3.9
+    },
+    {
+      "scenario": "list_v1",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 4
+    },
+    {
+      "scenario": "copy_object",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 9.4
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 3.5
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 19.5
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 6.7
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 10.2
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 6.8
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 62.8
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 3.1
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 17.8
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 7.7
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 2.3
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 2.5
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 1.8
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 2
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 3
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 2
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 5.5
+    },
+    {
+      "scenario": "versioning",
+      "status": "fail",
+      "error": "AmazonS3Exception: NotImplemented (501): A header you provided implies functionality that is not implemented",
+      "ms": 12.8
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "fail",
+      "error": "AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed.",
+      "ms": 3.4
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "fail",
+      "error": "AmazonS3Exception: MissingContentMD5 (400): Missing required header for this request: Content-Md5.",
+      "ms": 18.8
+    }
+  ]
+}

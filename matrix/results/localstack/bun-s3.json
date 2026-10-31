@@ -1,0 +1,224 @@
+{
+  "sdk": "bun-s3",
+  "lang": "js",
+  "version": "1.4.3",
+  "server": "localstack",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "skip",
+      "error": "Bun.S3Client has no bucket-level API (create/head/list/delete bucket)"
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "skip",
+      "error": "Bun.S3Client has no bucket-level API (create/head/list/delete bucket)"
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "skip",
+      "error": "Bun.S3Client has no bucket-level API (create/head/list/delete bucket)"
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "skip",
+      "error": "Bun.S3Client has no bucket-level API (create/head/list/delete bucket)"
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 9.5
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 7.2
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 91.9
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 21.5
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "skip",
+      "error": "Bun.S3Client cannot set Cache-Control or user metadata, and stat() exposes only size/etag/type"
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 8.2
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 12.9
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 6.4
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "skip",
+      "error": "Bun.S3Client has no conditional-request headers (If-Match/If-None-Match)"
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "skip",
+      "error": "Bun.S3Client has no conditional-request headers (If-Match/If-None-Match)"
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "skip",
+      "error": "Bun.S3Client has no conditional-request headers (If-Match/If-None-Match)"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 6.9
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 1.5
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "skip",
+      "error": "Bun.S3Client has no batch DeleteObjects API"
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 9.9
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 12
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 38.4
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 16.1
+    },
+    {
+      "scenario": "list_v1",
+      "status": "skip",
+      "error": "Bun.S3Client only implements ListObjectsV2"
+    },
+    {
+      "scenario": "copy_object",
+      "status": "skip",
+      "error": "Bun.S3Client has no CopyObject API"
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "skip",
+      "error": "Bun.S3Client has no CopyObject API"
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 369.8
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "skip",
+      "error": "Bun.S3Client has no low-level multipart API (only transparent multipart via writer())"
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "Bun.S3Client has no low-level multipart API (only transparent multipart via writer())"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "skip",
+      "error": "Bun.S3Client has no low-level multipart API (only transparent multipart via writer())"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 425.8
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 8.6
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 4.5
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "Bun.S3Client has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "Bun.S3Client has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "Bun.S3Client has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "Bun.S3Client has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "Bun.S3Client has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "Bun.S3Client has no Content-MD5 option"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "ms": 6.8,
+      "error": "AssertionError: operation: expected error SignatureDoesNotMatch/InvalidAccessKeyId/403, but it succeeded"
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "skip",
+      "error": "Bun.S3Client has no bucket-level API (create/head/list/delete bucket)"
+    },
+    {
+      "scenario": "versioning",
+      "status": "skip",
+      "error": "Bun.S3Client has no versioning API"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "skip",
+      "error": "Bun.S3Client has no tagging API"
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "skip",
+      "error": "Bun.S3Client has no bucket-level API (create/head/list/delete bucket)"
+    }
+  ]
+}

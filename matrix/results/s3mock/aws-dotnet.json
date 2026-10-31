@@ -1,0 +1,226 @@
+{
+  "sdk": "aws-dotnet",
+  "lang": "dotnet",
+  "version": "4.0.104.8",
+  "server": "s3mock",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 211.8
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 11
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 28
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 9.8
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 39.7
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 13.5
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 214.2
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 37.3
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 15
+    },
+    {
+      "scenario": "get_range",
+      "status": "fail",
+      "error": "AmazonClientException: Expected hash not equal to calculated hash",
+      "ms": 12.5
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 9.5
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 3.7
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 11.5
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 7.8
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 12
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 17.5
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 3
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 35.9
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 24
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 25.6
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 101.7
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 22.7
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 36.4
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 22.1
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "fail",
+      "error": "AssertionFailed: Content-Type: expected \"text/x-new\", got \"text/x-old\"",
+      "ms": 10.9
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 202.4
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 19.5
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 84.5
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 17.7
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 401.6
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 23.9
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 11.1
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "pass",
+      "ms": 17.8
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "pass",
+      "ms": 31.4
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "pass",
+      "ms": 5.6
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "pass",
+      "ms": 4.7
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "pass",
+      "ms": 9.4
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 5.9
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "error": "AssertionFailed: expected SignatureDoesNotMatch/InvalidAccessKeyId/403, but the call succeeded",
+      "ms": 4.2
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 9.9
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 38.8
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 15.3
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 43.2
+    }
+  ]
+}

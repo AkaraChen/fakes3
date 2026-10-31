@@ -1,0 +1,223 @@
+{
+  "sdk": "opendal",
+  "lang": "rust",
+  "version": "0.59.5",
+  "server": "minio",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "skip",
+      "error": "opendal has no bucket management API (bucket created via aws-sdk-s3)"
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "skip",
+      "error": "opendal has no bucket management API"
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "skip",
+      "error": "opendal has no bucket management API"
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "skip",
+      "error": "opendal has no bucket management API"
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 6.46
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 1.83
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 34.72
+    },
+    {
+      "scenario": "special_keys",
+      "status": "skip",
+      "error": "opendal normalizes paths and cannot address key \"a//b\"; other 2 keys passed"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 1.65
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 2.52
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 1.59
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 0.48
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 1.96
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 1.5
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 3.24
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 1.79
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 0.48
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 4.17
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 2.87
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 12.54
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 8.01
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 5.1
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 6.98
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 3.56
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "skip",
+      "error": "opendal copy has no metadata directive / replacement metadata"
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 44.96
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "skip",
+      "error": "opendal has no ListParts API to verify the abort"
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "opendal has no ListParts API"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "skip",
+      "error": "opendal clamps multipart chunk size to >= 5 MiB (write_multi_min_size), cannot upload undersized parts"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 53.36
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 5.69
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 5.19
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "opendal cannot request ChecksumMode or read response checksums on GET"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "opendal cannot request ChecksumMode or read response checksums on GET"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "opendal cannot request ChecksumMode or read response checksums on GET"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "opendal cannot request ChecksumMode or read response checksums on GET"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "opendal cannot request ChecksumMode or read response checksums on GET"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "opendal has no Content-MD5 option for writes"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 0.98
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "skip",
+      "error": "opendal has no bucket management API"
+    },
+    {
+      "scenario": "versioning",
+      "status": "skip",
+      "error": "opendal cannot enable bucket versioning"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "skip",
+      "error": "opendal has no object tagging API"
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "skip",
+      "error": "opendal has no bucket management API"
+    }
+  ]
+}

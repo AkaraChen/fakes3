@@ -1,0 +1,225 @@
+{
+  "sdk": "rust-s3",
+  "lang": "rust",
+  "version": "0.38.0",
+  "server": "localstack",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "fail",
+      "ms": 12.08,
+      "error": "InvalidLocationConstraint: The specified location-constraint is not valid (HTTP 400)"
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "skip",
+      "error": "rust-s3 has no HeadBucket API (Bucket::exists uses ListBuckets)"
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "skip",
+      "error": "rust-s3 has no HeadBucket API (Bucket::exists uses ListBuckets)"
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 10.32
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 3.7
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 2.92
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 65.82
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 15.27
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 3.19
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 5.62
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 3.09
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 1.14
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 2.59
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 2.48
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 5.98
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 3.63
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 1.05
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 7.25
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 5.06
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 26.7
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 33.73
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 7.54
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 9.57
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 6.04
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 4.94
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 97.38
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "skip",
+      "error": "rust-s3 has no ListParts API to verify the abort"
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "rust-s3 has no ListParts API"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 12.14
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 146.52
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 8.1
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 6.49
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "rust-s3 always overwrites Content-MD5 with the computed digest"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "ms": 12.71,
+      "error": "AssertionError: expected [\"SignatureDoesNotMatch\", \"InvalidAccessKeyId\"]/[403], got success"
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 4.45
+    },
+    {
+      "scenario": "versioning",
+      "status": "skip",
+      "error": "rust-s3 has no bucket versioning / ListObjectVersions API"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 4.76
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 24.53
+    }
+  ]
+}

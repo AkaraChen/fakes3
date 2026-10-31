@@ -1,0 +1,227 @@
+{
+  "sdk": "aws-sdk-s3",
+  "lang": "rust",
+  "version": "1.157.0",
+  "server": "moto",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 5.9
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 4.49
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 3.66
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 4.41
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 8.04
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 6.73
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 79.85
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 29.64
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 7.3
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 13.05
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 6.94
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 3.51
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 7.13
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 8.09
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 20.9
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 9.39
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 3.04
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 25.8
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 12.97
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 53.71
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 85.03
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 22.32
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 24.11
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 10.89
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 13.57
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 145.09
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 15.02
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "fail",
+      "ms": 45.85,
+      "error": "HttpError: HTTP 200 service error: unhandled error: error parsing XML: encountered invalid XML root: expected ListPartsResult but got StartEl { name: Name { prefix: \"\", local: \"ListPartsResponse\" }, attributes: [Attr { name: Name { prefix: \"\", local: \"xmlns\" }, value: \"http://s3.amazonaws.com/doc/20"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 16.03
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "fail",
+      "ms": 182.43,
+      "error": "streaming error: body checksum mismatch. expected body checksum to be 718338a4 but it was 87d1ceb47f4f0e0f"
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 11.94
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 7.91
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "pass",
+      "ms": 7.16
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "pass",
+      "ms": 6.2
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "pass",
+      "ms": 5.74
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "pass",
+      "ms": 5.91
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "pass",
+      "ms": 5.55
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "fail",
+      "ms": 2.42,
+      "error": "AssertionError: expected error [\"BadDigest\", \"InvalidDigest\"]/[400], got success"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "ms": 3.04,
+      "error": "AssertionError: expected error [\"SignatureDoesNotMatch\", \"InvalidAccessKeyId\"]/[403], got success"
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 5.19
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 35.21
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 8.45
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 266.45
+    }
+  ]
+}

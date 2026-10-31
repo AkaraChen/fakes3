@@ -1,0 +1,10 @@
+# s3fs pins aiobotocore, which pins an older botocore than the latest boto3,
+# so s3fs gets its own environment to let both sides be at their latest versions.
+[project]
+name = "s3-matrix-python-s3fs"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = ["s3fs", "botocore[crt]"]
+
+[tool.uv]
+package = false

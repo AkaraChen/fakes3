@@ -1,0 +1,227 @@
+{
+  "sdk": "minio-py",
+  "lang": "python",
+  "version": "7.2.20",
+  "server": "juicefs",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 12.2
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 1.7
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 1.1
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 3.5
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 9.7
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 6.7
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 68.9
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 36.3,
+      "error": "AssertionFailed: key 'a//b' missing from list"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "ms": 10.4,
+      "error": "AssertionFailed: Content-Encoding: expected 'gzip', got None"
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 15.5
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 7.4
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 1.1
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 5.8
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 7.8
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "skip",
+      "error": "minio-py put_object has no conditional-write option (non-allowlisted headers become x-amz-meta-*)"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 6.4
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 0.9
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 15.3
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 20.2
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 24.0
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 201.7
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 77.9
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 45.6
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 21.9
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 22.0
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 107.4
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 17.4
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 57.5
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "fail",
+      "ms": 22.7,
+      "error": "AssertionFailed: operation: expected error EntityTooSmall, but it succeeded"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 151.9
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 19.0
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 11.1
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "minio-py has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "minio-py has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "minio-py has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "minio-py has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "minio-py has no flexible-checksum (ChecksumAlgorithm/ChecksumMode) API"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "minio-py put_object has no Content-MD5 option (a Content-MD5 metadata key becomes x-amz-meta-content-md5)"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 1.9
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 23.8
+    },
+    {
+      "scenario": "versioning",
+      "status": "fail",
+      "ms": 16.1,
+      "error": "S3Error: S3 operation failed; code: NotImplemented, message: A header you provided implies functionality that is not implemented, resource: /m-miniopy-ccdf5ea0-v, request_id: 18E381DCA8DE956F, host_id: , bucket_name: m-miniopy-ccdf5ea0-v"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 25.5
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 62.4
+    }
+  ]
+}

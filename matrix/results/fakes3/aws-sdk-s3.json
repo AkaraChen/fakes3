@@ -1,0 +1,223 @@
+{
+  "sdk": "aws-sdk-s3",
+  "lang": "rust",
+  "version": "1.157.0",
+  "server": "fakes3",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 1.45
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 0.46
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 0.25
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 0.28
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 0.73
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 0.53
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 51.12
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 4.51
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 0.6
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 0.75
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 0.45
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 0.32
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 0.55
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 0.39
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 0.93
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 0.5
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 0.82
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 1.75
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 0.83
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 3.46
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 4.09
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 2.55
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 1.73
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 0.92
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 1.04
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 70.8
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 4.63
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 33.12
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 2.26
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 67.63
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 5.7
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 2.49
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "pass",
+      "ms": 1.15
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "pass",
+      "ms": 0.87
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "pass",
+      "ms": 1.05
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "pass",
+      "ms": 0.94
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "pass",
+      "ms": 0.77
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "pass",
+      "ms": 0.28
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 0.82
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 0.55
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 3.05
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 0.99
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 16.03
+    }
+  ]
+}

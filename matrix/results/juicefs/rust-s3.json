@@ -1,0 +1,229 @@
+{
+  "sdk": "rust-s3",
+  "lang": "rust",
+  "version": "0.38.0",
+  "server": "juicefs",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 13.36
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "skip",
+      "error": "rust-s3 has no HeadBucket API (Bucket::exists uses ListBuckets)"
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "skip",
+      "error": "rust-s3 has no HeadBucket API (Bucket::exists uses ListBuckets)"
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 9.8
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 6.57
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 3.62
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 61.58
+    },
+    {
+      "scenario": "special_keys",
+      "status": "fail",
+      "ms": 17.18,
+      "error": "AssertionError: key \"a//b\" not listed"
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "fail",
+      "ms": 4.05,
+      "error": "AssertionError: Content-Encoding None"
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 7.23
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 3.63
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 0.48
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 4.09
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 3.45
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "fail",
+      "ms": 5.84,
+      "error": "AssertionError: expected []/[412], got success"
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 4.13
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 0.6
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "fail",
+      "ms": 10.11,
+      "error": "S3Error::SerdeXml: serde xml: missing field `Key`"
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 11.71
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 37.59
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 39.9
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 18.26
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 19.95
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 10.92
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 10.3
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 92.51
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "skip",
+      "error": "rust-s3 has no ListParts API to verify the abort"
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "skip",
+      "error": "rust-s3 has no ListParts API"
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "fail",
+      "ms": 13.84,
+      "error": "AssertionError: expected EntityTooSmall, got success: <?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 156.31
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 8.79
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 6.74
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "skip",
+      "error": "rust-s3 has no flexible-checksum (x-amz-checksum-*) support"
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "skip",
+      "error": "rust-s3 always overwrites Content-MD5 with the computed digest"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "pass",
+      "ms": 10.11
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 4.89
+    },
+    {
+      "scenario": "versioning",
+      "status": "skip",
+      "error": "rust-s3 has no bucket versioning / ListObjectVersions API"
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 6.25
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "fail",
+      "ms": 18.28,
+      "error": "S3Error::SerdeXml: serde xml: missing field `Key`"
+    }
+  ]
+}

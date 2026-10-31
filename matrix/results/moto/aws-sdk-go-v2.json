@@ -1,0 +1,225 @@
+{
+  "sdk": "aws-sdk-go-v2",
+  "lang": "go",
+  "version": "1.114.6",
+  "server": "moto",
+  "results": [
+    {
+      "scenario": "create_bucket",
+      "status": "pass",
+      "ms": 4.909
+    },
+    {
+      "scenario": "head_bucket",
+      "status": "pass",
+      "ms": 2.856
+    },
+    {
+      "scenario": "head_bucket_missing",
+      "status": "pass",
+      "ms": 2.767
+    },
+    {
+      "scenario": "list_buckets",
+      "status": "pass",
+      "ms": 3.266
+    },
+    {
+      "scenario": "put_get_small",
+      "status": "pass",
+      "ms": 5.612
+    },
+    {
+      "scenario": "put_get_empty",
+      "status": "pass",
+      "ms": 5.019
+    },
+    {
+      "scenario": "put_get_large",
+      "status": "pass",
+      "ms": 88.394
+    },
+    {
+      "scenario": "special_keys",
+      "status": "pass",
+      "ms": 25.4
+    },
+    {
+      "scenario": "head_object_metadata",
+      "status": "pass",
+      "ms": 6.029
+    },
+    {
+      "scenario": "get_range",
+      "status": "pass",
+      "ms": 11.526
+    },
+    {
+      "scenario": "get_range_invalid",
+      "status": "pass",
+      "ms": 5.875
+    },
+    {
+      "scenario": "get_missing_key",
+      "status": "pass",
+      "ms": 2.906
+    },
+    {
+      "scenario": "get_if_none_match",
+      "status": "pass",
+      "ms": 5.207
+    },
+    {
+      "scenario": "get_if_match_fail",
+      "status": "pass",
+      "ms": 5.28
+    },
+    {
+      "scenario": "put_if_none_match",
+      "status": "pass",
+      "ms": 5.209
+    },
+    {
+      "scenario": "delete_object",
+      "status": "pass",
+      "ms": 7.671
+    },
+    {
+      "scenario": "delete_missing_object",
+      "status": "pass",
+      "ms": 3.314
+    },
+    {
+      "scenario": "delete_objects",
+      "status": "pass",
+      "ms": 15.031
+    },
+    {
+      "scenario": "list_v2_basic",
+      "status": "pass",
+      "ms": 13.286
+    },
+    {
+      "scenario": "list_v2_prefix_delimiter",
+      "status": "pass",
+      "ms": 18.704
+    },
+    {
+      "scenario": "list_v2_pagination",
+      "status": "pass",
+      "ms": 82.972
+    },
+    {
+      "scenario": "list_v2_start_after",
+      "status": "pass",
+      "ms": 18.499
+    },
+    {
+      "scenario": "list_v1",
+      "status": "pass",
+      "ms": 19.283
+    },
+    {
+      "scenario": "copy_object",
+      "status": "pass",
+      "ms": 11.912
+    },
+    {
+      "scenario": "copy_object_replace_metadata",
+      "status": "pass",
+      "ms": 9.102
+    },
+    {
+      "scenario": "multipart_upload",
+      "status": "pass",
+      "ms": 170.801
+    },
+    {
+      "scenario": "multipart_abort",
+      "status": "pass",
+      "ms": 17.868
+    },
+    {
+      "scenario": "multipart_list_parts",
+      "status": "pass",
+      "ms": 70.337
+    },
+    {
+      "scenario": "multipart_too_small",
+      "status": "pass",
+      "ms": 18.65
+    },
+    {
+      "scenario": "high_level_upload",
+      "status": "pass",
+      "ms": 315.462
+    },
+    {
+      "scenario": "presigned_get",
+      "status": "pass",
+      "ms": 7.49
+    },
+    {
+      "scenario": "presigned_put",
+      "status": "pass",
+      "ms": 6.172
+    },
+    {
+      "scenario": "checksum_crc32",
+      "status": "pass",
+      "ms": 5.848
+    },
+    {
+      "scenario": "checksum_crc32c",
+      "status": "pass",
+      "ms": 5.417
+    },
+    {
+      "scenario": "checksum_sha1",
+      "status": "pass",
+      "ms": 5.101
+    },
+    {
+      "scenario": "checksum_sha256",
+      "status": "pass",
+      "ms": 5.128
+    },
+    {
+      "scenario": "checksum_crc64nvme",
+      "status": "pass",
+      "ms": 5.065
+    },
+    {
+      "scenario": "content_md5_bad",
+      "status": "fail",
+      "ms": 2.422,
+      "error": "AssertionError: PUT: expected error ([400] [BadDigest InvalidDigest]), got success"
+    },
+    {
+      "scenario": "bad_credentials",
+      "status": "fail",
+      "ms": 7.265,
+      "error": "AssertionError: ListBuckets: expected error ([403] [SignatureDoesNotMatch InvalidAccessKeyId]), got success"
+    },
+    {
+      "scenario": "delete_bucket_not_empty",
+      "status": "pass",
+      "ms": 5.173
+    },
+    {
+      "scenario": "versioning",
+      "status": "pass",
+      "ms": 20.487
+    },
+    {
+      "scenario": "object_tagging",
+      "status": "pass",
+      "ms": 7.121
+    },
+    {
+      "scenario": "delete_bucket",
+      "status": "pass",
+      "ms": 237.276
+    }
+  ]
+}

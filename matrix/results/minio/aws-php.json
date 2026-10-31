@@ -1,0 +1,224 @@
+{
+    "sdk": "aws-php",
+    "lang": "php",
+    "version": "3.402.5",
+    "server": "minio",
+    "results": [
+        {
+            "scenario": "create_bucket",
+            "status": "pass",
+            "ms": 9.9
+        },
+        {
+            "scenario": "head_bucket",
+            "status": "pass",
+            "ms": 1.8
+        },
+        {
+            "scenario": "head_bucket_missing",
+            "status": "pass",
+            "ms": 2.6
+        },
+        {
+            "scenario": "list_buckets",
+            "status": "pass",
+            "ms": 2.9
+        },
+        {
+            "scenario": "put_get_small",
+            "status": "pass",
+            "ms": 5.7
+        },
+        {
+            "scenario": "put_get_empty",
+            "status": "pass",
+            "ms": 3.9
+        },
+        {
+            "scenario": "put_get_large",
+            "status": "pass",
+            "ms": 108.6
+        },
+        {
+            "scenario": "special_keys",
+            "status": "fail",
+            "error": "S3Exception: XMinioInvalidObjectName (400): Object name contains unsupported characters.",
+            "ms": 7.9
+        },
+        {
+            "scenario": "head_object_metadata",
+            "status": "pass",
+            "ms": 3.7
+        },
+        {
+            "scenario": "get_range",
+            "status": "pass",
+            "ms": 5.5
+        },
+        {
+            "scenario": "get_range_invalid",
+            "status": "pass",
+            "ms": 2.9
+        },
+        {
+            "scenario": "get_missing_key",
+            "status": "pass",
+            "ms": 1.2
+        },
+        {
+            "scenario": "get_if_none_match",
+            "status": "pass",
+            "ms": 2.5
+        },
+        {
+            "scenario": "get_if_match_fail",
+            "status": "pass",
+            "ms": 2.6
+        },
+        {
+            "scenario": "put_if_none_match",
+            "status": "pass",
+            "ms": 3.8
+        },
+        {
+            "scenario": "delete_object",
+            "status": "pass",
+            "ms": 4.1
+        },
+        {
+            "scenario": "delete_missing_object",
+            "status": "pass",
+            "ms": 1.1
+        },
+        {
+            "scenario": "delete_objects",
+            "status": "pass",
+            "ms": 9.2
+        },
+        {
+            "scenario": "list_v2_basic",
+            "status": "pass",
+            "ms": 6.9
+        },
+        {
+            "scenario": "list_v2_prefix_delimiter",
+            "status": "pass",
+            "ms": 8.7
+        },
+        {
+            "scenario": "list_v2_pagination",
+            "status": "pass",
+            "ms": 35.4
+        },
+        {
+            "scenario": "list_v2_start_after",
+            "status": "pass",
+            "ms": 6.7
+        },
+        {
+            "scenario": "list_v1",
+            "status": "pass",
+            "ms": 8.1
+        },
+        {
+            "scenario": "copy_object",
+            "status": "pass",
+            "ms": 4.8
+        },
+        {
+            "scenario": "copy_object_replace_metadata",
+            "status": "pass",
+            "ms": 6.6
+        },
+        {
+            "scenario": "multipart_upload",
+            "status": "pass",
+            "ms": 139.4
+        },
+        {
+            "scenario": "multipart_abort",
+            "status": "pass",
+            "ms": 8.5
+        },
+        {
+            "scenario": "multipart_list_parts",
+            "status": "pass",
+            "ms": 73.8
+        },
+        {
+            "scenario": "multipart_too_small",
+            "status": "pass",
+            "ms": 8
+        },
+        {
+            "scenario": "high_level_upload",
+            "status": "pass",
+            "ms": 251.8
+        },
+        {
+            "scenario": "presigned_get",
+            "status": "pass",
+            "ms": 6.3
+        },
+        {
+            "scenario": "presigned_put",
+            "status": "pass",
+            "ms": 4.8
+        },
+        {
+            "scenario": "checksum_crc32",
+            "status": "pass",
+            "ms": 4.8
+        },
+        {
+            "scenario": "checksum_crc32c",
+            "status": "pass",
+            "ms": 3.8
+        },
+        {
+            "scenario": "checksum_sha1",
+            "status": "pass",
+            "ms": 3.3
+        },
+        {
+            "scenario": "checksum_sha256",
+            "status": "pass",
+            "ms": 3.1
+        },
+        {
+            "scenario": "checksum_crc64nvme",
+            "status": "pass",
+            "ms": 3.5
+        },
+        {
+            "scenario": "content_md5_bad",
+            "status": "pass",
+            "ms": 1.7
+        },
+        {
+            "scenario": "bad_credentials",
+            "status": "pass",
+            "ms": 6.2
+        },
+        {
+            "scenario": "delete_bucket_not_empty",
+            "status": "pass",
+            "ms": 3.9
+        },
+        {
+            "scenario": "versioning",
+            "status": "pass",
+            "ms": 12.2
+        },
+        {
+            "scenario": "object_tagging",
+            "status": "pass",
+            "ms": 4.6
+        },
+        {
+            "scenario": "delete_bucket",
+            "status": "pass",
+            "ms": 20.9
+        }
+    ]
+}
