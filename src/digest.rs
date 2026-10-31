@@ -59,8 +59,9 @@ pub fn md5<B: AsRef<[u8]>>(parts: impl IntoIterator<Item = B>) -> [u8; 16] {
 }
 
 /// MD5 computed on a blocking thread from chunks sent to it. Chunks are reference-counted
-/// `Bytes`, so handing them over copies nothing; the bounded queue keeps memory in check if
-/// hashing falls behind the network.
+/// `Bytes`, so handing them over copies nothing. The queue is short on purpose: each queued
+/// chunk is a slice of hyper's read buffer (up to ~400 KiB) and keeps that whole buffer alive,
+/// so a deep queue multiplied by concurrent uploads pinned hundreds of MiB.
 pub struct Pipelined {
     tx: mpsc::Sender<Bytes>,
     worker: JoinHandle<[u8; 16]>,
@@ -68,7 +69,7 @@ pub struct Pipelined {
 
 impl Pipelined {
     pub fn spawn() -> Self {
-        let (tx, mut rx) = mpsc::channel::<Bytes>(64);
+        let (tx, mut rx) = mpsc::channel::<Bytes>(8);
         let worker = tokio::task::spawn_blocking(move || {
             let mut h = Md5::new();
             while let Some(chunk) = rx.blocking_recv() {
