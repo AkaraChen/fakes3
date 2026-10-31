@@ -11,8 +11,10 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
+chrono = { version = "0.4", default-features = false }
 fakes3 = { path = "../.." }
-napi = { version = "3.16.1", default-features = false, features = ["napi6", "async"] }
+http = "1"
+napi = { version = "3.16.1", default-features = false, features = ["napi6", "async", "chrono_date"] }
 napi-derive = "3.7.0"
 
 [build-dependencies]

@@ -183,10 +183,32 @@ await server.stop();
 | `accessKey` / `secretKey` | `fakes3` / `fakes3secret` | 访问凭证 |
 | `noAuth` | `false` | 接受未签名的请求（SDK 发出的已签名请求在这个模式下目前会被拒绝，见 [TODO.md](TODO.md)） |
 | `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
+| `requestLog` / `requestLogCapacity` | `true` / `10000` | 是否记录 S3 请求（见下面的控制面），以及最多保留多少条 |
 | `memoryLimit` | `"auto"` | 对象数据占用内存的上限：字节数，或 `"512MiB"`、`"2GiB"`、`"unlimited"`、`"auto"`；超出时写入返回 HTTP 507 |
 
 `FakeS3Server` 有只读属性 `endpoint`、`host`、`port`、`accessKey`、`secretKey`，以及方法 `memory(): { used, limit }`（当前用量和上限，字节；无上限时没有 `limit` 字段），`stop(): Promise<void>`（可重复调用，调用后端口立即释放）。
 类型声明由 `napi build` 生成。
+
+**测试控制面**：[控制面](docs/control-plane.md)的操作也有对应的方法，直接在进程内调用，不走 HTTP。时间一律用 JS 的 `Date`。
+
+```ts
+server.reset();                         // 清空所有数据、请求日志和时钟；快照保留（reset({ snapshots: true }) 一并删除）
+server.snapshot("seeded");              // 保存当前状态 → { name, created, buckets, objects, uploads }
+server.restore("seeded");               // 回滚到快照（快照不会被消耗）；snapshots() 列出，deleteSnapshot(name) 删除
+server.memory();                        // { used, limit }
+
+server.clock.freeze(new Date("2030-01-02T03:04:05Z"));   // freeze() 不带参数则冻结在当前时间
+server.clock.advance("31d");            // 数字按毫秒，字符串如 "1h30m"、"-2w"；还有 set(date)、unfreeze()、reset()
+server.clock.now();                     // Date；isFrozen()、isShifted()
+
+server.requests.list({ operation: "PutObject", status: "error", limit: 10 }); // 过滤条件都可省略
+server.requests.count({ bucket: "demo" });   // 匹配的条数（忽略 limit）
+server.requests.clear();                // configure({ enabled, capacity }) 开关日志、改容量
+```
+
+`requests.list()` 返回按到达顺序排列的记录：`{ seq, time, method, path, bucket, key, operation, status, latencyUs, bytesIn, bytesOut }`。
+过滤条件：`bucket`、`keyPrefix`、`operation`、`method`、`status`（`404`、`"4xx"` 或 `"error"`）、`since`、`after`（`seq`）、`limit`（只保留最近的几条）。
+和控制面一样，这些调用没有和进行中的请求同步，请在测试之间、没有未完成请求时使用。服务停止后调用会抛出 `server is stopped`。
 
 预编译产物覆盖 Linux 的 x64 / arm64，glibc 和 musl（Alpine）都有，通过 `optionalDependencies` 里的
 `fakes3-linux-x64-gnu` 等平台包分发；macOS 和 Windows 暂不支持（服务端依赖 Linux 的 `memfd`）。
@@ -245,8 +267,21 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 - 认证：SigV4（包括 presigned URL 和带 trailer 的流式上传）、SigV2
 - 对象标签、Range 读取、Content-MD5 校验
 
-还没做的功能见 [TODO.md](TODO.md)，主要是 Object Lock、ACL/Policy、CORS、Lifecycle、SSE，以及测试控制面
-（reset、快照、虚拟时钟、故障注入）。
+还没做的功能见 [TODO.md](TODO.md)，主要是 Object Lock、ACL/Policy、CORS、Lifecycle、SSE，以及测试控制面里的故障注入。
+
+## 测试控制面
+
+同一个端口上的 `/_fakes3/` 前缀是一组 JSON HTTP API，`fakes3 ctl` 是它的命令行客户端，Rust 进程内使用时是 `fakes3::Server` 上的方法：
+
+```bash
+fakes3 ctl reset                              # 清空所有 bucket、对象和上传，同时清空请求日志和时钟
+fakes3 ctl snapshot create seeded             # 保存当前状态（不复制对象数据）
+fakes3 ctl snapshot restore seeded            # 回滚
+fakes3 ctl clock advance 31d                  # 推进服务器时间（也可以 freeze / set），预签名 URL 会跟着过期
+fakes3 ctl requests list --op PutObject       # 请求日志：按 bucket、操作、状态码等过滤，用来断言调用次数和顺序
+```
+
+端点、命令、各操作的语义和限制见 [docs/control-plane.md](docs/control-plane.md)。控制面没有认证，只适合在测试环境里使用。
 
 ## 兼容性
 

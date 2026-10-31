@@ -1,10 +1,15 @@
 //! Node.js binding: runs fakes3 inside the Node process.
 //!
-//! This file is a thin shell over [`fakes3::Server`]. A control-plane method that lands on
-//! `fakes3::Server` becomes a wrapper in the `impl FakeS3Server` block below that calls it through
-//! [`FakeS3Server::server`]; the TypeScript declarations are generated from the signatures.
+//! This crate is a thin shell over [`fakes3::Server`]. A method on `fakes3::Server` becomes a
+//! wrapper that calls it through [`with_server`]; the TypeScript declarations are generated from
+//! the signatures. Server lifecycle and the control plane's reset/snapshot methods live here,
+//! [`control`] holds the clock and the request log.
+
+mod control;
 
 use std::sync::{Arc, Mutex};
+
+use chrono::{DateTime, Utc};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -29,6 +34,10 @@ pub struct StartOptions {
     /// `"2GiB"`, `"unlimited"` or `"auto"`. Writes past it fail with HTTP 507. Default `"auto"`,
     /// which is 75% of the container's or machine's memory.
     pub memory_limit: Option<Either<f64, String>>,
+    /// Record S3 requests for `server.requests`. Default `true`.
+    pub request_log: Option<bool>,
+    /// How many requests the log keeps; the oldest are dropped first. Default 10000.
+    pub request_log_capacity: Option<u32>,
 }
 
 /// A reading of the server's memory accounting.
@@ -43,7 +52,7 @@ pub struct MemoryStats {
 /// A running in-process server.
 #[napi(js_name = "FakeS3Server")]
 pub struct FakeS3Server {
-    server: Arc<Mutex<Option<fakes3::Server>>>,
+    server: Slot,
     endpoint: String,
     host: String,
     port: u16,
@@ -83,10 +92,68 @@ impl FakeS3Server {
         self.secret_key.clone()
     }
 
+    /// The server's clock: freeze it, move it, or let it run.
+    #[napi(getter)]
+    pub fn clock(&self) -> control::ClockControl {
+        control::ClockControl::new(self.server.clone())
+    }
+
+    /// The log of S3 requests the server has received.
+    #[napi(getter)]
+    pub fn requests(&self) -> control::RequestsControl {
+        control::RequestsControl::new(self.server.clone())
+    }
+
+    /// Clears all buckets, objects and uploads, and by default the request log and the clock too.
+    /// Snapshots are kept unless `options.snapshots` is true.
+    #[napi]
+    pub fn reset(&self, options: Option<ResetOptions>) -> Result<()> {
+        let defaults = fakes3::ResetOptions::default();
+        let opts = match options {
+            None => defaults,
+            Some(o) => fakes3::ResetOptions {
+                clock: o.clock.unwrap_or(defaults.clock),
+                requests: o.requests.unwrap_or(defaults.requests),
+                snapshots: o.snapshots.unwrap_or(defaults.snapshots),
+            },
+        };
+        with_server(&self.server, |s| s.control().reset_with(opts))
+    }
+
+    /// Saves the current buckets, objects and uploads. The name (1-64 characters of `A-Za-z0-9._-`)
+    /// is generated when omitted; a name that is already taken is an error.
+    #[napi]
+    pub fn snapshot(&self, name: Option<String>) -> Result<SnapshotInfo> {
+        with_server(&self.server, |s| s.snapshot(name.as_deref()))?
+            .map(snapshot_info)
+            .map_err(control_error)
+    }
+
+    /// Rolls buckets, objects and uploads back to a snapshot. The snapshot is kept, so it can be
+    /// restored again.
+    #[napi]
+    pub fn restore(&self, name: String) -> Result<SnapshotInfo> {
+        with_server(&self.server, |s| s.restore(&name))?
+            .map(snapshot_info)
+            .map_err(control_error)
+    }
+
+    /// Stored snapshots.
+    #[napi]
+    pub fn snapshots(&self) -> Result<Vec<SnapshotInfo>> {
+        with_server(&self.server, |s| s.control().snapshots().into_iter().map(snapshot_info).collect())
+    }
+
+    /// Deletes a snapshot.
+    #[napi]
+    pub fn delete_snapshot(&self, name: String) -> Result<()> {
+        with_server(&self.server, |s| s.control().delete_snapshot(&name))?.map_err(control_error)
+    }
+
     /// Object data currently held in memory, and the limit it is checked against.
     #[napi]
     pub fn memory(&self) -> Result<MemoryStats> {
-        let stats = self.server(|s| s.memory())?;
+        let stats = with_server(&self.server, |s| s.memory())?;
         Ok(MemoryStats {
             used: stats.used as f64,
             limit: stats.limit.map(|n| n as f64),
@@ -107,19 +174,62 @@ impl FakeS3Server {
     }
 }
 
-impl FakeS3Server {
-    /// The running server, for wrappers around `fakes3::Server` methods. Fails once stopped.
-    fn server<T>(&self, f: impl FnOnce(&fakes3::Server) -> T) -> Result<T> {
-        let guard = self.server.lock().map_err(poisoned)?;
-        match guard.as_ref() {
-            Some(server) => Ok(f(server)),
-            None => Err(Error::new(Status::GenericFailure, "server is stopped")),
-        }
+/// The server shared with the objects handed out by `clock` and `requests`; `None` once stopped.
+pub(crate) type Slot = Arc<Mutex<Option<fakes3::Server>>>;
+
+/// Runs `f` on the running server. Fails once the server is stopped.
+pub(crate) fn with_server<T>(slot: &Slot, f: impl FnOnce(&fakes3::Server) -> T) -> Result<T> {
+    let guard = slot.lock().map_err(poisoned)?;
+    match guard.as_ref() {
+        Some(server) => Ok(f(server)),
+        None => Err(Error::new(Status::GenericFailure, "server is stopped")),
     }
 }
 
 fn poisoned<T>(_: T) -> Error {
     Error::new(Status::GenericFailure, "server state is poisoned")
+}
+
+pub(crate) fn control_error(e: fakes3::ControlError) -> Error {
+    let status = match e {
+        fakes3::ControlError::BadRequest(_) => Status::InvalidArg,
+        _ => Status::GenericFailure,
+    };
+    Error::new(status, e.to_string())
+}
+
+/// What `reset()` clears besides buckets, objects and uploads, which it always clears.
+#[napi(object)]
+pub struct ResetOptions {
+    /// Put the clock back on the host clock. Default `true`.
+    pub clock: Option<bool>,
+    /// Empty the request log. Default `true`.
+    pub requests: Option<bool>,
+    /// Delete stored snapshots. Default `false`.
+    pub snapshots: Option<bool>,
+}
+
+/// A stored snapshot.
+#[napi(object)]
+pub struct SnapshotInfo {
+    pub name: String,
+    /// Server clock time when the snapshot was taken.
+    pub created: DateTime<Utc>,
+    pub buckets: f64,
+    /// Keys with at least one version (delete markers count).
+    pub objects: f64,
+    /// Multipart uploads in progress.
+    pub uploads: f64,
+}
+
+fn snapshot_info(s: fakes3::SnapshotInfo) -> SnapshotInfo {
+    SnapshotInfo {
+        name: s.name,
+        created: s.created.into(),
+        buckets: s.counts.buckets as f64,
+        objects: s.counts.objects as f64,
+        uploads: s.counts.uploads as f64,
+    }
 }
 
 /// Starts a server on the Node process's async runtime and resolves once it is listening.
@@ -134,6 +244,8 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         no_auth: None,
         inline_threshold: None,
         memory_limit: None,
+        request_log: None,
+        request_log_capacity: None,
     });
     let config = fakes3::Config {
         host: options.host.unwrap_or(defaults.host),
@@ -142,6 +254,8 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         secret_key: options.secret_key.unwrap_or(defaults.secret_key),
         auth: !options.no_auth.unwrap_or(false),
         inline_threshold: options.inline_threshold.map_or(defaults.inline_threshold, |n| n as usize),
+        request_log: options.request_log.unwrap_or(defaults.request_log),
+        request_log_capacity: options.request_log_capacity.map_or(defaults.request_log_capacity, |n| n as usize),
         memory_limit: match options.memory_limit {
             None => defaults.memory_limit,
             Some(Either::A(n)) if n.is_finite() && n >= 0.0 => fakes3::MemoryLimit::Bytes(n as u64),

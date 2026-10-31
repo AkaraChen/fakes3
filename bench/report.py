@@ -23,6 +23,8 @@ WORKLOADS = [
     ("mixed", None, "混合负载 64 KiB（GET 45% / STAT 30% / PUT 15% / DELETE 10%），16 并发"),
     ("large_put", "PUT", "64 MiB 单次 PUT，4 并发（只跑 5 秒，避免写满内存）"),
     ("large_get", "GET", "64 MiB GET，4 并发"),
+    ("large_get_c1", "GET", "64 MiB GET，单并发"),
+    ("xl_get_c1", "GET", "512 MiB GET，单并发"),
     ("multipart", "GET", "按 part 读取分段对象（GET ?partNumber=，每个 part 5 MiB），8 并发"),
 ]
 
