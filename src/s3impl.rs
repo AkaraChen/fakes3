@@ -10,6 +10,7 @@ use s3s::checksum::ChecksumHasher;
 use s3s::dto::*;
 use s3s::{S3, S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 
+use crate::clock::Clock;
 use crate::digest;
 use crate::store::{
     BlobWriter, Bucket as StoreBucket, Entry, Object as StoreObject, ObjectData, ObjectMeta, Part, Store, Upload, Version, Versioning,
@@ -18,6 +19,7 @@ use crate::store::{
 pub struct FakeS3 {
     pub store: Store,
     pub inline_threshold: usize,
+    pub clock: Arc<Clock>,
 }
 
 fn io_err(e: std::io::Error) -> S3Error {
@@ -644,7 +646,7 @@ impl S3 for FakeS3 {
         if buckets.contains_key(&name) {
             return Err(s3_error!(BucketAlreadyOwnedByYou));
         }
-        buckets.insert(name.clone(), Arc::new(StoreBucket::new()));
+        buckets.insert(name.clone(), Arc::new(StoreBucket::new(self.clock.now())));
         Ok(S3Response::new(CreateBucketOutput {
             location: Some(format!("/{name}")),
             ..Default::default()
@@ -766,7 +768,7 @@ impl S3 for FakeS3 {
                 input.metadata,
             ),
             e_tag: e_tag.clone(),
-            last_modified: SystemTime::now(),
+            last_modified: self.clock.now(),
             checksum: ing.checksum.clone(),
             checksum_type: Some(checksum_type(ChecksumType::FULL_OBJECT)),
             parts_count: None,
@@ -941,7 +943,7 @@ impl S3 for FakeS3 {
                     ..Default::default()
                 }
             }
-            None => match b.delete_current(&mut objects, &input.key) {
+            None => match b.delete_current(&mut objects, &input.key, self.clock.now()) {
                 Some(id) => DeleteObjectOutput {
                     version_id: Some(id),
                     delete_marker: Some(true),
@@ -970,7 +972,7 @@ impl S3 for FakeS3 {
                             delete_marker_version_id: marker.filter(|m| *m).map(|_| vid),
                         }
                     }
-                    None => match b.delete_current(&mut objects, &id.key) {
+                    None => match b.delete_current(&mut objects, &id.key, self.clock.now()) {
                         Some(mid) => DeletedObject {
                             key: Some(id.key),
                             delete_marker: Some(true),
@@ -1053,7 +1055,7 @@ impl S3 for FakeS3 {
         } else {
             src.tags.clone()
         };
-        let now = SystemTime::now();
+        let now = self.clock.now();
         let new = StoreObject {
             data: src.data.clone(),
             meta,
@@ -1351,7 +1353,7 @@ impl S3 for FakeS3 {
                     input.metadata,
                 ),
                 tags,
-                initiated: SystemTime::now(),
+                initiated: self.clock.now(),
                 checksum_algorithm: input.checksum_algorithm.clone(),
                 checksum_type: ty.clone(),
                 parts: BTreeMap::new(),
@@ -1405,7 +1407,7 @@ impl S3 for FakeS3 {
             Part {
                 data: ObjectData::from_segments(vec![ing.data]),
                 md5: ing.md5,
-                last_modified: SystemTime::now(),
+                last_modified: self.clock.now(),
                 checksum: ing.checksum.clone(),
             },
         );
@@ -1457,7 +1459,7 @@ impl S3 for FakeS3 {
         // The part shares the source's buffers; only its digests have to be computed.
         let segments = src.data.slice(range);
         let (md5, checksum) = digest_segments(&segments, Some(&algorithm))?;
-        let now = SystemTime::now();
+        let now = self.clock.now();
         let mut uploads = b.uploads.write();
         let up = uploads.get_mut(&id).ok_or_else(|| s3_error!(NoSuchUpload))?;
         up.parts.insert(
@@ -1689,7 +1691,7 @@ impl S3 for FakeS3 {
                 data: ObjectData::from_segments(segments),
                 meta: up.meta.clone(),
                 e_tag: multipart_etag(&md5s),
-                last_modified: SystemTime::now(),
+                last_modified: self.clock.now(),
                 checksum: checksum.clone(),
                 checksum_type: has_checksum.then(|| up.checksum_type.clone()),
                 parts_count: Some(md5s.len() as i32),

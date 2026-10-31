@@ -1,15 +1,6 @@
-mod digest;
-mod s3impl;
-mod store;
-
 use std::io::Write;
 
 use clap::Parser;
-use hyper_util::rt::{TokioExecutor, TokioIo};
-use hyper_util::server::conn::auto::Builder as ConnBuilder;
-use s3s::auth::SimpleAuth;
-use s3s::service::S3ServiceBuilder;
-use tokio::net::TcpListener;
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -44,75 +35,19 @@ fn main() -> std::io::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
-    tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(run(opt))
-}
-
-async fn run(opt: Opt) -> std::io::Result<()> {
-    let fake = s3impl::FakeS3 {
-        store: store::Store::default(),
+    let config = fakes3::Config {
+        host: opt.host,
+        port: opt.port,
+        access_key: opt.access_key,
+        secret_key: opt.secret_key,
+        auth: !opt.no_auth,
         inline_threshold: opt.inline_threshold,
     };
-    let mut b = S3ServiceBuilder::new(fake);
-    // Legacy clients (s3fs/aiobotocore presigning, old SDKs) still sign with SigV2.
-    let mut config = s3s::config::S3Config::default();
-    config.enable_sig_v2 = true;
-    b.set_config(std::sync::Arc::new(s3s::config::StaticConfigProvider::new(std::sync::Arc::new(
-        config,
-    ))));
-    if !opt.no_auth {
-        b.set_auth(SimpleAuth::from_single(opt.access_key, opt.secret_key));
-    }
-    let s3 = b.build();
-    let service = hyper::service::service_fn(move |mut req: http::Request<hyper::body::Incoming>| {
-        let s3 = s3.clone();
-        async move {
-            merge_duplicate_headers(req.headers_mut());
-            let head = req.method() == http::Method::HEAD;
-            let mut resp = hyper::service::Service::call(&s3, req).await?;
-            // s3s always answers HEAD with 200; a ?partNumber= HEAD is a partial response.
-            if head && resp.status() == http::StatusCode::OK && resp.headers().contains_key(http::header::CONTENT_RANGE) {
-                *resp.status_mut() = http::StatusCode::PARTIAL_CONTENT;
-            }
-            Ok::<_, s3s::HttpError>(resp)
-        }
-    });
-
-    let listener = TcpListener::bind((opt.host.as_str(), opt.port)).await?;
-    let addr = listener.local_addr()?;
-    println!("http://{addr}");
-    std::io::stdout().flush()?;
-
-    let http = ConnBuilder::new(TokioExecutor::new());
-    loop {
-        let (socket, _) = match listener.accept().await {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::warn!("accept: {e}");
-                continue;
-            }
-        };
-        let _ = socket.set_nodelay(true);
-        let conn = http.serve_connection(TokioIo::new(socket), service.clone()).into_owned();
-        tokio::spawn(async move {
-            let _ = conn.await;
-        });
-    }
-}
-
-/// Folds repeated headers into one comma-separated value, which is how HTTP defines their
-/// meaning (RFC 9110 §5.3). Joined with a bare `,` because that is how SigV4 canonicalizes
-/// repeated headers, so signatures still verify. Some SDKs (aws-sdk-java-v2) send
-/// `Content-Encoding: gzip` and `Content-Encoding: aws-chunked` separately, which s3s rejects.
-fn merge_duplicate_headers(h: &mut http::HeaderMap) {
-    let dups: Vec<http::HeaderName> = h
-        .keys()
-        .filter(|k| *k != http::header::HOST && *k != http::header::CONTENT_LENGTH && h.get_all(*k).iter().nth(1).is_some())
-        .cloned()
-        .collect();
-    for k in dups {
-        let joined = h.get_all(&k).iter().map(|v| v.as_bytes()).collect::<Vec<_>>().join(&b","[..]);
-        if let Ok(v) = http::HeaderValue::from_bytes(&joined) {
-            h.insert(k, v);
-        }
-    }
+    tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
+        let server = fakes3::Server::start(config).await?;
+        println!("{}", server.endpoint());
+        std::io::stdout().flush()?;
+        server.wait().await;
+        Ok(())
+    })
 }

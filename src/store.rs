@@ -149,9 +149,9 @@ impl Store {
 }
 
 impl Bucket {
-    pub fn new() -> Self {
+    pub fn new(now: SystemTime) -> Self {
         Self {
-            created: SystemTime::now(),
+            created: now,
             versioning: RwLock::new(Versioning::Unversioned),
             tags: RwLock::default(),
             objects: RwLock::default(),
@@ -186,7 +186,7 @@ impl Bucket {
     }
 
     /// A DELETE without a version id. Returns the id of the delete marker created, if any.
-    pub fn delete_current(&self, objects: &mut BTreeMap<String, Entry>, key: &str) -> Option<String> {
+    pub fn delete_current(&self, objects: &mut BTreeMap<String, Entry>, key: &str, now: SystemTime) -> Option<String> {
         let mode = *self.versioning.read();
         if mode == Versioning::Unversioned {
             objects.remove(key);
@@ -202,7 +202,7 @@ impl Bucket {
         entry.versions.push(Arc::new(Version {
             id: id.clone(),
             obj: None,
-            last_modified: SystemTime::now(),
+            last_modified: now,
         }));
         Some(id)
     }
