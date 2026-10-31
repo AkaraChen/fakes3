@@ -206,6 +206,7 @@ SigV2 的 `Expires`、POST policy 的 `expiration` 时，直接读取主机时�
 | `latency_us` | 从收到请求到响应头就绪的微秒数（不含响应体的流式发送） |
 | `bytes_in` | 请求负载大小：优先 `x-amz-decoded-content-length`，否则 `Content-Length` |
 | `bytes_out` | 响应的 `Content-Length`，未知时为 0 |
+| `access_key` | 请求签名用的 access key；只在 `--no-auth` 时记录（认证模式下总是配置的那个），没有则为 `null` |
 
 `operation` 是根据请求的形状（方法、路径、查询参数、是否有 `x-amz-copy-source`）推断的，不是 s3s 报告的：s3s 只在开启签名校验时
 才把操作名交给我们，而且签名失败的请求根本到不了那一步。覆盖 fakes3 实现的全部操作和常见的 bucket 子资源；
@@ -229,7 +230,7 @@ SigV2 的 `Expires`、POST policy 的 `expiration` 时，直接读取主机时�
 ```
 $ curl 'localhost:9000/_fakes3/requests?op=PutObject&bucket=logs&limit=1'
 {"requests":[{"seq":3,"time":"2026-10-31T07:21:30.998Z","method":"PUT","path":"/logs/b/two.txt","bucket":"logs","key":"b/two.txt",
-"operation":"PutObject","status":200,"latency_us":84,"bytes_in":2,"bytes_out":0}],"total":3,"dropped":0}
+"operation":"PutObject","status":200,"latency_us":84,"bytes_in":2,"bytes_out":0,"access_key":null}],"total":3,"dropped":0}
 ```
 
 `total` 是过滤后、应用 `limit` 前的匹配数（断言调用次数用它或 `ctl requests list --count`）；`dropped` 是因缓冲区满而被丢弃的记录数。
