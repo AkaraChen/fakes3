@@ -47,6 +47,9 @@ WARP = {
     # Short: every PUT is a new 64 MiB object, and 15 s would fill the host's RAM.
     "large_put": (["put", "--obj.size", "64MiB", "--concurrent", "4", "--disable-multipart"], "PUT", "5s"),
     "large_get": (["get", "--obj.size", "64MiB", "--objects", "16", "--concurrent", "4", "--disable-multipart"], "GET"),
+    # Temporary (exp/sendfile): single-stream large reads.
+    "large_get_c1": (["get", "--obj.size", "64MiB", "--objects", "8", "--concurrent", "1", "--disable-multipart"], "GET"),
+    "xl_get_c1": (["get", "--obj.size", "512MiB", "--objects", "2", "--concurrent", "1", "--disable-multipart"], "GET", "20s"),
     # warp uploads the parts during preparation, then benchmarks GET ?partNumber= reads.
     "multipart": (["multipart", "--part.size", "5MiB", "--parts", "40", "--concurrent", "8"], "GET"),
     "versioned": (["versioned", "--obj.size", "4KiB", "--objects", "1000", "--concurrent", "16"], None),
