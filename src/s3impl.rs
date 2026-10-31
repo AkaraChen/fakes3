@@ -602,9 +602,10 @@ fn list(objects: &BTreeMap<String, Entry>, prefix: &str, delimiter: Option<&str>
     }
 }
 
-/// `encoding-type=url` escaping: form-style, as S3 does (space becomes `+`).
+/// `encoding-type=url` escaping: form-style (space becomes `+`), but `/` stays literal like
+/// S3 and MinIO leave it; some clients (minio-dotnet) don't decode common prefixes.
 fn url_encode(s: &str) -> String {
-    form_urlencoded::byte_serialize(s.as_bytes()).collect()
+    form_urlencoded::byte_serialize(s.as_bytes()).collect::<String>().replace("%2F", "/")
 }
 
 fn wants_url(e: &Option<EncodingType>) -> bool {
@@ -1804,7 +1805,8 @@ mod tests {
     fn url_encoding_round_trips_through_form_decoding() {
         let key = "sp ace/üñí©ødé/a+b=c&d?e#f.txt";
         let enc = url_encode(key);
-        assert!(!enc.contains(' ') && !enc.contains('+') || enc.contains("%2B"));
+        assert!(enc.contains("%2B") && !enc.contains(' '));
+        assert!(enc.starts_with("sp+ace/"), "{enc}");
         let dec: String = form_urlencoded::parse(format!("k={enc}").as_bytes()).next().unwrap().1.into_owned();
         assert_eq!(dec, key);
     }
