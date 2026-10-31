@@ -40,6 +40,8 @@ enum Mode {
     /// `write` in 256 KiB pieces.
     Write256k,
     Sendfile,
+    /// `sendfile` in 256 KiB pieces.
+    Sendfile256k,
 }
 
 impl Mode {
@@ -48,6 +50,7 @@ impl Mode {
             Mode::Write => "write_mmap",
             Mode::Write256k => "write_mmap_256k",
             Mode::Sendfile => "sendfile",
+            Mode::Sendfile256k => "sendfile_256k",
         }
     }
 }
@@ -64,11 +67,12 @@ fn serve_conn(mut s: TcpStream, blobs: Arc<Vec<Blob>>, mode: Mode) {
         let r = match mode {
             Mode::Write => s.write_all(&b.map[..]),
             Mode::Write256k => b.map.chunks(256 << 10).try_for_each(|c| s.write_all(c)),
-            Mode::Sendfile => {
+            Mode::Sendfile | Mode::Sendfile256k => {
+                let piece = if mode == Mode::Sendfile { usize::MAX } else { 256 << 10 };
                 let mut off = 0u64;
                 let mut r = Ok(());
                 while (off as usize) < len {
-                    let left = len - off as usize;
+                    let left = (len - off as usize).min(piece);
                     match rustix::fs::sendfile(s.as_fd(), b.file.as_fd(), Some(&mut off), left) {
                         Ok(0) => break,
                         Ok(_) => {}
@@ -165,8 +169,8 @@ fn main() {
     );
     let mut summary: Vec<(String, f64)> = Vec::new();
     for round in 0..rounds {
-        for rbuf in [64usize << 10, 1 << 20] {
-            for mode in [Mode::Write, Mode::Write256k, Mode::Sendfile] {
+        for rbuf in [64usize << 10, 256 << 10] {
+            for mode in [Mode::Write, Mode::Write256k, Mode::Sendfile, Mode::Sendfile256k] {
                 let listener = TcpListener::bind("127.0.0.1:0").unwrap();
                 let addr = listener.local_addr().unwrap();
                 let stop = Arc::new(AtomicBool::new(false));

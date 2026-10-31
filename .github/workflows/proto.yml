@@ -13,6 +13,10 @@ permissions:
 jobs:
   proto:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -22,8 +26,9 @@ jobs:
         run: |
           {
             echo '```'
-            uname -r; nproc
+            uname -r; nproc; grep -m1 'model name' /proc/cpuinfo
             sysctl net.ipv4.tcp_wmem net.ipv4.tcp_rmem
-            ./target/release/examples/sendfile_proto --rounds 3 --secs 4
+            ./target/release/examples/sendfile_proto --rounds 2 --secs 3 --conns 4
+            ./target/release/examples/sendfile_proto --rounds 2 --secs 3 --conns 1
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
