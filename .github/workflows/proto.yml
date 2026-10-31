@@ -1,0 +1,29 @@
+name: proto
+
+# Temporary: runs the sendfile-vs-write prototype (examples/sendfile_proto.rs) on a runner.
+on:
+  workflow_dispatch:
+  push:
+    branches: [exp/sendfile]
+    paths: [examples/sendfile_proto.rs, .github/workflows/proto.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  proto:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --example sendfile_proto
+      - name: Run prototype
+        run: |
+          {
+            echo '```'
+            uname -r; nproc
+            sysctl net.ipv4.tcp_wmem net.ipv4.tcp_rmem
+            ./target/release/examples/sendfile_proto --rounds 3 --secs 4
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
