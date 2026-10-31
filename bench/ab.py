@@ -6,7 +6,13 @@ meaningless. This runs warp against A and B alternately (ABBA order per round) o
 machine and reports the median ops/s and the server CPU time per operation; the latter does not
 depend on how fast the load generator is.
 
-    bench/ab.py <binary A> <binary B>      # env: ROUNDS (6), DURATION (10s), WORKLOADS (comma list)
+    bench/ab.py <binary A> <binary B>      # env: ROUNDS (6), DURATION (10s), WORKLOADS (comma list), AUTH (1)
+
+Both binaries run in the same authentication mode, so the comparison is like for like even when A
+predates the `--auth` flag. AUTH=1 (default) verifies signatures: B gets `--auth`, A is started as
+is (before the flag existed, verifying was its only mode). AUTH=0 measures the mode that does not
+verify: `--no-auth` for both, which B accepts as a deprecated no-op because not verifying is its
+default.
 """
 
 import json
@@ -21,6 +27,7 @@ A, B = sys.argv[1], sys.argv[2]
 ROUNDS = int(os.environ.get("ROUNDS", "6"))
 DURATION = os.environ.get("DURATION", "10s")
 PORT = 9400
+AUTH = os.environ.get("AUTH", "1") != "0"
 
 # name -> (warp args, op type to report; None sums all op types)
 ALL = {
@@ -40,10 +47,17 @@ def cpu_sec(pid):
     return (int(f[11]) + int(f[12])) / os.sysconf("SC_CLK_TCK")
 
 
+def auth_args(binary):
+    if not AUTH:
+        return ["--no-auth"]
+    help_text = subprocess.run([binary, "--help"], capture_output=True, text=True).stdout
+    return ["--auth"] if "--auth" in help_text else []
+
+
 def once(binary, wl):
     args, op = ALL[wl]
     p = subprocess.Popen(
-        [binary, "--port", str(PORT), "--access-key", "fakes3", "--secret-key", "fakes3secret"],
+        [binary, "--port", str(PORT), "--access-key", "fakes3", "--secret-key", "fakes3secret", *auth_args(binary)],
         stdout=subprocess.DEVNULL,
     )
     try:
@@ -82,7 +96,7 @@ for rnd in range(ROUNDS):
             print(f"round {rnd} {wl} {name}: {ops:.0f} ops/s, {cpu_us:.1f} server-µs/op", flush=True)
 
 lines = [
-    f"Median of {ROUNDS} interleaved rounds, {DURATION} each.",
+    f"Median of {ROUNDS} interleaved rounds, {DURATION} each, {'signatures verified' if AUTH else 'signatures not verified (--no-auth / default)'}.",
     "",
     "| workload | A ops/s | B ops/s | B/A | A server µs/op | B server µs/op | B/A |",
     "|---|---:|---:|---:|---:|---:|---:|",

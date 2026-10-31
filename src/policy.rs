@@ -41,6 +41,8 @@ pub struct Context<'a> {
     pub query: &'a str,
     pub now: SystemTime,
     pub signed: bool,
+    /// The signature was in the query string rather than a header. Only meaningful when `signed`.
+    pub presigned: bool,
     pub peer: Option<IpAddr>,
 }
 
@@ -364,8 +366,7 @@ impl Context<'_> {
             "s3:max-keys" => self.query_param("max-keys"),
             "s3:versionid" => self.query_param("versionId"),
             "s3:authtype" if self.signed => {
-                let q = self.query.contains("X-Amz-Signature");
-                vec![if q { "REST-QUERY-STRING" } else { "REST-HEADER" }.to_owned()]
+                vec![if self.presigned { "REST-QUERY-STRING" } else { "REST-HEADER" }.to_owned()]
             }
             "s3:requestobjecttagkeys" => self.request_tags().into_iter().map(|(k, _)| k).collect(),
             k if k.starts_with("s3:requestobjecttag/") => {
@@ -567,6 +568,7 @@ mod tests {
             query: "prefix=logs%2F&max-keys=5",
             now: UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000),
             signed,
+            presigned: false,
             peer: Some("10.1.2.3".parse().unwrap()),
         }
     }

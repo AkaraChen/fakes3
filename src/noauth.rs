@@ -1,4 +1,4 @@
-//! `--no-auth`: accept requests signed with any credentials.
+//! Default mode (no `--auth`): accept requests signed with any credentials.
 //!
 //! s3s has no switch for this. Without an auth provider it answers every signed request with 501,
 //! and with one it checks the signature against that provider's secret, which cannot match a
@@ -7,7 +7,7 @@
 //! verifies every chunk signature, so it cannot be borrowed either.
 //!
 //! So the service wrapper takes the signature material off the request before s3s sees it. A
-//! request without any is anonymous, which an s3s service with no auth provider accepts:
+//! request without any is anonymous, which s3s accepts without consulting its auth provider:
 //!
 //! * the `Authorization` header (SigV4, SigV2 and SigV4a alike);
 //! * the query parameters of presigned URLs (SigV4 `X-Amz-*`, SigV2 `Signature` and friends);
@@ -15,6 +15,10 @@
 //!   signatures ignored. The decoded body goes to s3s with a plain `Content-Length`, and the
 //!   trailing headers (checksums) are handed to the S3 implementation through [`Trailers`], so a
 //!   trailing checksum is still verified against the data.
+//!
+//! s3s can no longer tell a signed request from an anonymous one afterwards, so the wrapper records
+//! that a signature was there, and which access key it named, in a [`Signed`] request extension.
+//! [`crate::access`] turns it into the identity the request acts as (the account owner).
 //!
 //! What is not checked any more is the signature itself and everything derived from it: clock
 //! skew, the payload hash in `x-amz-content-sha256`, signed-header lists. Signed POST forms
@@ -42,17 +46,38 @@ const V4_QUERY: &[&str] = &[
 ];
 const V2_QUERY: &[&str] = &["AWSAccessKeyId", "Expires", "Signature"];
 
+/// Set on a request whose signature [`accept_any`] removed without checking it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Signed {
+    /// The access key the signature named, if it could be read.
+    pub access_key: Option<String>,
+    /// The signature was in the query string (a presigned URL) rather than a header.
+    pub presigned: bool,
+}
+
 /// Strips the signature from `req` and decodes an aws-chunked body, so s3s treats it as an
-/// ordinary request. Returns the access key the request was signed with, if it named one.
-pub fn accept_any(req: &mut http::Request<s3s::Body>) -> Option<String> {
-    let mut access_key = None;
+/// ordinary request. A request that carried a signature gets a [`Signed`] extension.
+pub fn accept_any(req: &mut http::Request<s3s::Body>) -> Option<&Signed> {
+    let mut signed = None;
     if let Some(auth) = req.headers_mut().remove(http::header::AUTHORIZATION) {
-        access_key = auth.to_str().ok().and_then(header_access_key);
+        signed = Some(Signed {
+            access_key: auth.to_str().ok().and_then(header_access_key),
+            presigned: false,
+        });
     }
     if let Some(query) = req.uri().query()
         && let Some((rest, key)) = strip_presigned(query)
     {
-        access_key = access_key.or(key);
+        signed = match signed {
+            Some(s) => Some(Signed {
+                access_key: s.access_key.or(key),
+                ..s
+            }),
+            None => Some(Signed {
+                access_key: key,
+                presigned: true,
+            }),
+        };
         let path = req.uri().path();
         let target = if rest.is_empty() {
             path.to_owned()
@@ -74,7 +99,9 @@ pub fn accept_any(req: &mut http::Request<s3s::Body>) -> Option<String> {
     if streaming {
         decode_aws_chunked(req);
     }
-    access_key
+    let signed = signed?;
+    req.extensions_mut().insert(signed);
+    req.extensions().get()
 }
 
 /// `AWS4-HMAC-SHA256 Credential=<key>/<scope>, ...` or `AWS <key>:<signature>`.
@@ -145,8 +172,8 @@ fn decode_aws_chunked(req: &mut http::Request<s3s::Body>) {
 #[derive(Clone, Default)]
 struct OwnTrailers(Arc<Mutex<Option<http::HeaderMap>>>);
 
-/// The trailing headers of an aws-chunked body: s3s's when it verified the signature, ours under
-/// `--no-auth`. Only complete once the body has been read to its end.
+/// The trailing headers of an aws-chunked body: s3s's when it verified the signature, ours when
+/// signatures are not verified. Only complete once the body has been read to its end.
 pub struct Trailers(Source);
 
 enum Source {
@@ -425,6 +452,43 @@ mod tests {
         assert_eq!(header_access_key(v4).as_deref(), Some("AKIDEXAMPLE"));
         assert_eq!(header_access_key("AWS AKIDV2:c2ln").as_deref(), Some("AKIDV2"));
         assert_eq!(header_access_key("Bearer x"), None);
+    }
+
+    fn signed(uri: &str, auth: Option<&str>) -> (Option<Signed>, String, bool) {
+        let mut req = http::Request::get(uri).body(s3s::Body::empty()).unwrap();
+        if let Some(a) = auth {
+            req.headers_mut().insert(http::header::AUTHORIZATION, a.parse().unwrap());
+        }
+        let marker = accept_any(&mut req).cloned();
+        let left = req.uri().to_string();
+        (marker, left, req.headers().contains_key(http::header::AUTHORIZATION))
+    }
+
+    #[test]
+    fn signed_requests_are_marked_and_unsigned_ones_are_not() {
+        let (marker, uri, header) = signed(
+            "/b/k",
+            Some("AWS4-HMAC-SHA256 Credential=AK/20240101/r/s3/aws4_request, Signature=ab"),
+        );
+        let want = Signed {
+            access_key: Some("AK".into()),
+            presigned: false,
+        };
+        assert_eq!((marker, uri.as_str(), header), (Some(want), "/b/k", false));
+
+        let (marker, uri, _) = signed("/b/k?AWSAccessKeyId=AK2&Expires=9&Signature=x&versionId=1", None);
+        let want = Signed {
+            access_key: Some("AK2".into()),
+            presigned: true,
+        };
+        assert_eq!((marker, uri.as_str()), (Some(want), "/b/k?versionId=1"));
+
+        // An Authorization header in a scheme we cannot read is still a signature.
+        let (marker, ..) = signed("/b/k", Some("Bearer x"));
+        assert_eq!(marker.map(|s| s.access_key), Some(None));
+
+        let (marker, uri, _) = signed("/b/k?prefix=a", None);
+        assert_eq!((marker, uri.as_str()), (None, "/b/k?prefix=a"));
     }
 
     #[test]

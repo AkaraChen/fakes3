@@ -14,9 +14,13 @@
 - [x] Rust 进程内库模式（`Server::start` / `Server::start_blocking`）、Node.js 绑定（napi-rs）、GHCR 镜像
 - [x] testcontainers：不需要专门的模块，通用容器 + 日志等待即可（见 README）
 - [ ] 其余语言的框架集成（pytest fixture 等，基于 `fakes3 ctl` 或 HTTP API）
-- [x] `--no-auth`：任意 access key / secret 签名的请求都接受（SigV4 / SigV2 的头和 presigned URL、三种流式上传，trailer 校验和仍会校验），不做授权；
-      s3s 没有跳过验签的开关，所以在服务包装层去掉签名再交给 s3s，aws-chunked 自己解码（见 `src/noauth.rs`）
-  - 带签名的 POST 表单上传（`x-amz-signature` / `signature` 字段）在该模式下仍返回 501
+- [x] 默认不校验签名（原 `--no-auth`，现在是默认行为，`--auth` 才严格校验）：任意 access key / secret 签名的请求都接受（SigV4 / SigV2 的头和 presigned URL、三种流式上传，trailer 校验和仍会校验），
+      并且是 bucket 的 owner；不带签名的请求是匿名请求，照常走 ACL / Bucket Policy / Block Public Access。
+      s3s 没有跳过验签的开关，所以在服务包装层去掉签名再交给 s3s（aws-chunked 自己解码），并在请求扩展里留下 `Signed { access_key, presigned }`（见 `src/noauth.rs`、`src/access.rs`）
+  - 带签名的 POST 表单上传（`x-amz-signature` / `signature` 字段）仍由 s3s 按配置的凭证校验，任意凭证的签名表单不被接受
+  - `--no-auth` 保留为已弃用、不起作用的别名，之后可以删除
+- [ ] 多个身份：`--user name:access-key:secret[:canonical-id]`。默认模式下按请求里的 access key 选身份、不校验 secret，`--auth` 下校验该用户的 secret；
+      “带签名的请求是谁”只在 `src/access.rs` 的 `identify` 里决定（现在恒为 owner），Bucket Policy 的 Principal、ACL 的 grantee 和 owner 判断需要跟着区分身份
 
 ## S3 语义完整度
 

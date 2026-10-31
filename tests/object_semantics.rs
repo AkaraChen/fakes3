@@ -1,11 +1,14 @@
 //! Object Lock, SSE, storage class and GetObjectAttributes over real HTTP. A bare-bones HTTP/1.1
-//! client keeps this free of SDK dependencies; the server runs unauthenticated.
+//! client keeps this free of SDK dependencies; its requests carry a signature the server does not
+//! verify.
 
 use std::time::{Duration, UNIX_EPOCH};
 
 use fakes3::{BucketDefaults, Config, Server};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+
+mod common;
 
 struct Resp {
     status: u16,
@@ -39,9 +42,10 @@ impl Client {
     async fn call(&self, method: &str, path: &str, headers: &[(&str, &str)], body: &[u8]) -> Resp {
         let mut s = TcpStream::connect(&self.0).await.unwrap();
         let mut head = format!(
-            "{method} {path} HTTP/1.1\r\nhost: {}\r\nconnection: close\r\ncontent-length: {}\r\n",
+            "{method} {path} HTTP/1.1\r\nhost: {}\r\nconnection: close\r\ncontent-length: {}\r\nauthorization: {}\r\n",
             self.0,
-            body.len()
+            body.len(),
+            common::UNVERIFIED_AUTH
         );
         for (k, v) in headers {
             head.push_str(&format!("{k}: {v}\r\n"));
@@ -116,7 +120,6 @@ async fn start() -> (Server, Client) {
 
 async fn start_with(bucket_defaults: BucketDefaults) -> (Server, Client) {
     let server = Server::start(Config {
-        auth: false,
         bucket_defaults,
         ..Config::default()
     })

@@ -21,13 +21,14 @@ pub struct StartOptions {
     pub host: Option<String>,
     /// Port to listen on. Default `0`, which picks a free port.
     pub port: Option<u16>,
-    /// Access key clients must sign with. Default `fakes3`.
+    /// Access key clients must sign with when `auth` is on. Default `fakes3`.
     pub access_key: Option<String>,
-    /// Secret key clients must sign with. Default `fakes3secret`.
+    /// Secret key clients must sign with when `auth` is on. Default `fakes3secret`.
     pub secret_key: Option<String>,
-    /// Accept requests signed with any access key and secret, and unsigned ones. Authorization
-    /// (ACLs, bucket policies) is not applied. Default `false`.
-    pub no_auth: Option<bool>,
+    /// Verify request signatures against `accessKey` / `secretKey`. By default (`false`) a request
+    /// signed with any access key and secret is accepted and acts as the bucket owner, while an
+    /// unsigned request is anonymous and subject to ACLs, bucket policies and Block Public Access.
+    pub auth: Option<bool>,
     /// Objects and parts at or above this many bytes are stored in a memfd instead of on the heap.
     /// Default 1 MiB.
     pub inline_threshold: Option<u32>,
@@ -249,7 +250,7 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         port: None,
         access_key: None,
         secret_key: None,
-        no_auth: None,
+        auth: None,
         inline_threshold: None,
         domains: None,
         memory_limit: None,
@@ -262,7 +263,7 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         port: options.port.unwrap_or(defaults.port),
         access_key: options.access_key.unwrap_or(defaults.access_key),
         secret_key: options.secret_key.unwrap_or(defaults.secret_key),
-        auth: !options.no_auth.unwrap_or(false),
+        auth: options.auth.unwrap_or(defaults.auth),
         inline_threshold: options.inline_threshold.map_or(defaults.inline_threshold, |n| n as usize),
         domains: options.domains.unwrap_or(defaults.domains),
         request_log: options.request_log.unwrap_or(defaults.request_log),

@@ -53,9 +53,27 @@ async fn servers_are_independent() {
 }
 
 #[tokio::test]
-async fn wrong_credentials_are_rejected() {
+async fn any_credentials_work_by_default() {
     let config = Config::default();
+    assert!(!config.auth);
     let server = Server::start(config.clone()).await.unwrap();
+    let wrong = Config {
+        secret_key: "nope".into(),
+        access_key: "someone-else".into(),
+        ..config
+    };
+    roundtrip(&client(server.endpoint(), &wrong)).await;
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn wrong_credentials_are_rejected_with_auth() {
+    let config = Config {
+        auth: true,
+        ..Config::default()
+    };
+    let server = Server::start(config.clone()).await.unwrap();
+    roundtrip(&client(server.endpoint(), &config)).await;
     let wrong = Config {
         secret_key: "nope".into(),
         ..config
@@ -65,23 +83,18 @@ async fn wrong_credentials_are_rejected() {
 }
 
 #[tokio::test]
-async fn no_auth_accepts_unsigned_requests() {
+async fn unsigned_requests_are_anonymous() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let server = Server::start(Config {
-        auth: false,
-        ..Config::default()
-    })
-    .await
-    .unwrap();
+    let server = Server::start(Config::default()).await.unwrap();
     let mut conn = tokio::net::TcpStream::connect(server.addr()).await.unwrap();
     conn.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
         .await
         .unwrap();
     let mut response = String::new();
     conn.read_to_string(&mut response).await.unwrap();
-    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
-    assert!(response.contains("<ListAllMyBucketsResult"), "{response}");
+    assert!(response.starts_with("HTTP/1.1 403"), "{response}");
+    assert!(response.contains("<Code>AccessDenied</Code>"), "{response}");
 }
 
 #[tokio::test]

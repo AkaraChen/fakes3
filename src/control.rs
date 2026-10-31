@@ -35,6 +35,8 @@ pub struct Control {
     pub(crate) memory: Arc<MemoryTracker>,
     pub(crate) log: RequestLog,
     pub(crate) bucket_defaults: BucketDefaults,
+    /// Whether request signatures are verified (`Config::auth`).
+    auth: bool,
     snapshots: Mutex<BTreeMap<String, SnapshotEntry>>,
     next_snapshot: AtomicU64,
 }
@@ -104,6 +106,7 @@ impl Control {
         memory: Arc<MemoryTracker>,
         log: RequestLog,
         bucket_defaults: BucketDefaults,
+        auth: bool,
     ) -> Self {
         Self {
             store,
@@ -111,6 +114,7 @@ impl Control {
             memory,
             log,
             bucket_defaults,
+            auth,
             snapshots: Mutex::default(),
             next_snapshot: AtomicU64::new(1),
         }
@@ -400,6 +404,7 @@ impl Control {
                         "store": counts_json(self.counts()),
                         "memory": memory_json(self.memory.stats()),
                         "bucket_defaults": self.bucket_defaults.as_str(),
+                        "auth": if self.auth { "strict" } else { "any-credentials" },
                         "snapshots": self.snapshots.lock().len(),
                         "request_log": log_config_json(&self.log),
                     }),

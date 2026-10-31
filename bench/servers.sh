@@ -44,8 +44,11 @@ launch() {
   case $name in
     fakes3)
       # The image from ./Dockerfile (bench/setup.sh builds it as fakes3:local).
+      # --auth: fakes3 does not verify signatures by default, but the other servers do, and the SDK
+      # matrix (bad_credentials), the s3-tests runner and the benchmarks all measure fakes3 as a
+      # server that checks them. Without it those results would silently change meaning.
       # shellcheck disable=SC2086 # FAKES3_RUN_ARGS is a list of extra `docker run` options, e.g. "-e FAKES3_BUCKET_DEFAULTS=aws"
-      run fakes3 ${FAKES3_RUN_ARGS:-} "${FAKES3_IMAGE:-fakes3:local}" --host 127.0.0.1 --port "$p" --access-key "$AK" --secret-key "$SK" ;;
+      run fakes3 ${FAKES3_RUN_ARGS:-} "${FAKES3_IMAGE:-fakes3:local}" --host 127.0.0.1 --port "$p" --access-key "$AK" --secret-key "$SK" --auth ;;
     minio)
       run minio --tmpfs /data -e MINIO_ROOT_USER="$AK" -e MINIO_ROOT_PASSWORD="$SK" \
         -e MINIO_BROWSER=off cgr.dev/chainguard/minio:latest server /data --address "127.0.0.1:$p" ;;

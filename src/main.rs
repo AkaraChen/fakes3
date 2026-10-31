@@ -27,8 +27,14 @@ struct Opt {
     #[arg(long, default_value = "fakes3secret", env = "FAKES3_SECRET_KEY")]
     secret_key: String,
 
-    /// Accept requests without verifying signatures.
-    #[arg(long)]
+    /// Verify request signatures against --access-key / --secret-key. Without it any credentials
+    /// work: a signed request is accepted unverified and acts as the bucket owner, an unsigned one
+    /// is anonymous and subject to ACLs, bucket policies and Block Public Access.
+    #[arg(long, env = "FAKES3_AUTH", value_parser = clap::builder::BoolishValueParser::new())]
+    auth: bool,
+
+    /// Deprecated, does nothing: not verifying signatures is the default now.
+    #[arg(long, hide = true, conflicts_with = "auth")]
     no_auth: bool,
 
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
@@ -73,6 +79,9 @@ fn main() -> std::io::Result<std::process::ExitCode> {
             .build()?
             .block_on(ctl::run(c)));
     }
+    if opt.no_auth {
+        eprintln!("fakes3: --no-auth is deprecated and does nothing; signatures are not verified unless --auth is given");
+    }
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()))
         .init();
@@ -81,7 +90,7 @@ fn main() -> std::io::Result<std::process::ExitCode> {
         port: opt.port,
         access_key: opt.access_key,
         secret_key: opt.secret_key,
-        auth: !opt.no_auth,
+        auth: opt.auth,
         inline_threshold: opt.inline_threshold,
         domains: opt.domains.into_iter().filter(|d| !d.is_empty()).collect(),
         request_log: !opt.no_request_log,

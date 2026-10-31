@@ -18,9 +18,11 @@
 //! Synchronous code can use [`Server::start_blocking`], which runs the server on a background
 //! runtime and stops it when the returned handle is dropped.
 //!
-//! Clients need path-style addressing, and the credentials from [`Config`] (`fakes3` /
-//! `fakes3secret` unless changed) unless `auth` is off, in which case any credentials work. Any
-//! region works. See `examples/aws_sdk.rs` for a complete setup with `aws-sdk-s3`.
+//! Clients need path-style addressing. By default any credentials work: a signed request is
+//! accepted without checking the signature and acts as the bucket owner, an unsigned one is
+//! anonymous and subject to ACLs, bucket policies and Block Public Access. With `auth` on, requests
+//! must be signed with the credentials from [`Config`] (`fakes3` / `fakes3secret` unless changed).
+//! Any region works. See `examples/aws_sdk.rs` for a complete setup with `aws-sdk-s3`.
 
 mod access;
 mod acl;
@@ -77,9 +79,10 @@ pub struct Config {
     /// Credentials clients must sign with when `auth` is on.
     pub access_key: String,
     pub secret_key: String,
-    /// Verify request signatures. When off, requests signed with any access key and secret are
-    /// accepted (and unsigned ones too), and authorization (ACLs, bucket policies, Block Public
-    /// Access) is not applied.
+    /// Verify request signatures (SigV4 and SigV2) against `access_key` / `secret_key`. Off by
+    /// default: a request signed with any access key and secret is accepted unverified and acts
+    /// as the bucket owner, and an unsigned request is anonymous. Authorization (ACLs, bucket
+    /// policies, Block Public Access) applies either way.
     pub auth: bool,
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     pub inline_threshold: usize,
@@ -107,7 +110,7 @@ impl Default for Config {
             port: 0,
             access_key: "fakes3".into(),
             secret_key: "fakes3secret".into(),
-            auth: true,
+            auth: false,
             inline_threshold: 1 << 20,
             domains: vec!["localhost".into()],
             request_log: true,
@@ -144,6 +147,7 @@ impl Server {
             MemoryTracker::new(limit),
             reqlog::RequestLog::new(config.request_log, config.request_log_capacity),
             config.bucket_defaults,
+            config.auth,
         ));
         let (stop, mut stopped) = oneshot::channel();
         let service = service(&config, control.clone());
@@ -268,13 +272,12 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
     if !config.domains.is_empty() {
         b.set_host(domains.clone());
     }
-    if config.auth {
-        b.set_auth(SimpleAuth::from_single(config.access_key.clone(), config.secret_key.clone()));
-    }
+    // s3s runs the access hook only when an auth provider is set. Without `auth` it never consults
+    // it for the requests it sees (see [`noauth`]), but a signed POST form still reaches it.
+    b.set_auth(SimpleAuth::from_single(config.access_key.clone(), config.secret_key.clone()));
     b.set_access(access::Access {
         store: control.store.clone(),
         clock: control.clock.clone(),
-        auth: config.auth,
     });
     let shared = Arc::new(Shared {
         s3: b.build(),
@@ -317,7 +320,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                     hyper::service::Service::call(&sh.s3, req).await?
                 } else {
                     let mut req = req.map(s3s::Body::from);
-                    if let (Some(key), Some(p)) = (noauth::accept_any(&mut req), logged.as_mut()) {
+                    if let (Some(key), Some(p)) = (noauth::accept_any(&mut req).and_then(|s| s.access_key.clone()), logged.as_mut()) {
                         p.set_access_key(key);
                     }
                     sh.s3.call(req).await?

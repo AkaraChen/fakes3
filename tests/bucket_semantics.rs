@@ -1,4 +1,6 @@
-//! End-to-end tests for the bucket-level S3 semantics, over real sockets with SigV4 auth on.
+//! End-to-end tests for the bucket-level S3 semantics, over real sockets. Requests are properly SigV4-signed with the configured
+//! credentials, which the default mode accepts without checking; the test that needs signatures to be
+//! verified starts the server with `auth: true`.
 
 mod common;
 
@@ -12,6 +14,17 @@ const DAY_NANOS: i64 = 86_400 * 1_000_000_000;
 
 async fn start() -> (Server, SocketAddr) {
     let server = Server::start(Config::default()).await.unwrap();
+    let addr = server.addr();
+    (server, addr)
+}
+
+async fn start_strict() -> (Server, SocketAddr) {
+    let server = Server::start(Config {
+        auth: true,
+        ..Config::default()
+    })
+    .await
+    .unwrap();
     let addr = server.addr();
     (server, addr)
 }
@@ -767,7 +780,7 @@ async fn copy_object_needs_read_access_to_the_source() {
 
 #[tokio::test]
 async fn signed_requests_are_unaffected_by_missing_config() {
-    let (_s, a) = start().await;
+    let (_s, a) = start_strict().await;
     make_bucket(a, "bkt").await;
     assert_eq!(put(a, "/bkt/k", b"v").await.status, 200);
     assert_eq!(send(a, req("GET", "/bkt/k")).await.body, "v");

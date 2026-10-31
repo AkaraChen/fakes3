@@ -1,5 +1,5 @@
 //! `Config::bucket_defaults`: what a new bucket starts with in `legacy` and `aws` mode, over real
-//! sockets with SigV4 auth on. The `aws` expectations are the documented AWS defaults:
+//! sockets with SigV4-signed requests. The `aws` expectations are the documented AWS defaults:
 //! <https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html> and
 //! <https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html>.
 

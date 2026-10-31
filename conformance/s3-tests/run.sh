@@ -5,6 +5,8 @@
 #
 #   <server> is a bench/servers.sh name, or `fakes3-aws`: fakes3 started with --bucket-defaults aws
 #   (AWS's 2023+ defaults for new buckets: ACLs disabled, Block Public Access, default SSE-S3).
+#   bench/servers.sh starts fakes3 with --auth (strict signature verification), the mode this suite
+#   has always been measured in; fakes3's default, which accepts any credentials, is not tested here.
 #
 #   S3TESTS_REF   ceph/s3-tests commit to test (default: the pin below)
 #   S3T_WORKERS   pytest-xdist workers, 1 = serial (default 4)
