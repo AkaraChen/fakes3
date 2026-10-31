@@ -45,21 +45,29 @@ impl RequestId {
         self.hex().iter().map(|&b| b as char).collect()
     }
 
-    /// The value of `x-amz-id-2` (S3's extended request id: 64 base64 characters).
-    pub fn host_id(self) -> String {
+    /// The value of `x-amz-id-2` (S3's extended request id: 64 base64 characters), on the stack.
+    fn host_id_bytes(self) -> [u8; 64] {
         let mut raw = [0u8; 48];
         let mut s = self.0;
         for chunk in raw.chunks_exact_mut(8) {
             s = s.wrapping_add(GAMMA);
             chunk.copy_from_slice(&mix(s).to_be_bytes());
         }
-        base64_simd::STANDARD.encode_to_string(raw)
+        let mut out = [0u8; 64];
+        // 48 bytes encode to exactly 64 characters, so the buffer is never short.
+        let _ = base64_simd::STANDARD.encode(&raw, base64_simd::Out::from_slice(&mut out));
+        out
+    }
+
+    #[cfg(test)]
+    fn host_id(self) -> String {
+        self.host_id_bytes().iter().map(|&b| b as char).collect()
     }
 
     /// Sets `x-amz-request-id` and `x-amz-id-2` unless the response already has them, and for an
     /// error response writes `<RequestId>` / `<HostId>` into its XML body.
     pub fn decorate(self, resp: &mut s3s::HttpResponse) {
-        let host_id = self.host_id();
+        let host_id = self.host_id_bytes();
         let h = resp.headers_mut();
         if !h.contains_key("x-amz-request-id")
             && let Ok(v) = http::HeaderValue::from_bytes(&self.hex())
@@ -67,7 +75,7 @@ impl RequestId {
             h.insert("x-amz-request-id", v);
         }
         if !h.contains_key("x-amz-id-2")
-            && let Ok(v) = http::HeaderValue::from_str(&host_id)
+            && let Ok(v) = http::HeaderValue::from_bytes(&host_id)
         {
             h.insert("x-amz-id-2", v);
         }
@@ -77,7 +85,7 @@ impl RequestId {
     }
 
     /// Error bodies are small, single-chunk XML; anything else (HEAD, streams) is left alone.
-    fn stamp_error_body(self, resp: &mut s3s::HttpResponse, host_id: &str) {
+    fn stamp_error_body(self, resp: &mut s3s::HttpResponse, host_id: &[u8]) {
         let Some(body) = resp.body().bytes() else { return };
         let Some(end) = body.windows(8).rposition(|w| w == b"</Error>") else {
             return;
@@ -90,7 +98,7 @@ impl RequestId {
             out.extend_from_slice(b"</RequestId>");
         }
         out.extend_from_slice(b"<HostId>");
-        out.extend_from_slice(host_id.as_bytes());
+        out.extend_from_slice(host_id);
         out.extend_from_slice(b"</HostId>");
         out.extend_from_slice(&body[end..]);
         let len = out.len();
