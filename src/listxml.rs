@@ -42,7 +42,6 @@ pub fn counters() -> (u64, u64) {
 const DECL: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
 const OPEN: &str = "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
 const OPEN_VERSIONS: &str = "<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
-const OWNER: &str = "<Owner><DisplayName>fakes3</DisplayName><ID>fakes3</ID></Owner>";
 
 /// What one byte of text content needs, per quick-xml's `escape`: nothing, an entity, or (a
 /// control character) a response s3s refuses to send.
@@ -258,13 +257,13 @@ impl Xml {
     }
 
     /// A `<Contents>` entry of ListObjects / ListObjectsV2.
-    fn contents(&mut self, key: &str, o: &StoreObject, url: bool, owner: bool, restore: Option<archive::Archived>) {
+    fn contents(&mut self, key: &str, o: &StoreObject, url: bool, owner: Option<&str>, restore: Option<archive::Archived>) {
         self.raw("<Contents>");
         self.etag(&o.e_tag);
         self.el_enc("Key", key, url);
         self.el_timestamp("LastModified", o.last_modified);
-        if owner {
-            self.raw(OWNER);
+        if let Some(owner) = owner {
+            self.raw(owner);
         }
         if let Some(status) = restore.and_then(|a| a.restore_status()) {
             self.restore_status(&status);
@@ -290,25 +289,25 @@ impl Xml {
         self.raw("</RestoreStatus>");
     }
 
-    fn version(&mut self, key: &str, v: &Version, o: &StoreObject, is_latest: bool, url: bool) {
+    fn version(&mut self, key: &str, v: &Version, o: &StoreObject, is_latest: bool, url: bool, owner: &str) {
         self.raw("<Version>");
         self.etag(&o.e_tag);
         self.el_bool("IsLatest", is_latest);
         self.el_enc("Key", key, url);
         self.el_timestamp("LastModified", o.last_modified);
-        self.raw(OWNER);
+        self.raw(owner);
         self.el_int("Size", o.data.size as i64);
         self.storage_class(o);
         self.el("VersionId", &v.id);
         self.raw("</Version>");
     }
 
-    fn delete_marker(&mut self, key: &str, v: &Version, is_latest: bool, url: bool) {
+    fn delete_marker(&mut self, key: &str, v: &Version, is_latest: bool, url: bool, owner: &str) {
         self.raw("<DeleteMarker>");
         self.el_bool("IsLatest", is_latest);
         self.el_enc("Key", key, url);
         self.el_timestamp("LastModified", v.last_modified);
-        self.raw(OWNER);
+        self.raw(owner);
         self.el("VersionId", &v.id);
         self.raw("</DeleteMarker>");
     }
@@ -384,7 +383,8 @@ fn count(page: Option<Bytes>) -> Option<Bytes> {
 // Fixed bytes of one entry: `<Contents>` with its ETag, LastModified, Size and StorageClass,
 // plus the owner.
 const CONTENTS: usize = 190;
-const OWNER_LEN: usize = OWNER.len();
+// An estimate: the length of the default account's owner element.
+const OWNER_LEN: usize = 64;
 const VERSION: usize = 280;
 
 impl FakeS3 {
@@ -420,7 +420,7 @@ impl FakeS3 {
             delimiter,
             after,
             max_keys,
-            |key, o| {
+            |key, v, o| {
                 let archived = restore
                     .then(|| o.ext.as_deref().and_then(|e| e.storage_class.as_ref()).map(|c| c.as_str()))
                     .flatten()
@@ -431,7 +431,8 @@ impl FakeS3 {
                         )
                     })
                     .and_then(|_| archive::archived(b, key, o, now));
-                page.xml.contents(key, o, url, owner, archived);
+                page.xml
+                    .contents(key, o, url, owner.then(|| self.users.owner_xml(v.owner)), archived);
             },
             |p| prefixes.common_prefix(p, url),
         );
@@ -490,7 +491,7 @@ impl FakeS3 {
             delimiter,
             marker,
             max_keys,
-            |key, o| page.xml.contents(key, o, url, true, None),
+            |key, v, o| page.xml.contents(key, o, url, Some(self.users.owner_xml(v.owner)), None),
             |p| prefixes.common_prefix(p, url),
         );
         drop(objects);
@@ -543,8 +544,8 @@ impl FakeS3 {
             prefix,
             max_keys,
             |key, v, is_latest| match &v.obj {
-                Some(o) => page.xml.version(key, v, o, is_latest, url),
-                None => markers.delete_marker(key, v, is_latest, url),
+                Some(o) => page.xml.version(key, v, o, is_latest, url, self.users.owner_xml(v.owner)),
+                None => markers.delete_marker(key, v, is_latest, url, self.users.owner_xml(v.owner)),
             },
             |p| prefixes.common_prefix(p, url),
         );
@@ -590,7 +591,7 @@ fn hex_into(x: &mut Xml, s: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::acl::OWNER_ID;
+    use crate::users::{UserId, Users};
 
     fn xml(f: impl FnOnce(&mut Xml)) -> String {
         let mut x = Xml::with_capacity(0);
@@ -601,11 +602,13 @@ mod tests {
 
     #[test]
     fn owner_matches_the_dto() {
-        assert_eq!(OWNER_ID, "fakes3");
-        let mut buf = Vec::new();
-        let mut ser = s3s::xml::Serializer::new(&mut buf);
-        ser.content("Owner", &crate::acl::Acl::owner()).unwrap();
-        assert_eq!(String::from_utf8(buf).unwrap(), OWNER);
+        let users = Users::new("fakes3", "s", &["a<b&c:AK:SK".parse().unwrap()]).unwrap();
+        for id in [UserId::DEFAULT, users.resolve(Some("AK"))] {
+            let mut buf = Vec::new();
+            let mut ser = s3s::xml::Serializer::new(&mut buf);
+            ser.content("Owner", &users.owner(id)).unwrap();
+            assert_eq!(String::from_utf8(buf).unwrap(), users.owner_xml(id));
+        }
     }
 
     /// The same bytes as s3s' serializer for strings: the five entities and `\r`, nothing else.

@@ -17,8 +17,10 @@
 //!   trailing checksum is still verified against the data.
 //!
 //! s3s can no longer tell a signed request from an anonymous one afterwards, so the wrapper records
-//! that a signature was there, and which access key it named, in a [`Signed`] request extension.
-//! [`crate::access`] turns it into the identity the request acts as (the account owner).
+//! that a signature was there, which access key it named and which identity that is
+//! ([`crate::users::Users::resolve`]: an access key nobody configured is the default identity,
+//! the owner), in a [`Signed`] request extension. [`crate::access`] turns it into the identity the
+//! request acts as.
 //!
 //! What is not checked any more is the signature itself and everything derived from it: clock
 //! skew, the payload hash in `x-amz-content-sha256`, signed-header lists. Signed POST forms
@@ -34,6 +36,8 @@ use futures::Stream;
 use parking_lot::Mutex;
 use s3s::StdError;
 use s3s::stream::{ByteStream, RemainingLength};
+
+use crate::users::{UserId, Users};
 
 /// Query parameters that only exist to authenticate a presigned URL.
 const V4_QUERY: &[&str] = &[
@@ -53,16 +57,19 @@ pub struct Signed {
     pub access_key: Option<String>,
     /// The signature was in the query string (a presigned URL) rather than a header.
     pub presigned: bool,
+    /// The identity the access key belongs to.
+    pub user: UserId,
 }
 
 /// Strips the signature from `req` and decodes an aws-chunked body, so s3s treats it as an
 /// ordinary request. A request that carried a signature gets a [`Signed`] extension.
-pub fn accept_any(req: &mut http::Request<s3s::Body>) -> Option<&Signed> {
+pub fn accept_any<'a>(req: &'a mut http::Request<s3s::Body>, users: &Users) -> Option<&'a Signed> {
     let mut signed = None;
     if let Some(auth) = req.headers_mut().remove(http::header::AUTHORIZATION) {
         signed = Some(Signed {
             access_key: auth.to_str().ok().and_then(header_access_key),
             presigned: false,
+            user: UserId::DEFAULT,
         });
     }
     if let Some(query) = req.uri().query()
@@ -76,6 +83,7 @@ pub fn accept_any(req: &mut http::Request<s3s::Body>) -> Option<&Signed> {
             None => Some(Signed {
                 access_key: key,
                 presigned: true,
+                user: UserId::DEFAULT,
             }),
         };
         let path = req.uri().path();
@@ -99,7 +107,8 @@ pub fn accept_any(req: &mut http::Request<s3s::Body>) -> Option<&Signed> {
     if streaming {
         decode_aws_chunked(req);
     }
-    let signed = signed?;
+    let mut signed = signed?;
+    signed.user = users.resolve(signed.access_key.as_deref());
     req.extensions_mut().insert(signed);
     req.extensions().get()
 }
@@ -459,7 +468,7 @@ mod tests {
         if let Some(a) = auth {
             req.headers_mut().insert(http::header::AUTHORIZATION, a.parse().unwrap());
         }
-        let marker = accept_any(&mut req).cloned();
+        let marker = accept_any(&mut req, &Users::default()).cloned();
         let left = req.uri().to_string();
         (marker, left, req.headers().contains_key(http::header::AUTHORIZATION))
     }
@@ -473,6 +482,7 @@ mod tests {
         let want = Signed {
             access_key: Some("AK".into()),
             presigned: false,
+            user: UserId::DEFAULT,
         };
         assert_eq!((marker, uri.as_str(), header), (Some(want), "/b/k", false));
 
@@ -480,6 +490,7 @@ mod tests {
         let want = Signed {
             access_key: Some("AK2".into()),
             presigned: true,
+            user: UserId::DEFAULT,
         };
         assert_eq!((marker, uri.as_str()), (Some(want), "/b/k?versionId=1"));
 
@@ -489,6 +500,26 @@ mod tests {
 
         let (marker, uri, _) = signed("/b/k?prefix=a", None);
         assert_eq!((marker, uri.as_str()), (None, "/b/k?prefix=a"));
+    }
+
+    #[test]
+    fn the_access_key_picks_the_identity() {
+        let users = Users::new("fakes3", "s", &["alt:ALTKEY:x".parse().unwrap()]).unwrap();
+        let user_of = |uri: &str, auth: Option<&str>| {
+            let mut req = http::Request::get(uri).body(s3s::Body::empty()).unwrap();
+            if let Some(a) = auth {
+                req.headers_mut().insert(http::header::AUTHORIZATION, a.parse().unwrap());
+            }
+            accept_any(&mut req, &users).map(|s| s.user)
+        };
+        let header = |key: &str| format!("AWS4-HMAC-SHA256 Credential={key}/20240101/r/s3/aws4_request, Signature=ab");
+        assert_eq!(user_of("/b/k", Some(&header("ALTKEY"))), Some(UserId::DEFAULT.next()));
+        assert_eq!(user_of("/b/k", Some(&header("fakes3"))), Some(UserId::DEFAULT));
+        // Nobody's key is the default account; no signature at all is anonymous.
+        assert_eq!(user_of("/b/k", Some(&header("stranger"))), Some(UserId::DEFAULT));
+        assert_eq!(user_of("/b/k", None), None);
+        let query = "/b/k?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ALTKEY%2F20240101%2Fr%2Fs3%2Faws4_request&X-Amz-Signature=ab";
+        assert_eq!(user_of(query, None), Some(UserId::DEFAULT.next()));
     }
 
     #[test]

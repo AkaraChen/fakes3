@@ -9,12 +9,13 @@ use http::StatusCode;
 use s3s::dto::*;
 use s3s::{S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 
-use crate::acl::{Acl, AclArgs, acl_args, resolve};
+use crate::acl::{Acl, AclArgs, Parties, acl_args, resolve};
 use crate::bucket_config::{BucketConfig, Ownership, PublicAccessBlock, custom_error};
 use crate::lifecycle::Lifecycle;
 use crate::policy::Policy;
 use crate::s3impl::FakeS3;
 use crate::store::Version;
+use crate::users::UserId;
 
 type Out<T> = S3Result<S3Response<T>>;
 
@@ -32,30 +33,44 @@ fn access_denied(msg: &'static str) -> S3Error {
 }
 
 /// The ACL a PutBucketAcl / PutObjectAcl request asks for: from the body or from the headers.
-fn requested_acl(cfg: &BucketConfig, body: Option<AccessControlPolicy>, args: &AclArgs<'_>, bucket: bool) -> S3Result<Acl> {
+fn requested_acl(
+    cfg: &BucketConfig,
+    body: Option<AccessControlPolicy>,
+    args: &AclArgs<'_>,
+    bucket: bool,
+    who: Parties<'_>,
+) -> S3Result<Acl> {
     match body {
         Some(_) if !args.is_empty() => Err(s3_error!(UnexpectedContent, "This request does not support content")),
         Some(p) => {
             if !cfg.acls_enabled() {
                 return Err(s3_error!(AccessControlListNotSupported, "The bucket does not allow ACLs"));
             }
-            let acl = Acl::from_dto(p)?;
+            let acl = Acl::from_dto(p, who.users)?;
             if acl.is_public() && cfg.public_access_block.read().is_some_and(|b| b.block_public_acls) {
                 return Err(access_denied("Access Denied"));
             }
             Ok(acl)
         }
         None if args.is_empty() => Err(s3_error!(MissingSecurityHeader, "Your request was missing a required header")),
-        None => Ok(resolve(cfg, args, bucket)?.unwrap_or_else(Acl::private)),
+        None => match resolve(cfg, args, bucket, who)? {
+            Some(acl) => Ok(acl),
+            None => Ok(Acl::private(&who.users.get(who.owner).canonical_id)),
+        },
     }
 }
 
 /// What a GET reports: ACLs that are disabled read as the default.
-fn visible(cfg: &BucketConfig, acl: Option<&Acl>) -> Vec<Grant> {
+fn visible(cfg: &BucketConfig, acl: Option<&Acl>, owner: UserId, users: &crate::users::Users) -> Vec<Grant> {
     match acl {
-        Some(a) if cfg.acls_enabled() => a.to_dto(),
-        _ => Acl::private().to_dto(),
+        Some(a) if cfg.acls_enabled() => a.to_dto(users),
+        _ => Acl::private(&users.get(owner).canonical_id).to_dto(users),
     }
+}
+
+/// An ACL stored on a resource: `None` when it is the default `private`.
+fn stored(acl: Acl, owner: UserId, users: &crate::users::Users) -> Option<Acl> {
+    (acl != Acl::private(&users.get(owner).canonical_id)).then_some(acl)
 }
 
 impl FakeS3 {
@@ -63,8 +78,8 @@ impl FakeS3 {
         let b = self.bucket(&req.input.bucket)?;
         let acl = b.config.acl.read().clone();
         Ok(S3Response::new(GetBucketAclOutput {
-            grants: Some(visible(&b.config, Some(&acl))),
-            owner: Some(Acl::owner()),
+            grants: Some(visible(&b.config, acl.as_ref(), b.owner, &self.users)),
+            owner: Some(self.users.owner(b.owner)),
         }))
     }
 
@@ -72,8 +87,13 @@ impl FakeS3 {
         let mut input = req.input;
         let b = self.bucket(&input.bucket)?;
         let body = input.access_control_policy.take();
-        let acl = requested_acl(&b.config, body, &acl_args!(&input, bucket), true)?;
-        *b.config.acl.write() = acl;
+        let who = Parties {
+            users: &self.users,
+            owner: b.owner,
+            bucket_owner: b.owner,
+        };
+        let acl = requested_acl(&b.config, body, &acl_args!(&input, bucket), true, who)?;
+        *b.config.acl.write() = stored(acl, b.owner, &self.users);
         Ok(S3Response::new(PutBucketAclOutput {}))
     }
 
@@ -82,9 +102,11 @@ impl FakeS3 {
         let b = self.bucket(&input.bucket)?;
         let (v, _) = self.version(&input.bucket, &input.key, input.version_id.as_deref())?;
         let o = v.obj.as_ref().expect("resolved versions are never delete markers");
+        // With ACLs disabled the bucket owner owns every object.
+        let owner = if b.config.acls_enabled() { v.owner } else { b.owner };
         Ok(S3Response::new(GetObjectAclOutput {
-            grants: Some(visible(&b.config, o.acl.as_deref())),
-            owner: Some(Acl::owner()),
+            grants: Some(visible(&b.config, o.acl.as_deref(), owner, &self.users)),
+            owner: Some(self.users.owner(owner)),
             ..Default::default()
         }))
     }
@@ -93,7 +115,6 @@ impl FakeS3 {
         let mut input = req.input;
         let b = self.bucket(&input.bucket)?;
         let body = input.access_control_policy.take();
-        let acl = requested_acl(&b.config, body, &acl_args!(&input), false)?;
         let mut objects = b.objects.write();
         let entry = objects.get_mut(&input.key).ok_or_else(|| s3_error!(NoSuchKey))?;
         let pos = match &input.version_id {
@@ -112,12 +133,20 @@ impl FakeS3 {
                 s3_error!(NoSuchKey)
             });
         };
+        let owner = if b.config.acls_enabled() { v.owner } else { b.owner };
+        let who = Parties {
+            users: &self.users,
+            owner,
+            bucket_owner: b.owner,
+        };
+        let acl = requested_acl(&b.config, body, &acl_args!(&input), false, who)?;
         let mut o = o.clone();
-        o.acl = (acl != Acl::private()).then(|| Arc::new(acl));
+        o.acl = stored(acl, owner, &self.users).map(Arc::new);
         entry.versions[pos] = Arc::new(Version {
             id: v.id.clone(),
             obj: Some(o),
             last_modified: v.last_modified,
+            owner: v.owner,
         });
         Ok(S3Response::new(PutObjectAclOutput::default()))
     }
@@ -149,6 +178,13 @@ impl FakeS3 {
             return Err(malformed_xml());
         };
         let o = Ownership::parse(rule.object_ownership.as_str()).ok_or_else(malformed_xml)?;
+        // ACLs would stop applying: AWS wants the grants moved elsewhere first.
+        if o == Ownership::Enforced && b.config.acl.read().is_some() {
+            return Err(s3_error!(
+                InvalidBucketAclWithObjectOwnership,
+                "Bucket cannot have ACLs set with ObjectOwnership's BucketOwnerEnforced setting"
+            ));
+        }
         *b.config.ownership.write() = Some(o);
         Ok(S3Response::new(PutBucketOwnershipControlsOutput {}))
     }

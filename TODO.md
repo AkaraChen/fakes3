@@ -19,8 +19,10 @@
       s3s 没有跳过验签的开关，所以在服务包装层去掉签名再交给 s3s（aws-chunked 自己解码），并在请求扩展里留下 `Signed { access_key, presigned }`（见 `src/noauth.rs`、`src/access.rs`）
   - 带签名的 POST 表单上传（`x-amz-signature` / `signature` 字段）仍由 s3s 按配置的凭证校验，任意凭证的签名表单不被接受
   - `--no-auth` 保留为已弃用、不起作用的别名，之后可以删除
-- [ ] 多个身份：`--user name:access-key:secret[:canonical-id]`。默认模式下按请求里的 access key 选身份、不校验 secret，`--auth` 下校验该用户的 secret；
-      “带签名的请求是谁”只在 `src/access.rs` 的 `identify` 里决定（现在恒为 owner），Bucket Policy 的 Principal、ACL 的 grantee 和 owner 判断需要跟着区分身份
+- [x] 多个身份：`--user name:access-key:secret[:account-id[:canonical-id]]`（Node 的 `users`，库的 `Config::users`，见 [docs/multi-user.md](docs/multi-user.md)）。
+      一个身份就是一个账户；默认模式下按请求里的 access key 选账户、不校验 secret（没配置的 key 是默认账户），`--auth` 下校验该账户的 secret；
+      bucket、对象版本、分段上传各存 owner，ACL grantee、Bucket Policy 的 Principal、`x-amz-expected-bucket-owner`、列举里的 Owner 都按账户区分；控制面 `status` 列出账户
+  - 不做：IAM 用户和策略、角色与 STS、邮箱授权、RGW 的 tenant 语法
 
 ## S3 语义完整度
 

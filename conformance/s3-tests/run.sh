@@ -7,6 +7,9 @@
 #   (AWS's 2023+ defaults for new buckets: ACLs disabled, Block Public Access, default SSE-S3).
 #   bench/servers.sh starts fakes3 with --auth (strict signature verification), the mode this suite
 #   has always been measured in; fakes3's default, which accepts any credentials, is not tested here.
+#   On fakes3 the `alt` and `tenant` users are separate accounts with their own credentials
+#   (FAKES3_USERS, docs/multi-user.md); the other servers only know one credential, so there
+#   every user below is that credential and the tests that need a second one cannot pass.
 #
 #   S3TESTS_REF   ceph/s3-tests commit to test (default: the pin below)
 #   S3T_WORKERS   pytest-xdist workers, 1 = serial (default 4)
@@ -44,6 +47,17 @@ SRC=$WORK/s3-tests
 VENV=$WORK/venv
 AK=${S3_ACCESS_KEY:-fakes3}
 SK=${S3_SECRET_KEY:-fakes3secret}
+# alt and tenant: the identities of the config below. Servers that know only one credential give
+# every user that one; fakes3 is started with the extra accounts.
+ALT_AK=$AK ALT_SK=$SK TENANT_AK=$AK TENANT_SK=$SK
+ALT_ID=56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234
+TENANT_ID='testx$9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+if [ "$SERVER_NAME" = fakes3 ]; then
+  ALT_AK=ALTUSERACCESSKEY00 ALT_SK=altusersecretkey0000000000000000000000000
+  TENANT_AK=TENANTACCESSKEY0000 TENANT_SK=tenantsecretkey000000000000000000000000
+  # name:access-key:secret:account-id:canonical-id (no spaces: the value is word-split by servers.sh)
+  export FAKES3_RUN_ARGS="${FAKES3_RUN_ARGS:-} -e FAKES3_USERS=alt-user:$ALT_AK:$ALT_SK:222222222222:$ALT_ID,tenant-user:$TENANT_AK:$TENANT_SK:333333333333:$TENANT_ID"
+fi
 
 # --- checkout at the pinned commit
 if [ "$(git -C "$SRC" rev-parse HEAD 2>/dev/null || true)" != "$S3TESTS_REF" ]; then
@@ -76,8 +90,8 @@ if [ -z "${S3T_NO_SERVER:-}" ]; then
 fi
 
 # --- s3tests.conf
-# The servers know one credential, so every user below is that credential: tests that need a second
-# identity cannot pass and are classified as such by report.py. main's ids are what fakes3 reports as owner.
+# main's ids are what fakes3 reports as owner. Where the server knows only one credential (everything
+# but fakes3) tests that need a second identity cannot pass and report.py classifies them as such.
 rm -rf "$OUT"
 mkdir -p "$OUT"
 CONF=$OUT/s3tests.conf
@@ -103,18 +117,18 @@ lc_debug_interval = 1
 
 [s3 alt]
 display_name = alt-user
-user_id = 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234
+user_id = $ALT_ID
 email = alt@example.com
-access_key = $AK
-secret_key = $SK
+access_key = $ALT_AK
+secret_key = $ALT_SK
 
 [s3 tenant]
 display_name = tenant-user
 user_id = testx\$9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 email = tenant@example.com
 tenant = testx
-access_key = $AK
-secret_key = $SK
+access_key = $TENANT_AK
+secret_key = $TENANT_SK
 
 [iam]
 display_name = iam-user

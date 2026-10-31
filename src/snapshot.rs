@@ -13,6 +13,7 @@ use parking_lot::RwLock;
 use crate::bucket_config::ConfigSnapshot;
 use crate::objext::{BucketCfg, CfgState};
 use crate::store::{Bucket, Index, Store, Upload, Versioning};
+use crate::users::UserId;
 
 pub struct StoreSnapshot {
     buckets: Vec<(String, BucketSnapshot)>,
@@ -20,6 +21,7 @@ pub struct StoreSnapshot {
 
 struct BucketSnapshot {
     created: SystemTime,
+    owner: UserId,
     versioning: Versioning,
     tags: Option<Vec<(String, String)>>,
     objects: Index,
@@ -63,6 +65,7 @@ impl Store {
                 // Listing every field makes adding one to `Bucket` a compile error here.
                 let Bucket {
                     created,
+                    owner,
                     versioning,
                     tags,
                     objects,
@@ -72,6 +75,7 @@ impl Store {
                 } = &**b;
                 let snap = BucketSnapshot {
                     created: *created,
+                    owner: *owner,
                     versioning: *versioning.read(),
                     tags: tags.read().clone(),
                     objects: objects.read().clone(),
@@ -94,6 +98,7 @@ impl Store {
             .map(|(name, s)| {
                 let BucketSnapshot {
                     created,
+                    owner,
                     versioning,
                     tags,
                     objects,
@@ -103,6 +108,7 @@ impl Store {
                 } = s;
                 let bucket = Bucket {
                     created: *created,
+                    owner: *owner,
                     versioning: RwLock::new(*versioning),
                     tags: RwLock::new(tags.clone()),
                     objects: RwLock::new(objects.clone()),
@@ -165,12 +171,12 @@ mod tests {
     }
 
     fn fill(store: &Store, bucket: &str, n: usize) {
-        let b = Arc::new(Bucket::new(SystemTime::UNIX_EPOCH));
+        let b = Arc::new(Bucket::new(SystemTime::UNIX_EPOCH, UserId::DEFAULT));
         {
             let mut objects = b.objects.write();
             for i in 0..n {
                 // Same key shape as the benchmarks: a short prefix and a counter.
-                b.put(&mut objects, format!("prefix/{i:08}"), object(i));
+                b.put(&mut objects, format!("prefix/{i:08}"), object(i), UserId::DEFAULT);
             }
         }
         store.buckets.write().insert(bucket.to_owned(), b);
@@ -204,6 +210,7 @@ mod tests {
                     id: "null".into(),
                     obj: Some(object(99)),
                     last_modified: SystemTime::UNIX_EPOCH,
+                    owner: UserId::DEFAULT,
                 }));
         }
         store.buckets.write().remove("b");
@@ -260,7 +267,7 @@ mod tests {
                     let b = store.bucket("bench").unwrap();
                     let mut objects = b.objects.write();
                     for i in 0..1000 {
-                        b.put(&mut objects, format!("prefix/{:08}", i * (n / 1000)), object(i));
+                        b.put(&mut objects, format!("prefix/{:08}", i * (n / 1000)), object(i), UserId::DEFAULT);
                     }
                 }
                 mutate = mutate.min(t.elapsed());

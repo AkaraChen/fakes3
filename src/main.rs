@@ -27,8 +27,20 @@ struct Opt {
     #[arg(long, default_value = "fakes3secret", env = "FAKES3_SECRET_KEY")]
     secret_key: String,
 
-    /// Verify request signatures against --access-key / --secret-key. Without it any credentials
-    /// work: a signed request is accepted unverified and acts as the bucket owner, an unsigned one
+    /// Another account: `name:access-key:secret[:account-id[:canonical-id]]`; repeatable (or
+    /// comma-separated in FAKES3_USERS). Each account owns the buckets and objects it creates;
+    /// --access-key / --secret-key remain the first account, the owner of everything else.
+    #[arg(
+        long = "user",
+        env = "FAKES3_USERS",
+        value_delimiter = ',',
+        value_name = "NAME:ACCESS_KEY:SECRET[:ACCOUNT_ID[:CANONICAL_ID]]"
+    )]
+    users: Vec<fakes3::UserConfig>,
+
+    /// Verify request signatures against the accounts' credentials (--access-key / --secret-key
+    /// and --user). Without it any credentials work: a signed request is accepted unverified and
+    /// acts as the account its access key belongs to (the first one if none does), an unsigned one
     /// is anonymous and subject to ACLs, bucket policies and Block Public Access.
     #[arg(long, env = "FAKES3_AUTH", value_parser = clap::builder::BoolishValueParser::new())]
     auth: bool,
@@ -95,6 +107,7 @@ fn main() -> std::io::Result<std::process::ExitCode> {
         port: opt.port,
         access_key: opt.access_key,
         secret_key: opt.secret_key,
+        users: opt.users,
         auth: opt.auth,
         inline_threshold: opt.inline_threshold,
         domains: opt.domains.into_iter().filter(|d| !d.is_empty()).collect(),

@@ -17,6 +17,7 @@ use parking_lot::RwLock;
 
 use crate::memory::{LimitExceeded, MemoryTracker, Reservation, Tracked};
 use crate::objext::{BucketCfg, ObjectExt};
+use crate::users::UserId;
 
 #[derive(Clone, Default)]
 pub struct ObjectData {
@@ -89,6 +90,9 @@ pub struct Version {
     pub id: String,
     pub obj: Option<Object>,
     pub last_modified: SystemTime,
+    /// The account that owns the object (see `docs/multi-user.md`); for a delete marker, the one
+    /// that created it.
+    pub owner: UserId,
 }
 
 /// All versions of a key, oldest first. Unversioned buckets keep a single `null` version.
@@ -129,6 +133,10 @@ pub struct Part {
 
 #[derive(Clone)]
 pub struct Upload {
+    /// Who sent CreateMultipartUpload.
+    pub initiator: UserId,
+    /// Who will own the object, decided like a PutObject's owner when the upload starts.
+    pub owner: UserId,
     pub meta: ObjectMeta,
     pub tags: Vec<(String, String)>,
     pub ext: Option<ObjectExt>,
@@ -145,6 +153,8 @@ pub type Index = BTreeMap<String, Entry>;
 
 pub struct Bucket {
     pub created: SystemTime,
+    /// The account that created the bucket.
+    pub owner: UserId,
     pub versioning: RwLock<Versioning>,
     pub tags: RwLock<Option<Vec<(String, String)>>>,
     pub objects: RwLock<Index>,
@@ -166,9 +176,10 @@ impl Store {
 }
 
 impl Bucket {
-    pub fn new(now: SystemTime) -> Self {
+    pub fn new(now: SystemTime, owner: UserId) -> Self {
         Self {
             created: now,
+            owner,
             versioning: RwLock::new(Versioning::Unversioned),
             tags: RwLock::default(),
             objects: RwLock::default(),
@@ -187,7 +198,7 @@ impl Bucket {
     /// Stores `obj` as the newest version of `key` and returns the version id to report: only
     /// buckets with versioning Enabled report one (a suspended bucket writes the `null` version
     /// silently, like the PutObject reference's suspended-bucket example).
-    pub fn put(&self, objects: &mut Index, key: String, obj: Object) -> Option<String> {
+    pub fn put(&self, objects: &mut Index, key: String, obj: Object, owner: UserId) -> Option<String> {
         let mode = *self.versioning.read();
         let entry = objects.entry(key).or_default();
         let id = match mode {
@@ -202,12 +213,13 @@ impl Bucket {
             id: id.clone(),
             obj: Some(obj),
             last_modified,
+            owner,
         }));
         (mode == Versioning::Enabled).then_some(id)
     }
 
     /// A DELETE without a version id. Returns the id of the delete marker created, if any.
-    pub fn delete_current(&self, objects: &mut Index, key: &str, now: SystemTime) -> Option<String> {
+    pub fn delete_current(&self, objects: &mut Index, key: &str, now: SystemTime, owner: UserId) -> Option<String> {
         let mode = *self.versioning.read();
         if mode == Versioning::Unversioned {
             objects.remove(key);
@@ -224,6 +236,7 @@ impl Bucket {
             id: id.clone(),
             obj: None,
             last_modified: now,
+            owner,
         }));
         Some(id)
     }
@@ -428,20 +441,27 @@ mod tests {
     fn dropping_buckets_releases_everything_including_shared_and_versioned_data() {
         let t = MemoryTracker::new(None);
         let store = Store::default();
-        let bucket = Arc::new(Bucket::new(SystemTime::UNIX_EPOCH));
+        let bucket = Arc::new(Bucket::new(SystemTime::UNIX_EPOCH, UserId::DEFAULT));
         *bucket.versioning.write() = Versioning::Enabled;
         store.buckets.write().insert("b".into(), bucket.clone());
 
         let shared = blob(&t, 1000, 2500, true).unwrap();
         {
             let mut objects = bucket.objects.write();
-            bucket.put(&mut objects, "a".into(), object(shared.clone()));
-            bucket.put(&mut objects, "a".into(), object(blob(&t, 1000, 300, true).unwrap()));
-            bucket.put(&mut objects, "copy".into(), object(shared.slice(0..100)));
+            bucket.put(&mut objects, "a".into(), object(shared.clone()), UserId::DEFAULT);
+            bucket.put(
+                &mut objects,
+                "a".into(),
+                object(blob(&t, 1000, 300, true).unwrap()),
+                UserId::DEFAULT,
+            );
+            bucket.put(&mut objects, "copy".into(), object(shared.slice(0..100)), UserId::DEFAULT);
         }
         bucket.uploads.write().insert(
             ("k".into(), "u".into()),
             Upload {
+                initiator: UserId::DEFAULT,
+                owner: UserId::DEFAULT,
                 meta: ObjectMeta::default(),
                 tags: Vec::new(),
                 ext: None,
