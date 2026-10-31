@@ -898,3 +898,63 @@ async fn snapshot_restore_keeps_object_lock_and_encryption_state() {
     assert_eq!(done.status, 200, "{}", done.body);
     assert_eq!(c.head("/bkt/mp", &[]).await.header("x-amz-storage-class"), Some("ONEZONE_IA"));
 }
+
+#[tokio::test]
+async fn lifecycle_respects_object_lock_and_headers_coexist() {
+    let (server, c) = start().await;
+    c.lock_bucket("bkt").await;
+    let day = |n: u64| UNIX_EPOCH + Duration::from_secs(1_700_000_000 + n * 86_400);
+    server.clock().freeze(Some(day(0))).unwrap();
+    let lifecycle = "<LifecycleConfiguration>\
+        <Rule><ID>old</ID><Status>Enabled</Status><Filter><Prefix></Prefix></Filter><NoncurrentVersionExpiration><NoncurrentDays>1</NoncurrentDays></NoncurrentVersionExpiration></Rule>\
+        <Rule><ID>exp</ID><Status>Enabled</Status><Filter><Prefix>exp/</Prefix></Filter><Expiration><Days>30</Days></Expiration></Rule>\
+        </LifecycleConfiguration>";
+    assert_eq!(c.put("/bkt?lifecycle", &[], lifecycle).await.status, 200);
+
+    // ACL, expiration, lock and SSE headers share one PUT and its HEAD.
+    let r = c
+        .put(
+            "/bkt/exp/o",
+            &[
+                ("x-amz-acl", "private"),
+                ("x-amz-server-side-encryption", "aws:kms"),
+                ("x-amz-object-lock-mode", "GOVERNANCE"),
+                ("x-amz-object-lock-retain-until-date", "2099-01-01T00:00:00Z"),
+            ],
+            "x",
+        )
+        .await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert!(
+        r.header("x-amz-expiration").is_some_and(|e| e.contains("rule-id=\"exp\"")),
+        "{:?}",
+        r.headers
+    );
+    assert_eq!(r.header("x-amz-server-side-encryption"), Some("aws:kms"));
+    let h = c.head("/bkt/exp/o", &[]).await;
+    assert!(h.header("x-amz-expiration").is_some());
+    assert_eq!(h.header("x-amz-object-lock-mode"), Some("GOVERNANCE"));
+    assert_eq!(h.header("x-amz-server-side-encryption"), Some("aws:kms"));
+
+    // A locked noncurrent version outlives its rule; an unlocked one does not.
+    c.put(
+        "/bkt/k",
+        &[
+            ("x-amz-object-lock-mode", "COMPLIANCE"),
+            ("x-amz-object-lock-retain-until-date", "2023-12-01T00:00:00Z"),
+        ],
+        "1",
+    )
+    .await;
+    c.put("/bkt/k", &[], "2").await;
+    c.put("/bkt/j", &[], "1").await;
+    c.put("/bkt/j", &[], "2").await;
+    let versions_of = |body: &str, key: &str| body.matches(&format!("<Key>{key}</Key>")).count();
+    server.clock().set(day(3)).unwrap();
+    let v = c.get("/bkt?versions", &[]).await;
+    assert_eq!((versions_of(&v.body, "k"), versions_of(&v.body, "j")), (2, 1), "{}", v.body);
+    // 2023-12-01 is day 17 of this clock; after it the retention is over.
+    server.clock().set(day(20)).unwrap();
+    let v = c.get("/bkt?versions", &[]).await;
+    assert_eq!((versions_of(&v.body, "k"), versions_of(&v.body, "j")), (1, 1), "{}", v.body);
+}

@@ -51,6 +51,7 @@ s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 | `--access-key` | `FAKES3_ACCESS_KEY` | `fakes3` | 访问凭证 |
 | `--secret-key` | `FAKES3_SECRET_KEY` | `fakes3secret` | 访问凭证 |
 | `--no-auth` | | 关 | 不校验签名 |
+| `--domain` | `FAKES3_DOMAIN` | `localhost` | virtual-host 寻址的基础域名，可重复（或逗号分隔）；`<bucket>.<domain>` 选择 bucket，其它主机名仍按 path-style 处理；传空字符串关闭 |
 | `--inline-threshold` | | `1048576` | 达到这个大小的对象或 part 存进 memfd，小于它的放在堆上 |
 | `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | 对象数据占用内存的上限，见下文。可以写 `2GiB`、`512MiB`、`unlimited`、`auto` |
 
@@ -88,8 +89,15 @@ s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
   分段上传支持 COMPOSITE 和 FULL_OBJECT；没指定算法时默认计算 CRC64NVME，和现在的 AWS S3 一致
 - 认证：SigV4（包括 presigned URL 和带 trailer 的流式上传）、SigV2
 - 对象标签、Range 读取、Content-MD5 校验
+- 访问控制：Bucket/Object ACL（canned、grant 头、请求体）、OwnershipControls（BucketOwnerEnforced 时 ACL 被禁用）、
+  PublicAccessBlock、Bucket Policy（含 Condition，显式 Deny 对已签名请求也生效）；未签名的匿名请求在 policy 或公开 ACL 允许时放行，
+  `--no-auth` 时不做授权
+- CORS：预检 `OPTIONS` 和实际响应上的 CORS 头
+- Lifecycle：过期（含版本控制下的删除标记、非当前版本、`NewerNoncurrentVersions`）和清理未完成的分段上传，按服务端虚拟时钟在 UTC 日期变化后的第一次访问时执行；
+  没有规则的 bucket 零开销
+- Website、Notification 配置的存取（不提供网站端点，不投递事件）；POST policy 表单上传
 
-还没做的功能见 [TODO.md](TODO.md)，主要是 ACL/Policy、CORS、Lifecycle，以及测试控制面里的故障注入。
+还没做的功能见 [TODO.md](TODO.md)，主要是 Website 端点，以及测试控制面里的故障注入。
 
 ## 测试控制面
 

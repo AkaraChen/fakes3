@@ -80,6 +80,8 @@ pub struct Object {
     pub tags: Vec<(String, String)>,
     /// Storage class, encryption, Object Lock...; `None` for a plain object.
     pub ext: Option<Arc<ObjectExt>>,
+    /// `None` is the default `private` ACL.
+    pub acl: Option<Arc<crate::acl::Acl>>,
 }
 
 /// One entry in a key's version chain. `obj == None` is a delete marker.
@@ -130,6 +132,7 @@ pub struct Upload {
     pub meta: ObjectMeta,
     pub tags: Vec<(String, String)>,
     pub ext: Option<ObjectExt>,
+    pub acl: Option<Arc<crate::acl::Acl>>,
     pub initiated: SystemTime,
     pub checksum_algorithm: Option<s3s::dto::ChecksumAlgorithm>,
     /// Effective checksum type (explicit, or the default for the algorithm).
@@ -147,11 +150,13 @@ pub struct Bucket {
     pub objects: RwLock<Index>,
     pub uploads: RwLock<BTreeMap<(String, String), Upload>>,
     pub cfg: BucketCfg,
+    pub config: crate::bucket_config::BucketConfig,
 }
 
 #[derive(Default)]
 pub struct Store {
     pub buckets: RwLock<BTreeMap<String, Arc<Bucket>>>,
+    pub access: crate::bucket_config::AccessState,
 }
 
 impl Store {
@@ -169,6 +174,7 @@ impl Bucket {
             objects: RwLock::default(),
             uploads: RwLock::default(),
             cfg: BucketCfg::default(),
+            config: Default::default(),
         }
     }
 }
@@ -355,6 +361,7 @@ mod tests {
             part_sizes: None,
             tags: Vec::new(),
             ext: None,
+            acl: None,
         }
     }
 
@@ -436,6 +443,7 @@ mod tests {
                 meta: ObjectMeta::default(),
                 tags: Vec::new(),
                 ext: None,
+                acl: None,
                 initiated: SystemTime::UNIX_EPOCH,
                 checksum_algorithm: None,
                 checksum_type: s3s::dto::ChecksumType::from_static(s3s::dto::ChecksumType::FULL_OBJECT),

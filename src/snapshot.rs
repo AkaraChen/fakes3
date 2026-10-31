@@ -10,6 +10,7 @@ use std::time::SystemTime;
 
 use parking_lot::RwLock;
 
+use crate::bucket_config::ConfigSnapshot;
 use crate::objext::{BucketCfg, CfgState};
 use crate::store::{Bucket, Index, Store, Upload, Versioning};
 
@@ -24,6 +25,7 @@ struct BucketSnapshot {
     objects: Index,
     uploads: BTreeMap<(String, String), Upload>,
     cfg: CfgState,
+    config: ConfigSnapshot,
 }
 
 /// What a snapshot holds, for listings.
@@ -66,6 +68,7 @@ impl Store {
                     objects,
                     uploads,
                     cfg,
+                    config,
                 } = &**b;
                 let snap = BucketSnapshot {
                     created: *created,
@@ -74,6 +77,7 @@ impl Store {
                     objects: objects.read().clone(),
                     uploads: uploads.read().clone(),
                     cfg: cfg.state(),
+                    config: config.snapshot(),
                 };
                 (name.clone(), snap)
             })
@@ -95,6 +99,7 @@ impl Store {
                     objects,
                     uploads,
                     cfg,
+                    config,
                 } = s;
                 let bucket = Bucket {
                     created: *created,
@@ -103,6 +108,7 @@ impl Store {
                     objects: RwLock::new(objects.clone()),
                     uploads: RwLock::new(uploads.clone()),
                     cfg: BucketCfg::from_state(cfg.clone()),
+                    config: crate::bucket_config::BucketConfig::restore(config),
                 };
                 (name.clone(), Arc::new(bucket))
             })
@@ -154,6 +160,7 @@ mod tests {
             part_sizes: None,
             tags: Vec::new(),
             ext: None,
+            acl: None,
         }
     }
 
