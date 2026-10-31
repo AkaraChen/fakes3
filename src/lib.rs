@@ -17,13 +17,17 @@ mod acl;
 mod bucket_config;
 mod bucket_ops;
 mod clock;
+mod control;
 mod cors;
 mod digest;
 mod host;
 mod lifecycle;
 mod memory;
 mod policy;
+mod presign;
+mod reqlog;
 mod s3impl;
+mod snapshot;
 mod store;
 
 use std::net::{IpAddr, SocketAddr};
@@ -38,8 +42,11 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-pub use clock::Clock;
+pub use clock::{Clock, OutOfRange, parse_duration};
+pub use control::{Control, ControlError, ResetOptions, SnapshotInfo};
 pub use memory::{MemoryLimit, MemoryStats};
+pub use reqlog::{DEFAULT_CAPACITY as DEFAULT_REQUEST_LOG_CAPACITY, RequestFilter, RequestRecord, StatusFilter};
+pub use snapshot::Counts;
 
 /// Server settings. `Default` listens on a random localhost port with the default credentials.
 #[derive(Clone, Debug)]
@@ -56,6 +63,10 @@ pub struct Config {
     /// Base domains for virtual-host-style addressing: `<bucket>.<domain>` selects the bucket.
     /// Path-style requests keep working on every host. Empty disables virtual-host addressing.
     pub domains: Vec<String>,
+    /// Record S3 requests for the control plane's request log.
+    pub request_log: bool,
+    /// Requests kept by the log; the oldest are dropped first.
+    pub request_log_capacity: usize,
     /// Cap on the object data held in memory (including uploaded parts). A write that would pass it
     /// is refused with HTTP 507 `XFakeS3MemoryLimitExceeded`. The default, [`MemoryLimit::Auto`],
     /// is 75% of the container's or machine's memory.
@@ -72,6 +83,8 @@ impl Default for Config {
             auth: true,
             inline_threshold: 1 << 20,
             domains: vec!["localhost".into()],
+            request_log: true,
+            request_log_capacity: DEFAULT_REQUEST_LOG_CAPACITY,
             memory_limit: MemoryLimit::Auto,
         }
     }
@@ -81,8 +94,7 @@ impl Default for Config {
 /// Tokio runtime it was started on shuts down.
 pub struct Server {
     addr: SocketAddr,
-    clock: Arc<Clock>,
-    memory: Arc<MemoryTracker>,
+    control: Arc<Control>,
     stop: Option<oneshot::Sender<()>>,
     task: JoinHandle<()>,
 }
@@ -92,15 +104,19 @@ impl Server {
     pub async fn start(config: Config) -> std::io::Result<Self> {
         let listener = TcpListener::bind((config.host.as_str(), config.port)).await?;
         let addr = listener.local_addr()?;
-        let clock = Arc::new(Clock::default());
-        let (stop, mut stopped) = oneshot::channel();
         let limit = config.memory_limit.resolve();
         match limit {
             Some(n) => tracing::info!("memory limit: {} ({:?})", memory::human(n), config.memory_limit),
             None => tracing::info!("memory limit: none"),
         }
-        let memory = MemoryTracker::new(limit);
-        let service = service(&config, clock.clone(), memory.clone());
+        let control = Arc::new(Control::new(
+            Arc::default(),
+            Arc::default(),
+            MemoryTracker::new(limit),
+            reqlog::RequestLog::new(config.request_log, config.request_log_capacity),
+        ));
+        let (stop, mut stopped) = oneshot::channel();
+        let service = service(&config, control.clone());
         let task = tokio::spawn(async move {
             let http = ConnBuilder::new(TokioExecutor::new());
             loop {
@@ -126,8 +142,7 @@ impl Server {
         });
         Ok(Self {
             addr,
-            clock,
-            memory,
+            control,
             stop: Some(stop),
             task,
         })
@@ -144,12 +159,37 @@ impl Server {
 
     /// The server's clock, for tests that need to move time.
     pub fn clock(&self) -> &Clock {
-        &self.clock
+        &self.control.clock
+    }
+
+    /// Reset, snapshots and the request log: the same operations as the `/_fakes3/` HTTP API.
+    pub fn control(&self) -> &Control {
+        &self.control
+    }
+
+    /// Clears buckets, objects, uploads, the request log and the clock; keeps snapshots.
+    pub fn reset(&self) {
+        self.control.reset();
+    }
+
+    /// Copies the current buckets, objects and uploads under `name` (generated when `None`).
+    pub fn snapshot(&self, name: Option<&str>) -> Result<SnapshotInfo, ControlError> {
+        self.control.snapshot(name)
+    }
+
+    /// Rolls the store back to a snapshot.
+    pub fn restore(&self, name: &str) -> Result<SnapshotInfo, ControlError> {
+        self.control.restore(name)
+    }
+
+    /// Logged S3 requests matching `filter`, oldest first, and the match count before `limit`.
+    pub fn requests(&self, filter: &RequestFilter) -> (Vec<RequestRecord>, usize) {
+        self.control.requests(filter)
     }
 
     /// Bytes of object data currently held, and the limit in force.
     pub fn memory(&self) -> MemoryStats {
-        self.memory.stats()
+        self.control.memory.stats()
     }
 
     /// Stops accepting connections. Requests already in flight finish on their own.
@@ -174,17 +214,16 @@ type Service = Arc<
 
 struct Shared {
     s3: s3s::service::S3Service,
-    store: Arc<store::Store>,
+    control: Arc<Control>,
     domains: host::Domains,
 }
 
-fn service(config: &Config, clock: Arc<Clock>, memory: Arc<MemoryTracker>) -> ServiceFn {
-    let store = Arc::new(store::Store::default());
+fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
     let fake = s3impl::FakeS3 {
-        store: store.clone(),
+        store: control.store.clone(),
         inline_threshold: config.inline_threshold,
-        memory,
-        clock: clock.clone(),
+        memory: control.memory.clone(),
+        clock: control.clock.clone(),
     };
     let mut b = S3ServiceBuilder::new(fake);
     // Legacy clients (s3fs/aiobotocore presigning, old SDKs) still sign with SigV2.
@@ -199,38 +238,55 @@ fn service(config: &Config, clock: Arc<Clock>, memory: Arc<MemoryTracker>) -> Se
         b.set_auth(SimpleAuth::from_single(config.access_key.clone(), config.secret_key.clone()));
     }
     b.set_access(access::Access {
-        store: store.clone(),
-        clock,
+        store: control.store.clone(),
+        clock: control.clock.clone(),
         auth: config.auth,
     });
     let shared = Arc::new(Shared {
         s3: b.build(),
-        store,
+        control,
         domains,
     });
     let f: Service = Arc::new(move |mut req: http::Request<hyper::body::Incoming>, peer: IpAddr| {
         let sh = shared.clone();
         Box::pin(async move {
+            let control = &sh.control;
+            if req.uri().path().starts_with(control::PREFIX) {
+                return Ok(control.handle(req).await);
+            }
+            let logged = control.log.start(&req, || control.clock.now());
             merge_duplicate_headers(req.headers_mut());
-            if req.method() == http::Method::OPTIONS {
-                return Ok(cors::preflight(&sh.store, &sh.domains, &req));
-            }
-            if sh.store.access.record_peers.load(std::sync::atomic::Ordering::Relaxed) {
-                req.extensions_mut().insert(access::PeerAddr(peer));
-            }
-            // Only requests from a browser context carry Origin; everything else skips CORS.
-            let cors_ctx = req
-                .headers()
-                .contains_key(http::header::ORIGIN)
-                .then(|| cors::RequestInfo::of(&req, &sh.domains));
-            let head = req.method() == http::Method::HEAD;
-            let mut resp = hyper::service::Service::call(&sh.s3, req).await?;
-            // s3s always answers HEAD with 200; a ?partNumber= HEAD is a partial response.
-            if head && resp.status() == http::StatusCode::OK && resp.headers().contains_key(http::header::CONTENT_RANGE) {
-                *resp.status_mut() = http::StatusCode::PARTIAL_CONTENT;
-            }
-            if let Some(info) = cors_ctx {
-                info.decorate(&sh.store, &mut resp);
+            let resp = if req.method() == http::Method::OPTIONS {
+                // s3s does not route OPTIONS; preflights are answered from the bucket's CORS rules.
+                cors::preflight(&control.store, &sh.domains, &req)
+            } else {
+                if control.store.access.record_peers.load(std::sync::atomic::Ordering::Relaxed) {
+                    req.extensions_mut().insert(access::PeerAddr(peer));
+                }
+                // Only requests from a browser context carry Origin; everything else skips CORS.
+                let cors_ctx = req
+                    .headers()
+                    .contains_key(http::header::ORIGIN)
+                    .then(|| cors::RequestInfo::of(&req, &sh.domains));
+                let head = req.method() == http::Method::HEAD;
+                // s3s judges presigned-URL expiry by the host clock; honor a moved server clock first.
+                let expired = control.clock.is_virtual() && req.uri().query().is_some_and(|q| presign::is_expired(q, control.clock.now()));
+                let mut resp = if expired {
+                    presign::expired_response()
+                } else {
+                    hyper::service::Service::call(&sh.s3, req).await?
+                };
+                // s3s always answers HEAD with 200; a ?partNumber= HEAD is a partial response.
+                if head && resp.status() == http::StatusCode::OK && resp.headers().contains_key(http::header::CONTENT_RANGE) {
+                    *resp.status_mut() = http::StatusCode::PARTIAL_CONTENT;
+                }
+                if let Some(info) = cors_ctx {
+                    info.decorate(&control.store, &mut resp);
+                }
+                resp
+            };
+            if let Some(p) = logged {
+                control.log.finish(p, &resp);
             }
             Ok(resp)
         })

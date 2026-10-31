@@ -86,7 +86,62 @@ impl Default for BucketConfig {
     }
 }
 
+/// A copy of a bucket's configuration documents, for control-plane snapshots. The documents are
+/// small and mostly shared (`Arc`), so copying them is cheap.
+#[derive(Clone)]
+pub struct ConfigSnapshot {
+    acl: Acl,
+    ownership: Option<Ownership>,
+    public_access_block: Option<PublicAccessBlock>,
+    policy: Option<Arc<Policy>>,
+    cors: Option<Arc<CORSConfiguration>>,
+    lifecycle: Option<Arc<Lifecycle>>,
+    website: Option<WebsiteConfiguration>,
+    notification: Option<NotificationConfiguration>,
+}
+
 impl BucketConfig {
+    pub fn snapshot(&self) -> ConfigSnapshot {
+        // Listing every field makes adding one to `BucketConfig` a compile error here.
+        let Self {
+            acl,
+            ownership,
+            public_access_block,
+            policy,
+            cors,
+            lifecycle,
+            has_lifecycle: _,
+            lifecycle_day: _,
+            website,
+            notification,
+        } = self;
+        ConfigSnapshot {
+            acl: acl.read().clone(),
+            ownership: *ownership.read(),
+            public_access_block: *public_access_block.read(),
+            policy: policy.read().clone(),
+            cors: cors.read().clone(),
+            lifecycle: lifecycle.read().clone(),
+            website: website.read().clone(),
+            notification: notification.read().clone(),
+        }
+    }
+
+    pub fn restore(s: &ConfigSnapshot) -> Self {
+        let c = Self::default();
+        *c.acl.write() = s.acl.clone();
+        *c.ownership.write() = s.ownership;
+        *c.public_access_block.write() = s.public_access_block;
+        *c.policy.write() = s.policy.clone();
+        *c.cors.write() = s.cors.clone();
+        // The restored rules apply at the next access, as when they were first put.
+        c.has_lifecycle.store(s.lifecycle.is_some(), std::sync::atomic::Ordering::Release);
+        *c.lifecycle.write() = s.lifecycle.clone();
+        *c.website.write() = s.website.clone();
+        *c.notification.write() = s.notification.clone();
+        c
+    }
+
     /// ACLs are in force unless the bucket owner enforced setting is on.
     pub fn acls_enabled(&self) -> bool {
         *self.ownership.read() != Some(Ownership::Enforced)

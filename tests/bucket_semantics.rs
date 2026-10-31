@@ -147,7 +147,7 @@ async fn policy_conditions_read_the_server_clock() {
         "Condition":{"DateLessThan":{"aws:CurrentTime":"2099-01-01T00:00:00Z"}}}]}"#;
     send(a, req("PUT", "/bkt").query("policy").body(until.as_bytes())).await;
     assert_eq!(send(a, req("GET", "/bkt/k").anon()).await.status, 200);
-    s.clock().advance(100 * 366 * DAY_NANOS);
+    s.clock().advance(100 * 366 * DAY_NANOS).unwrap();
     assert_eq!(send(a, req("GET", "/bkt/k").anon()).await.status, 403);
 }
 
@@ -500,10 +500,10 @@ async fn lifecycle_expires_current_objects_when_the_clock_moves() {
     assert!(r.header("x-amz-expiration").is_some());
     assert!(send(a, req("HEAD", "/bkt/keep/x")).await.header("x-amz-expiration").is_none());
 
-    s.clock().advance(DAY_NANOS);
+    s.clock().advance(DAY_NANOS).unwrap();
     assert_eq!(send(a, req("GET", "/bkt/tmp/x")).await.status, 200);
     // 2 days + rounding to midnight: 4 days is past the deadline wherever "now" falls in the day.
-    s.clock().advance(3 * DAY_NANOS);
+    s.clock().advance(3 * DAY_NANOS).unwrap();
     assert_eq!(send(a, req("GET", "/bkt/tmp/x")).await.status, 404);
     assert_eq!(send(a, req("GET", "/bkt/keep/x")).await.status, 200);
     let r = send(a, req("GET", "/bkt").query("list-type=2")).await;
@@ -526,7 +526,7 @@ async fn lifecycle_on_versioned_buckets() {
     );
     put_config(a, "bkt", "lifecycle", &xml).await;
 
-    s.clock().advance(3 * DAY_NANOS);
+    s.clock().advance(3 * DAY_NANOS).unwrap();
     // The current version expired: a delete marker hides the key, old versions remain.
     assert_eq!(send(a, req("GET", "/bkt/k")).await.status, 404);
     let r = send(a, req("GET", "/bkt").query("versions")).await;
@@ -535,7 +535,7 @@ async fn lifecycle_on_versioned_buckets() {
 
     // Once the versions have been noncurrent for 5 days the newest noncurrent one is kept (NewerNoncurrentVersions=1)... until
     // the marker is also removed, which only happens when nothing is behind it.
-    s.clock().advance(10 * DAY_NANOS);
+    s.clock().advance(10 * DAY_NANOS).unwrap();
     let r = send(a, req("GET", "/bkt").query("versions")).await;
     assert_eq!(r.body.matches("<Version>").count(), 1, "{}", r.body);
     assert_eq!(r.body.matches("<DeleteMarker>").count(), 1, "{}", r.body);
@@ -560,7 +560,7 @@ async fn lifecycle_aborts_incomplete_multipart_uploads() {
     );
     put_config(a, "bkt", "lifecycle", &xml).await;
     assert!(send(a, req("GET", "/bkt").query("uploads")).await.body.contains(&id));
-    s.clock().advance(4 * DAY_NANOS);
+    s.clock().advance(4 * DAY_NANOS).unwrap();
     assert!(!send(a, req("GET", "/bkt").query("uploads")).await.body.contains(&id));
     let r = send(a, req("PUT", "/bkt/up").query(&format!("partNumber=1&uploadId={id}")).body(b"x")).await;
     assert_eq!(r.code(), "NoSuchUpload");
@@ -780,4 +780,90 @@ async fn signed_requests_are_unaffected_by_missing_config() {
     r.signed = false;
     send(a, req("PUT", "/bkt").query("acl").header("x-amz-acl", "public-read-write")).await;
     assert_eq!(send(a, r).await.status, 403);
+}
+
+#[tokio::test]
+async fn snapshot_and_restore_keep_bucket_configuration() {
+    let (s, a) = start().await;
+    make_bucket(a, "bkt").await;
+    send(a, req("PUT", "/bkt/shared").header("x-amz-acl", "public-read").body(b"x")).await;
+    send(a, req("PUT", "/bkt/pub/p").body(b"y")).await;
+    let own = "<OwnershipControls><Rule><ObjectOwnership>ObjectWriter</ObjectOwnership></Rule></OwnershipControls>";
+    let pab = "<PublicAccessBlockConfiguration><BlockPublicAcls>false</BlockPublicAcls><BlockPublicPolicy>false</BlockPublicPolicy></PublicAccessBlockConfiguration>";
+    let cors =
+        "<CORSConfiguration><CORSRule><AllowedOrigin>*</AllowedOrigin><AllowedMethod>GET</AllowedMethod></CORSRule></CORSConfiguration>";
+    let lifecycle = lifecycle_xml(
+        "<Rule><ID>l</ID><Filter><Prefix>tmp/</Prefix></Filter><Status>Enabled</Status><Expiration><Days>1</Days></Expiration></Rule>",
+    );
+    let website = "<WebsiteConfiguration><IndexDocument><Suffix>index.html</Suffix></IndexDocument></WebsiteConfiguration>";
+    let notification = "<NotificationConfiguration><QueueConfiguration><Id>q</Id><Queue>arn:aws:sqs:us-east-1:000000000000:q</Queue><Event>s3:ObjectCreated:*</Event></QueueConfiguration></NotificationConfiguration>";
+    for (sub, xml) in [
+        ("ownershipControls", own),
+        ("publicAccessBlock", pab),
+        ("cors", cors),
+        ("lifecycle", lifecycle.as_str()),
+        ("website", website),
+        ("notification", notification),
+    ] {
+        let r = put_config(a, "bkt", sub, xml).await;
+        assert_eq!(r.status, 200, "{sub}: {}", r.body);
+    }
+    send(a, req("PUT", "/bkt").query("policy").body(PUBLIC_READ_POLICY.as_bytes())).await;
+    send(a, req("PUT", "/bkt").query("acl").header("x-amz-acl", "public-read")).await;
+    s.snapshot(Some("configured")).unwrap();
+
+    // Tear everything down, then roll back.
+    for sub in ["ownershipControls", "publicAccessBlock", "cors", "lifecycle", "website", "policy"] {
+        assert_eq!(send(a, req("DELETE", "/bkt").query(sub)).await.status, 204, "{sub}");
+    }
+    put_config(a, "bkt", "notification", "<NotificationConfiguration/>").await;
+    send(a, req("PUT", "/bkt").query("acl").header("x-amz-acl", "private")).await;
+    send(a, req("PUT", "/bkt/shared").body(b"x")).await;
+    assert_eq!(send(a, req("GET", "/bkt/pub/p").anon()).await.status, 403);
+    s.restore("configured").unwrap();
+
+    for (sub, needle) in [
+        ("ownershipControls", "ObjectWriter"),
+        ("publicAccessBlock", "BlockPublicAcls"),
+        ("cors", "<AllowedMethod>GET</AllowedMethod>"),
+        ("lifecycle", "<ID>l</ID>"),
+        ("website", "index.html"),
+        ("notification", "<Id>q</Id>"),
+        ("policy", "s3:GetObject"),
+        ("acl", "AllUsers"),
+    ] {
+        let r = send(a, req("GET", "/bkt").query(sub)).await;
+        assert!(r.status == 200 && r.body.contains(needle), "{sub}: {} {}", r.status, r.body);
+    }
+    // The restored policy, ACLs and lifecycle rules are in force again.
+    assert_eq!(send(a, req("GET", "/bkt/pub/p").anon()).await.status, 200);
+    assert_eq!(send(a, req("GET", "/bkt/shared").anon()).await.status, 200);
+    assert_eq!(send(a, req("GET", "/bkt").query("list-type=2").anon()).await.status, 200);
+    put(a, "/bkt/tmp/x", b"1").await;
+    s.clock().advance(4 * DAY_NANOS).unwrap();
+    assert_eq!(send(a, req("GET", "/bkt/tmp/x")).await.status, 404);
+    // A bucket created later starts with nothing configured.
+    make_bucket(a, "fresh").await;
+    assert_eq!(send(a, req("GET", "/fresh").query("policy")).await.code(), "NoSuchBucketPolicy");
+}
+
+#[tokio::test]
+async fn control_plane_paths_bypass_cors_and_authorization() {
+    let (_s, a) = start().await;
+    // Not an S3 request: no signature, no CORS evaluation, and an OPTIONS here is not a bucket preflight.
+    let r = send(a, req("GET", "/_fakes3/clock").anon().header("origin", "https://x.test")).await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert!(r.header("access-control-allow-origin").is_none());
+}
+
+#[tokio::test]
+async fn lifecycle_follows_the_control_plane_clock() {
+    let (_s, a) = start().await;
+    make_bucket(a, "bkt").await;
+    let xml = lifecycle_xml("<Rule><Filter/><Status>Enabled</Status><Expiration><Days>1</Days></Expiration></Rule>");
+    put_config(a, "bkt", "lifecycle", &xml).await;
+    put(a, "/bkt/k", b"1").await;
+    let r = send(a, req("POST", "/_fakes3/clock/advance").anon().body(br#"{"by":"3d"}"#)).await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert_eq!(send(a, req("GET", "/bkt/k")).await.status, 404);
 }

@@ -2,12 +2,18 @@ use std::io::Write;
 
 use clap::Parser;
 
+mod ctl;
+
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Parser)]
 #[command(version, about = "An in-memory S3 server for tests")]
 struct Opt {
+    /// Talk to a running server's control plane instead of serving.
+    #[command(subcommand)]
+    command: Option<Cmd>,
+
     #[arg(long, default_value = "127.0.0.1", env = "FAKES3_HOST")]
     host: String,
 
@@ -33,6 +39,13 @@ struct Opt {
     /// `--domain ""` turns virtual-host addressing off.
     #[arg(long = "domain", default_value = "localhost", env = "FAKES3_DOMAIN", value_delimiter = ',')]
     domains: Vec<String>,
+    /// Do not record S3 requests for the control plane's request log.
+    #[arg(long)]
+    no_request_log: bool,
+
+    /// Requests kept by the request log; the oldest are dropped first.
+    #[arg(long, default_value_t = fakes3::DEFAULT_REQUEST_LOG_CAPACITY)]
+    request_log_capacity: usize,
     /// Most object data fakes3 will hold; a write beyond it fails with HTTP 507 instead of the
     /// process being OOM-killed. A size like `512MiB` or `2GiB`, `unlimited`, or `auto` (75% of the
     /// container's or machine's memory).
@@ -40,8 +53,20 @@ struct Opt {
     memory_limit: fakes3::MemoryLimit,
 }
 
-fn main() -> std::io::Result<()> {
+#[derive(clap::Subcommand)]
+enum Cmd {
+    /// Control a running server: reset, snapshots, clock, request log.
+    Ctl(ctl::Ctl),
+}
+
+fn main() -> std::io::Result<std::process::ExitCode> {
     let opt = Opt::parse();
+    if let Some(Cmd::Ctl(c)) = opt.command {
+        return Ok(tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(ctl::run(c)));
+    }
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()))
         .init();
@@ -53,6 +78,8 @@ fn main() -> std::io::Result<()> {
         auth: !opt.no_auth,
         inline_threshold: opt.inline_threshold,
         domains: opt.domains.into_iter().filter(|d| !d.is_empty()).collect(),
+        request_log: !opt.no_request_log,
+        request_log_capacity: opt.request_log_capacity,
         memory_limit: opt.memory_limit,
     };
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
@@ -60,6 +87,6 @@ fn main() -> std::io::Result<()> {
         println!("{}", server.endpoint());
         std::io::stdout().flush()?;
         server.wait().await;
-        Ok(())
+        Ok(std::process::ExitCode::SUCCESS)
     })
 }

@@ -1,16 +1,17 @@
 # TODO
 
-## 测试控制面（`/_fakes3/*`，后续计划）
+## 测试控制面（`/_fakes3/*`，见 [docs/control-plane.md](docs/control-plane.md)）
 
-- [ ] `POST /_fakes3/reset`：清空所有 bucket / object / upload，微秒级完成
-- [ ] `POST /_fakes3/snapshot` → `{id}`；`POST /_fakes3/restore/{id}`：O(1) 快照和回滚
-  - 前提：元数据换成持久化数据结构（`im::OrdMap`），Blob 本身已经不可变且有引用计数
-- [ ] `POST /_fakes3/clock`：冻结、推进或设置虚拟时间
-  - 驱动 presigned URL 过期、lifecycle 过期、Object Lock retention 到期、Glacier restore 完成
+- [x] `POST /_fakes3/reset`：清空所有 bucket / object / upload，同时清空请求日志和时钟
+- [x] 快照：`POST /_fakes3/snapshots`、`POST /_fakes3/snapshots/{name}/restore`（索引复制方案，选型和实测数据见文档）
+- [x] `/_fakes3/clock`：冻结、推进或设置虚拟时间；预签名 URL 过期跟随虚拟时钟
+  - s3s 不允许注入时间，SigV4 日期偏差检查仍然用主机时间（见文档）
+  - 以后的 lifecycle 过期、Object Lock retention 到期、Glacier restore 完成应当读 `Clock::now`
 - [ ] `POST /_fakes3/faults`：按操作、bucket/key 前缀或概率注入故障
   - 503 SlowDown、500 InternalError、固定或随机延迟、body 截断、连接重置
-- [ ] `GET /_fakes3/requests`：请求日志，用于断言调用次数和顺序
-- [ ] 各语言客户端封装（Rust 进程内库模式、testcontainers 模块、pytest fixture、Go helper、JUnit extension）
+- [x] `GET /_fakes3/requests`：请求日志，用于断言调用次数和顺序
+- [x] 命令行 `fakes3 ctl` 和 Rust 进程内的 `Server` 方法（不做各语言的客户端封装）
+- [ ] testcontainers 模块、pytest fixture 之类的框架集成（基于 `fakes3 ctl` 或 HTTP API）
 
 ## S3 语义完整度
 
@@ -38,14 +39,15 @@
 
 ## 性能
 
-- [ ] 明文 HTTP 下大对象 GET 走 `sendfile`/`splice`（需要绕过 s3s 的 body 抽象）
+- [x] 评估明文 HTTP 下大对象 GET 走 `sendfile`：服务端 CPU 减半，但端到端吞吐没有提升，单流还慢约 37%，结论不做，见 [bench/SENDFILE.md](bench/SENDFILE.md)（实现在分支 `exp/sendfile-impl`）
 - [x] MD5 优化：换成 OpenSSL 的汇编实现（通过底层 `MD5_*` 接口调用，不链接 EVP，二进制体积不变），
       大于 inline 阈值的请求体把 MD5 放到独立线程，与接收、校验和、写 memfd 流水线并行
 - [ ] 多个并发流共享 SIMD 的多路 MD5（类似 MinIO 的 md5-simd），提升多并发大对象写入的总吞吐
 - [x] 内存上限（`--memory-limit`）和超出上限时的明确报错（507 `XFakeS3MemoryLimitExceeded`）
 - [x] 评估每 bucket 的 `RwLock<BTreeMap>` 是否是瓶颈：CI（4 核）上 64 并发 PUT 与 16 并发吞吐持平（约 2.3 万 ops/s），
       服务端只用了约 0.74 核，瓶颈在压测客户端而不是锁，暂不更换。
-- [ ] 做测试控制面的快照功能时，把索引换成 `im::OrdMap`（O(1) 快照）；届时在核数更多的机器上复测写入争用
+- [x] 快照没有换成 `im::OrdMap`：实测持久化 map 让每次写入的“构造并插入”慢 2.2～2.6 倍（HTTP 层面吞吐低约 1.5%），而复制 `BTreeMap` 在 10 万个对象时只要几毫秒（数据见
+      [docs/control-plane.md](docs/control-plane.md#快照的实现和选型)）；需要时只改 `store::Index` 一处
 
 ## 一致性验证
 
