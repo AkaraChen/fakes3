@@ -59,7 +59,14 @@ WARP = {
 
 # Temporary (exp/sendfile): "<workload>@<variant>" reruns a workload with the same server under
 # a different setting, back to back on the same machine.
-VARIANTS = {"nosf": ("--no-sendfile", "0"), "sf": ("", "0"), "ch256k": ("", "262144"), "ch1m": ("", "1048576")}
+VARIANTS = {
+    "nosf": ("--no-sendfile", "0", "0"),
+    "sf": ("", "0", "0"),
+    "ch256k": ("", "262144", "0"),
+    "ch1m": ("", "1048576", "0"),
+    "wc256k": ("--no-sendfile", "0", "262144"),
+    "wc1m": ("--no-sendfile", "0", "1048576"),
+}
 for _w in list(WARP):
     for _v in VARIANTS:
         WARP[f"{_w}@{_v}"] = WARP[_w]
@@ -326,8 +333,9 @@ def main():
         for w, (args, op, *dur) in WARP.items():
             if not want(w):
                 continue
-            extra, chunk = VARIANTS.get(w.partition("@")[2], ("", "0"))
+            extra, chunk, wchunk = VARIANTS.get(w.partition("@")[2], ("", "0", "0"))
             os.environ["FAKES3_EXTRA_ARGS"], os.environ["FAKES3_SENDFILE_CHUNK"] = extra, chunk
+            os.environ["FAKES3_WRITE_CHUNK"] = wchunk
             try:
                 r[w] = measure(s, lambda: {"ops": summarize_warp(warp(s, args, dur[0] if dur else a.duration), op)})
             except Exception as e:  # noqa: BLE001

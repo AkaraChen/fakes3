@@ -44,7 +44,7 @@ launch() {
   case $name in
     fakes3)
       # The image from ./Dockerfile (bench/setup.sh builds it as fakes3:local).
-      run fakes3 -e FAKES3_SENDFILE_CHUNK="${FAKES3_SENDFILE_CHUNK:-0}" "${FAKES3_IMAGE:-fakes3:local}" ${FAKES3_EXTRA_ARGS:-} --host 127.0.0.1 --port "$p" --access-key "$AK" --secret-key "$SK" ;;
+      run fakes3 -e FAKES3_SENDFILE_CHUNK="${FAKES3_SENDFILE_CHUNK:-0}" -e FAKES3_WRITE_CHUNK="${FAKES3_WRITE_CHUNK:-0}" "${FAKES3_IMAGE:-fakes3:local}" ${FAKES3_EXTRA_ARGS:-} --host 127.0.0.1 --port "$p" --access-key "$AK" --secret-key "$SK" ;;
     minio)
       run minio --tmpfs /data -e MINIO_ROOT_USER="$AK" -e MINIO_ROOT_PASSWORD="$SK" \
         -e MINIO_BROWSER=off cgr.dev/chainguard/minio:latest server /data --address "127.0.0.1:$p" ;;

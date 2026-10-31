@@ -35,6 +35,7 @@ static REGIONS: RwLock<BTreeMap<usize, (usize, RawFd)>> = RwLock::new(BTreeMap::
 /// Cleared process-wide if the kernel (or a seccomp filter) turns out not to support `sendfile` on sockets.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
+static WRITE_CHUNK: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
 static CHUNK: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
 
 /// Bytes sent with `sendfile` so far, for tests.
@@ -205,6 +206,16 @@ impl Write for Io {
             .then(|| bufs.iter().enumerate().find_map(|(i, b)| locate(b).map(|(fd, off)| (i, fd, off))))
             .flatten();
         let Some((i, fd, off)) = target else {
+            let wc = *WRITE_CHUNK.get_or_init(|| {
+                std::env::var("FAKES3_WRITE_CHUNK")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|&n: &usize| n > 0)
+                    .unwrap_or(usize::MAX)
+            });
+            if bufs.iter().map(|b| b.len()).sum::<usize>() > wc && bufs[0].len() > wc {
+                return Pin::new(&mut self.io).poll_write(cx, &bufs[0][..wc]);
+            }
             return Pin::new(&mut self.io).poll_write_vectored(cx, bufs);
         };
         if i > 0 {
