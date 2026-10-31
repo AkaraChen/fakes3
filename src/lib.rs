@@ -19,8 +19,8 @@
 //! runtime and stops it when the returned handle is dropped.
 //!
 //! Clients need path-style addressing, and the credentials from [`Config`] (`fakes3` /
-//! `fakes3secret` unless changed) unless `auth` is off. Any region works. See
-//! `examples/aws_sdk.rs` for a complete setup with `aws-sdk-s3`.
+//! `fakes3secret` unless changed) unless `auth` is off, in which case any credentials work. Any
+//! region works. See `examples/aws_sdk.rs` for a complete setup with `aws-sdk-s3`.
 
 mod access;
 mod acl;
@@ -36,6 +36,7 @@ mod digest;
 mod host;
 mod lifecycle;
 mod memory;
+mod noauth;
 mod objext;
 mod objops;
 mod policy;
@@ -75,7 +76,9 @@ pub struct Config {
     /// Credentials clients must sign with when `auth` is on.
     pub access_key: String,
     pub secret_key: String,
-    /// Verify request signatures.
+    /// Verify request signatures. When off, requests signed with any access key and secret are
+    /// accepted (and unsigned ones too), and authorization (ACLs, bucket policies, Block Public
+    /// Access) is not applied.
     pub auth: bool,
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     pub inline_threshold: usize,
@@ -243,6 +246,8 @@ struct Shared {
     s3: s3s::service::S3Service,
     control: Arc<Control>,
     domains: host::Domains,
+    /// Whether signatures are verified; see [`noauth`] for what happens without.
+    auth: bool,
 }
 
 fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
@@ -274,6 +279,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
         s3: b.build(),
         control,
         domains,
+        auth: config.auth,
     });
     let f: Service = Arc::new(move |mut req: http::Request<hyper::body::Incoming>, peer: IpAddr| {
         let sh = shared.clone();
@@ -282,7 +288,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
             if req.uri().path().starts_with(control::PREFIX) {
                 return Ok(control.handle(req).await);
             }
-            let logged = control.log.start(&req, || control.clock.now());
+            let mut logged = control.log.start(&req, || control.clock.now());
             merge_duplicate_headers(req.headers_mut());
             let resp = if req.method() == http::Method::OPTIONS {
                 // s3s does not route OPTIONS; preflights are answered from the bucket's CORS rules.
@@ -301,8 +307,14 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 let expired = control.clock.is_virtual() && req.uri().query().is_some_and(|q| presign::is_expired(q, control.clock.now()));
                 let mut resp = if expired {
                     presign::expired_response()
-                } else {
+                } else if sh.auth {
                     hyper::service::Service::call(&sh.s3, req).await?
+                } else {
+                    let mut req = req.map(s3s::Body::from);
+                    if let (Some(key), Some(p)) = (noauth::accept_any(&mut req), logged.as_mut()) {
+                        p.set_access_key(key);
+                    }
+                    sh.s3.call(req).await?
                 };
                 // s3s always answers HEAD with 200; a ?partNumber= HEAD is a partial response.
                 if head && resp.status() == http::StatusCode::OK && resp.headers().contains_key(http::header::CONTENT_RANGE) {

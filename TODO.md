@@ -14,7 +14,9 @@
 - [x] Rust 进程内库模式（`Server::start` / `Server::start_blocking`）、Node.js 绑定（napi-rs）、GHCR 镜像
 - [x] testcontainers：不需要专门的模块，通用容器 + 日志等待即可（见 README）
 - [ ] 其余语言的框架集成（pytest fixture 等，基于 `fakes3 ctl` 或 HTTP API）
-- [ ] `--no-auth` 模式下已签名的请求会得到 501 `This service has no authentication provider`（s3s 在没有 auth provider 时拒绝带签名的请求），只有匿名请求能通过
+- [x] `--no-auth`：任意 access key / secret 签名的请求都接受（SigV4 / SigV2 的头和 presigned URL、三种流式上传，trailer 校验和仍会校验），不做授权；
+      s3s 没有跳过验签的开关，所以在服务包装层去掉签名再交给 s3s，aws-chunked 自己解码（见 `src/noauth.rs`）
+  - 带签名的 POST 表单上传（`x-amz-signature` / `signature` 字段）在该模式下仍返回 501
 
 ## S3 语义完整度
 
