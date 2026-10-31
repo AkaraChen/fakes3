@@ -37,6 +37,10 @@ pub struct StartOptions {
     /// `"2GiB"`, `"unlimited"` or `"auto"`. Writes past it fail with HTTP 507. Default `"auto"`,
     /// which is 75% of the container's or machine's memory.
     pub memory_limit: Option<Either<f64, String>>,
+    /// Settings new buckets start with: `"legacy"` (ACLs enabled, Block Public Access off, no
+    /// default encryption) or `"aws"` (ACLs disabled, Block Public Access on, SSE-S3, SSE-C blocked: what AWS
+    /// applies to new buckets today). Default `"legacy"`.
+    pub bucket_defaults: Option<String>,
     /// Record S3 requests for `server.requests`. Default `true`.
     pub request_log: Option<bool>,
     /// How many requests the log keeps; the oldest are dropped first. Default 10000.
@@ -248,6 +252,7 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         inline_threshold: None,
         domains: None,
         memory_limit: None,
+        bucket_defaults: None,
         request_log: None,
         request_log_capacity: None,
     });
@@ -268,6 +273,10 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
             Some(Either::B(s)) => s
                 .parse()
                 .map_err(|e| Error::new(Status::InvalidArg, format!("invalid memoryLimit {s:?}: {e}")))?,
+        },
+        bucket_defaults: match options.bucket_defaults {
+            None => defaults.bucket_defaults,
+            Some(s) => s.parse().map_err(|e| Error::new(Status::InvalidArg, format!("invalid bucketDefaults: {e}")))?,
         },
     };
     let server = fakes3::Server::start(config.clone()).await.map_err(|e| {

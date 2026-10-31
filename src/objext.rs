@@ -54,6 +54,8 @@ impl Retention {
 
 #[derive(Clone, PartialEq)]
 pub enum Sse {
+    /// SSE-S3 (`AES256`): the content's MD5 stays the ETag.
+    S3,
     Kms {
         dsse: bool,
         key_id: Option<String>,
@@ -69,7 +71,8 @@ pub struct ObjectExt {
     /// `None` is STANDARD.
     pub storage_class: Option<StorageClass>,
     pub website_redirect: Option<String>,
-    /// `None` is SSE-S3, which every S3 object has by default.
+    /// `None` is an unencrypted object, which only buckets without default encryption produce
+    /// (see `BucketDefaults`).
     pub sse: Option<Sse>,
     pub retention: Option<Retention>,
     /// `None` until a legal hold was ever set; `Some(false)` is `OFF`.
@@ -79,6 +82,15 @@ pub struct ObjectExt {
 }
 
 impl ObjectExt {
+    fn is_sse_s3_only(&self) -> bool {
+        matches!(self.sse, Some(Sse::S3))
+            && self.storage_class.is_none()
+            && self.website_redirect.is_none()
+            && self.retention.is_none()
+            && self.legal_hold.is_none()
+            && self.part_checksums.is_none()
+    }
+
     fn is_plain(&self) -> bool {
         self.storage_class.is_none()
             && self.website_redirect.is_none()
@@ -86,6 +98,11 @@ impl ObjectExt {
             && self.retention.is_none()
             && self.legal_hold.is_none()
             && self.part_checksums.is_none()
+    }
+
+    /// SSE-KMS and SSE-C objects get an ETag that is not the content's MD5.
+    fn opaque_etag(&self) -> bool {
+        matches!(self.sse, Some(Sse::Kms { .. } | Sse::Customer { .. }))
     }
 
     pub fn customer_key_md5(&self) -> Option<&str> {
@@ -165,7 +182,7 @@ pub struct CfgState {
 /// Bucket settings that change what new objects look like or what may be done to them.
 #[derive(Default)]
 pub struct BucketCfg {
-    /// Set while a default retention or KMS/blocking default encryption exists, so the PUT path
+    /// Set while a default retention or default encryption exists, so the PUT path
     /// skips the lock when there is nothing to apply.
     defaults: AtomicBool,
     inner: RwLock<CfgState>,
@@ -173,11 +190,8 @@ pub struct BucketCfg {
 
 impl BucketCfg {
     fn refresh(&self, i: &CfgState) {
-        let kms = i
-            .encryption
-            .as_ref()
-            .is_some_and(|e| e.algorithm.as_str() != ServerSideEncryption::AES256 || e.blocked.is_some());
-        self.defaults.store(i.retention.is_some() || kms, Ordering::Release);
+        self.defaults
+            .store(i.retention.is_some() || i.encryption.is_some(), Ordering::Release);
     }
 
     pub fn lock_enabled(&self) -> bool {
@@ -445,6 +459,7 @@ pub fn resolve(o: ObjectOpts, bucket: &Bucket, clock: &Clock) -> S3Result<Option
                     "A KMS key id can only be specified together with x-amz-server-side-encryption: aws:kms"
                 ));
             }
+            ext.sse = Some(Sse::S3);
         } else {
             ext.sse = Some(Sse::Kms {
                 dsse: a.as_str() == ServerSideEncryption::AWS_KMS_DSSE,
@@ -458,14 +473,16 @@ pub fn resolve(o: ObjectOpts, bucket: &Bucket, clock: &Clock) -> S3Result<Option
             InvalidArgument,
             "KMS parameters can only be specified together with x-amz-server-side-encryption: aws:kms"
         ));
-    } else if let Some(r) = rule
-        && r.algorithm.as_str() != ServerSideEncryption::AES256
-    {
-        ext.sse = Some(Sse::Kms {
-            dsse: r.algorithm.as_str() == ServerSideEncryption::AWS_KMS_DSSE,
-            key_id: r.kms_key_id,
-            context: None,
-            bucket_key: r.bucket_key,
+    } else if let Some(r) = rule {
+        ext.sse = Some(if r.algorithm.as_str() == ServerSideEncryption::AES256 {
+            Sse::S3
+        } else {
+            Sse::Kms {
+                dsse: r.algorithm.as_str() == ServerSideEncryption::AWS_KMS_DSSE,
+                key_id: r.kms_key_id,
+                context: None,
+                bucket_key: r.bucket_key,
+            }
         });
     }
 
@@ -497,7 +514,7 @@ pub fn resolve(o: ObjectOpts, bucket: &Bucket, clock: &Clock) -> S3Result<Option
             });
         }
     }
-    // Explicit SSE-S3 headers and STANDARD leave nothing worth storing.
+    // STANDARD leaves nothing worth storing.
     Ok((!ext.is_plain()).then_some(ext))
 }
 
@@ -518,8 +535,17 @@ pub fn finish(ext: Option<ObjectExt>, bucket: &Bucket, now: SystemTime) -> Optio
             until: Timestamp::from(until),
         });
     }
-    ext.map(Arc::new)
+    ext.map(|e| if e.is_sse_s3_only() { SSE_S3_ONLY.clone() } else { Arc::new(e) })
 }
+
+/// The extension of the commonest object in a bucket with default encryption: SSE-S3 and nothing
+/// else. Shared, so such a write allocates no extension.
+static SSE_S3_ONLY: std::sync::LazyLock<Arc<ObjectExt>> = std::sync::LazyLock::new(|| {
+    Arc::new(ObjectExt {
+        sse: Some(Sse::S3),
+        ..Default::default()
+    })
+});
 
 /// The encryption headers a response carries.
 #[derive(Default)]
@@ -533,7 +559,8 @@ pub struct SseOut {
 
 pub fn sse_out(ext: Option<&ObjectExt>) -> SseOut {
     match ext.and_then(|e| e.sse.as_ref()) {
-        None => SseOut {
+        None => SseOut::default(),
+        Some(Sse::S3) => SseOut {
             algorithm: Some(ServerSideEncryption::from_static(ServerSideEncryption::AES256)),
             ..Default::default()
         },
@@ -560,7 +587,7 @@ pub fn sse_out(ext: Option<&ObjectExt>) -> SseOut {
 pub fn sse_context(ext: Option<&ObjectExt>) -> Option<String> {
     match ext?.sse.as_ref()? {
         Sse::Kms { context, .. } => context.clone(),
-        Sse::Customer { .. } => None,
+        Sse::S3 | Sse::Customer { .. } => None,
     }
 }
 
@@ -674,8 +701,8 @@ pub fn opaque_etag(md5: &[u8; 16]) -> String {
 
 /// The ETag of a copy: the source's, unless the two sides disagree on whether it is the content's MD5.
 pub fn copy_etag(src: &Object, dst: Option<&ObjectExt>) -> String {
-    let src_opaque = src.ext.as_ref().is_some_and(|e| e.sse.is_some());
-    let dst_opaque = dst.is_some_and(|e| e.sse.is_some());
+    let src_opaque = src.ext.as_ref().is_some_and(|e| e.opaque_etag());
+    let dst_opaque = dst.is_some_and(|e| e.opaque_etag());
     if src_opaque == dst_opaque || src.parts_count.is_some() {
         return src.e_tag.clone();
     }
@@ -691,9 +718,9 @@ pub fn copy_etag(src: &Object, dst: Option<&ObjectExt>) -> String {
 
 /// The ETag a write stores for content with this MD5. SSE-KMS and SSE-C objects don't get the MD5.
 pub fn etag_for(md5: &[u8; 16], ext: Option<&ObjectExt>) -> String {
-    match ext.and_then(|e| e.sse.as_ref()) {
-        Some(_) => opaque_etag(md5),
-        None => hex::encode(md5),
+    match ext {
+        Some(e) if e.opaque_etag() => opaque_etag(md5),
+        _ => hex::encode(md5),
     }
 }
 
