@@ -18,6 +18,8 @@
 #   S3T_WORK      checkout and venv directory (default conformance/s3-tests/.work)
 #   S3T_LENIENT_CLEANUP  1 (default) = bucket cleanup errors are logged, not raised (see s3t_plugin.py)
 #   S3T_NO_SERVER set to test a server that is already running (needs S3T_PORT)
+#   S3T_ALL       set to also run the tests triage.json lists as out of scope (other services:
+#                 IAM, STS, SNS, S3 Control); by default they are neither run nor counted
 #
 # Writes junit.xml, phases.*.jsonl (one line per test phase, with markers; see s3t_plugin.py) and
 # meta.json to the result directory. A failing test is not a failing run: the exit code is non-zero
@@ -142,7 +144,25 @@ CONF_EOF
 ARGS=(-p s3t_plugin --junitxml="$OUT/junit.xml" -o junit_family=xunit1 -o cache_dir="$WORK/.pytest_cache"
   --timeout "${S3T_TIMEOUT:-180}" -q -rN --no-header)
 [ "$WORKERS" -gt 1 ] && ARGS+=(-n "$WORKERS")
-[ -n "${S3T_MARKER:-}" ] && ARGS+=(-m "$S3T_MARKER")
+# Out of scope (triage.json "out_of_scope"): tests of other AWS services. They are left out of the run
+# (and so of every count) with --ignore for whole files, a marker expression and --deselect for single tests.
+MARKER=${S3T_MARKER:-}
+if [ -z "${S3T_ALL:-}" ]; then
+  SCOPE=$(python3 -I - "$HERE/triage.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))["out_of_scope"]
+print(" or ".join(s["markers"]))
+for f in s["files"]:
+    print("--ignore=s3tests/functional/" + f)
+for t in s["tests"]:
+    print("--deselect=s3tests/functional/test_s3.py::" + t)
+PY
+  )
+  { read -r OOS_MARKERS; mapfile -t OOS_ARGS; } <<< "$SCOPE"
+  ARGS+=("${OOS_ARGS[@]}")
+  MARKER=${MARKER:+($MARKER) and }"not ($OOS_MARKERS)"
+fi
+[ -n "$MARKER" ] && ARGS+=(-m "$MARKER")
 [ -n "${S3T_KEYWORD:-}" ] && ARGS+=(-k "$S3T_KEYWORD")
 read -r -a PATHS <<< "${S3T_PATHS:-s3tests/functional}"
 
@@ -159,7 +179,7 @@ set -e
 
 cat > "$OUT/meta.json" <<META_EOF
 {"server": "$SERVER", "s3tests_ref": "$S3TESTS_REF", "workers": $WORKERS, "marker": "${S3T_MARKER:-}",
- "keyword": "${S3T_KEYWORD:-}", "seconds": $((SECONDS - START)), "pytest_exit": $RC}
+ "keyword": "${S3T_KEYWORD:-}", "all": $([ -n "${S3T_ALL:-}" ] && echo true || echo false), "seconds": $((SECONDS - START)), "pytest_exit": $RC}
 META_EOF
 echo "$SERVER: pytest exit $RC after $((SECONDS - START))s; results in $OUT"
 # 0 = all passed, 1 = some failed; anything else means the run itself was broken.
