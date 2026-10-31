@@ -6,7 +6,7 @@
 - [x] 快照：`POST /_fakes3/snapshots`、`POST /_fakes3/snapshots/{name}/restore`（索引复制方案，选型和实测数据见文档）
 - [x] `/_fakes3/clock`：冻结、推进或设置虚拟时间；预签名 URL 过期跟随虚拟时钟
   - s3s 不允许注入时间，SigV4 日期偏差检查仍然用主机时间（见文档）
-  - 以后的 lifecycle 过期、Object Lock retention 到期、Glacier restore 完成应当读 `Clock::now`
+  - lifecycle 过期和转换、Object Lock retention 到期、Glacier restore 的完成与到期都读 `Clock::now`
 - [ ] `POST /_fakes3/faults`：按操作、bucket/key 前缀或概率注入故障
   - 503 SlowDown、500 InternalError、固定或随机延迟、body 截断、连接重置
 - [x] `GET /_fakes3/requests`：请求日志，用于断言调用次数和顺序
@@ -33,14 +33,18 @@
 - [x] ACL（canned / grant / 请求体）、OwnershipControls、PublicAccessBlock、Bucket Policy 求值（匿名访问 + 显式 Deny）、
       CORS 预检与响应头、Lifecycle（按服务端时钟惰性执行）、Website 与 Notification 的配置读写
 - [ ] Website 端点（按 index/error document 和 routing rules 提供静态网站）、Notification 实际投递、
-      Lifecycle 的 Transition、新建 bucket 默认启用 BucketOwnerEnforced 和 Block Public Access（AWS 2023 年之后的默认值）
+      新建 bucket 默认启用 BucketOwnerEnforced 和 Block Public Access（AWS 2023 年之后的默认值）
 - [x] SSE-C（校验 key MD5）、SSE-S3/KMS header 回显、Put/Get/DeleteBucketEncryption 及默认加密
 - [x] POST policy 表单上传（条件校验由 s3s 完成；过期时间按宿主机时钟判断，不受虚拟时钟影响）
 - [x] virtual-host 寻址：`--domain`（可重复），默认 `localhost`，即 `http://<bucket>.localhost:<port>`
 - [x] ListMultipartUploads
 - [x] GetObjectAttributes
 - [x] 回显 `storage_class`、`x-amz-website-redirect-location` 等剩余元数据
-- [ ] Glacier / Deep Archive 对象的 `InvalidObjectState` 和 RestoreObject（目前这两类对象仍可直接读取）
+- [x] Glacier / Deep Archive / Intelligent-Tiering 归档层：读返回 `InvalidObjectState`，RestoreObject（202 / 200 / 409、`x-amz-restore`、ListObjectsV2 的 `RestoreStatus`），
+      完成和到期按服务端时钟，见 [README](README.md#归档存储类)
+- [x] Lifecycle 的 Transition / NoncurrentVersionTransition（瀑布模型、128 KB 默认下限、Object Lock 不阻止转换）
+- [ ] 归档相关的剩余差异：ListObjectVersions 不返回 `RestoreStatus`；SELECT 类型的 RestoreObject 返回 501；不模拟 `GlacierExpeditedRetrievalNotAvailable`；
+      Intelligent-Tiering 不记录读取，访问不会重置闲置天数；不校验 Lifecycle 里 Days 的先后和最小值要求
 
 ## 性能
 

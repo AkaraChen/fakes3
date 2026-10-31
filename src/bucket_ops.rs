@@ -288,6 +288,11 @@ impl FakeS3 {
         let input = req.input;
         let b = self.bucket(&input.bucket)?;
         let config = input.lifecycle_configuration.ok_or_else(malformed_xml)?;
+        if let Some(t) = &input.transition_default_minimum_object_size
+            && !matches!(t.as_str(), DEFAULT_MIN_SIZE | "varies_by_storage_class")
+        {
+            return Err(s3_error!(InvalidArgument, "Invalid transition default minimum object size"));
+        }
         let mut lc = Lifecycle::new(config)?;
         lc.transition_default_minimum_object_size = input.transition_default_minimum_object_size.clone();
         *b.config.lifecycle.write() = Some(Arc::new(lc));

@@ -143,3 +143,49 @@ async fn blocking_server_can_be_dropped_inside_async_code() {
     }
     assert!(closed);
 }
+
+#[tokio::test]
+async fn archived_object_restore_through_the_sdk() {
+    use aws_sdk_s3::types::{GlacierJobParameters, RestoreRequest, StorageClass, Tier};
+    let config = Config::default();
+    let server = Server::start(config.clone()).await.unwrap();
+    let s3 = client(server.endpoint(), &config);
+    s3.create_bucket().bucket("bucket").send().await.unwrap();
+    s3.put_object()
+        .bucket("bucket")
+        .key("k")
+        .storage_class(StorageClass::Glacier)
+        .body(ByteStream::from_static(b"cold"))
+        .send()
+        .await
+        .unwrap();
+
+    let err = s3.get_object().bucket("bucket").key("k").send().await.unwrap_err();
+    assert_eq!(err.as_service_error().and_then(|e| e.meta().code()), Some("InvalidObjectState"));
+    assert!(err.as_service_error().unwrap().is_invalid_object_state());
+
+    let restore = || {
+        s3.restore_object().bucket("bucket").key("k").restore_request(
+            RestoreRequest::builder()
+                .days(2)
+                .glacier_job_parameters(GlacierJobParameters::builder().tier(Tier::Standard).build().unwrap())
+                .build(),
+        )
+    };
+    restore().send().await.unwrap();
+    let head = s3.head_object().bucket("bucket").key("k").send().await.unwrap();
+    assert_eq!(head.restore(), Some("ongoing-request=\"true\""));
+    assert_eq!(head.storage_class(), Some(&StorageClass::Glacier));
+    let again = restore().send().await.unwrap_err();
+    assert_eq!(
+        again.as_service_error().and_then(|e| e.meta().code()),
+        Some("RestoreAlreadyInProgress")
+    );
+
+    server.clock().advance(3 * 3_600 * 1_000_000_000).unwrap();
+    let head = s3.head_object().bucket("bucket").key("k").send().await.unwrap();
+    assert!(head.restore().unwrap().starts_with("ongoing-request=\"false\", expiry-date=\""));
+    let got = s3.get_object().bucket("bucket").key("k").send().await.unwrap();
+    assert_eq!(got.body.collect().await.unwrap().into_bytes().as_ref(), b"cold");
+    server.shutdown().await;
+}

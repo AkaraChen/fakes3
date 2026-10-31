@@ -1075,6 +1075,10 @@ impl S3 for FakeS3 {
             input.sse_customer_key.as_deref(),
             input.sse_customer_key_md5.as_deref(),
         )?;
+        let archive = self.archive_state(&input.bucket, &input.key, o);
+        if let Some(a) = &archive {
+            a.require_readable(false)?;
+        }
         check_conditions(
             o,
             input.if_match.as_ref(),
@@ -1139,6 +1143,7 @@ impl S3 for FakeS3 {
             checksum
         );
         apply_ext!(out, o.ext.as_deref());
+        out.restore = archive.and_then(|a| a.restore_header());
         Ok(S3Response::new(out))
     }
 
@@ -1208,6 +1213,10 @@ impl S3 for FakeS3 {
             checksum
         );
         apply_ext!(out, o.ext.as_deref());
+        if let Some(a) = self.archive_state(&input.bucket, &input.key, o) {
+            out.restore = a.restore_header();
+            out.archive_status = a.archive_status();
+        }
         let mut resp = S3Response::new(out);
         if partial {
             resp.status = Some(http::StatusCode::PARTIAL_CONTENT);
@@ -1329,6 +1338,7 @@ impl S3 for FakeS3 {
             input.copy_source_sse_customer_key.as_deref(),
             input.copy_source_sse_customer_key_md5.as_deref(),
         )?;
+        self.require_copy_source_restored(&input.copy_source, src)?;
         check_conditions(
             src,
             input.copy_source_if_match.as_ref(),
@@ -1520,6 +1530,15 @@ impl S3 for FakeS3 {
             encoding_type: input.encoding_type,
             ..Default::default()
         };
+        if input
+            .optional_object_attributes
+            .iter()
+            .flatten()
+            .any(|a| a.as_str() == OptionalObjectAttributes::RESTORE_STATUS)
+            && let Some(contents) = &mut out.contents
+        {
+            self.add_restore_status(&b, contents);
+        }
         if wants_url(&out.encoding_type) {
             enc(&mut out.prefix);
             enc(&mut out.delimiter);
@@ -1814,6 +1833,7 @@ impl S3 for FakeS3 {
             input.copy_source_sse_customer_key.as_deref(),
             input.copy_source_sse_customer_key_md5.as_deref(),
         )?;
+        self.require_copy_source_restored(&input.copy_source, src)?;
         check_conditions(
             src,
             input.copy_source_if_match.as_ref(),
@@ -2173,6 +2193,38 @@ impl S3 for FakeS3 {
 
     async fn get_object_attributes(&self, req: S3Request<GetObjectAttributesInput>) -> S3Result<S3Response<GetObjectAttributesOutput>> {
         self.do_get_object_attributes(req).await
+    }
+
+    async fn restore_object(&self, req: S3Request<RestoreObjectInput>) -> S3Result<S3Response<RestoreObjectOutput>> {
+        self.do_restore_object(req).await
+    }
+
+    async fn put_bucket_intelligent_tiering_configuration(
+        &self,
+        req: S3Request<PutBucketIntelligentTieringConfigurationInput>,
+    ) -> S3Result<S3Response<PutBucketIntelligentTieringConfigurationOutput>> {
+        self.do_put_it_config(req)
+    }
+
+    async fn get_bucket_intelligent_tiering_configuration(
+        &self,
+        req: S3Request<GetBucketIntelligentTieringConfigurationInput>,
+    ) -> S3Result<S3Response<GetBucketIntelligentTieringConfigurationOutput>> {
+        self.do_get_it_config(req)
+    }
+
+    async fn list_bucket_intelligent_tiering_configurations(
+        &self,
+        req: S3Request<ListBucketIntelligentTieringConfigurationsInput>,
+    ) -> S3Result<S3Response<ListBucketIntelligentTieringConfigurationsOutput>> {
+        self.do_list_it_configs(req)
+    }
+
+    async fn delete_bucket_intelligent_tiering_configuration(
+        &self,
+        req: S3Request<DeleteBucketIntelligentTieringConfigurationInput>,
+    ) -> S3Result<S3Response<DeleteBucketIntelligentTieringConfigurationOutput>> {
+        self.do_delete_it_config(req)
     }
 
     async fn abort_multipart_upload(&self, req: S3Request<AbortMultipartUploadInput>) -> S3Result<S3Response<AbortMultipartUploadOutput>> {

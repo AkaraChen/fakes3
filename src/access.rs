@@ -73,6 +73,12 @@ fn action_of(op: &str, version: bool) -> String {
         }
         "GetBucketLifecycleConfiguration" => "s3:GetLifecycleConfiguration".into(),
         "PutBucketLifecycleConfiguration" | "DeleteBucketLifecycle" => "s3:PutLifecycleConfiguration".into(),
+        "GetBucketIntelligentTieringConfiguration" | "ListBucketIntelligentTieringConfigurations" => {
+            "s3:GetIntelligentTieringConfiguration".into()
+        }
+        "PutBucketIntelligentTieringConfiguration" | "DeleteBucketIntelligentTieringConfiguration" => {
+            "s3:PutIntelligentTieringConfiguration".into()
+        }
         "GetBucketCors" => "s3:GetBucketCORS".into(),
         "PutBucketCors" | "DeleteBucketCors" => "s3:PutBucketCORS".into(),
         "GetPublicAccessBlock" => "s3:GetBucketPublicAccessBlock".into(),
