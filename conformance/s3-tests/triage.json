@@ -390,6 +390,44 @@
    "tests": [
     "test_bucket_logging_owner"
    ]
+  },
+  {
+   "id": "tenant-bucket-syntax",
+   "category": "test-defect",
+   "title": "RGW tenant syntax in bucket names (`:bucket`, `tenant:bucket`) is not S3",
+   "why": "The tests address another tenant's bucket as `tenant:bucket` / `:bucket`, which RGW resolves and S3 rejects as `InvalidBucketName`. The `tenant` user is an ordinary second account on fakes3 (the tests that only use its client pass); there is no tenant namespace to map this to.",
+   "tests": [
+    "test_bucket_policy_different_tenant",
+    "test_bucket_policy_tenanted_bucket"
+   ]
+  },
+  {
+   "id": "acl-grant-order-rgw",
+   "category": "test-defect",
+   "title": "Test reads the bucket owner from `Grants[2]` of a public-read-write ACL (RGW's grant order)",
+   "why": "`bucket_acl_response['Grants'][2]['Grantee']['ID']` after `create_bucket(ACL='public-read-write')`: RGW lists the owner third, S3 (and fakes3) list the owner first, then `AllUsers` READ and WRITE, so index 2 is a group grantee without `ID` (`KeyError: 'ID'`). The behaviour the tests are about (`bucket-owner-read` / `bucket-owner-full-control` give the bucket owner a grant on the uploader's object) is covered by fakes3's own tests (`tests/multi_user.rs`).",
+   "tests": [
+    "test_object_acl_canned_bucketownerfullcontrol",
+    "test_object_acl_canned_bucketownerread"
+   ]
+  },
+  {
+   "id": "policy-action-vs-resource",
+   "category": "test-defect",
+   "title": "Bucket policy with an object action on a bucket ARN is accepted by RGW, rejected by S3",
+   "why": "`Allow s3:PutObject` on `arn:aws:s3:::bucket` (no `/*`): S3 answers 400 `MalformedPolicy: Action does not apply to any resource(s) in statement` at PutBucketPolicy, which is what fakes3 does; the test expects the policy to be stored.",
+   "tests": [
+    "test_bucket_policy_multipart"
+   ]
+  },
+  {
+   "id": "request-tag-header-on-wrong-client",
+   "category": "test-defect",
+   "title": "Test adds the `x-amz-tagging` header to the main client but sends the request with the alt client",
+   "why": "`client.meta.events.register('before-call.s3.PutObject', ...)` is registered on `client`, then `alt_client.put_object(...)` is called, so the request carries no tag and the `s3:RequestObjectTag/security` Allow cannot match: 403 on S3 as well (the test is `fails_on_rgw` with a TODO about it).",
+   "tests": [
+    "test_bucket_policy_put_obj_request_obj_tag"
+   ]
   }
  ]
 }
