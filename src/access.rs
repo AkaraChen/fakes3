@@ -12,7 +12,8 @@
 //!
 //! Until some bucket has had a policy attached, a signed request returns from `check` after one
 //! atomic load, so deployments that never use policies pay nothing. Anonymous requests are rare
-//! and always take the full path. With `--no-auth` s3s skips authorization entirely.
+//! and always take the full path. Without an auth provider (`--no-auth`) s3s never calls `check`, so
+//! nothing is authorized or denied: signed and anonymous requests alike act as the owner.
 
 use std::net::IpAddr;
 use std::sync::Arc;

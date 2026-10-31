@@ -25,7 +25,8 @@ pub struct StartOptions {
     pub access_key: Option<String>,
     /// Secret key clients must sign with. Default `fakes3secret`.
     pub secret_key: Option<String>,
-    /// Skip signature verification. Default `false`.
+    /// Accept requests signed with any access key and secret, and unsigned ones. Authorization
+    /// (ACLs, bucket policies) is not applied. Default `false`.
     pub no_auth: Option<bool>,
     /// Objects and parts at or above this many bytes are stored in a memfd instead of on the heap.
     /// Default 1 MiB.

@@ -15,6 +15,7 @@ use crate::bucket_config::Ownership;
 use crate::clock::Clock;
 use crate::digest;
 use crate::memory::{LimitExceeded, MemoryTracker};
+use crate::noauth::Trailers;
 use crate::objext::{self, apply_ext, apply_sse, object_opts};
 use crate::objops;
 use crate::store::{
@@ -220,7 +221,7 @@ async fn ingest(
     content_md5: Option<&str>,
     mut expected: Checksum,
     algorithm: Option<&ChecksumAlgorithm>,
-    trailers: Option<s3s::TrailingHeaders>,
+    trailers: Option<Trailers>,
 ) -> S3Result<Ingested> {
     let mut hasher = hasher_for(&expected, algorithm)?;
     // Large bodies hash MD5 on another thread, overlapping with the work below.
@@ -1018,7 +1019,7 @@ impl S3 for FakeS3 {
             input.content_md5.as_deref(),
             expected,
             input.checksum_algorithm.as_ref(),
-            req.trailing_headers,
+            Trailers::of(req.trailing_headers, &req.extensions),
         )
         .await?;
         let e_tag = objext::etag_for(&ing.md5, ext.as_ref());
@@ -1773,7 +1774,7 @@ impl S3 for FakeS3 {
             input.content_md5.as_deref(),
             expected,
             Some(&algorithm),
-            req.trailing_headers,
+            Trailers::of(req.trailing_headers, &req.extensions),
         )
         .await?;
         let mut uploads = b.uploads.write();

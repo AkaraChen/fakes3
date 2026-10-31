@@ -181,7 +181,7 @@ await server.stop();
 | `host` | `127.0.0.1` | 监听地址 |
 | `port` | `0` | 监听端口，`0` 表示随机端口 |
 | `accessKey` / `secretKey` | `fakes3` / `fakes3secret` | 访问凭证 |
-| `noAuth` | `false` | 接受未签名的请求（SDK 发出的已签名请求在这个模式下目前会被拒绝，见 [TODO.md](TODO.md)） |
+| `noAuth` | `false` | 不校验签名：用任意 access key 和 secret 签名的请求都接受，未签名的也接受（见下面“`--no-auth`”） |
 | `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
 | `requestLog` / `requestLogCapacity` | `true` / `10000` | 是否记录 S3 请求（见下面的控制面），以及最多保留多少条 |
 | `domains` | 无 | 虚拟主机寻址的基础域名（`<bucket>.<domain>`），path-style 始终可用 |
@@ -232,10 +232,24 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 | `--port` | `FAKES3_PORT` | `9000` | 监听端口，`0` 表示随机端口 |
 | `--access-key` | `FAKES3_ACCESS_KEY` | `fakes3` | 访问凭证 |
 | `--secret-key` | `FAKES3_SECRET_KEY` | `fakes3secret` | 访问凭证 |
-| `--no-auth` | | 关 | 不校验签名 |
+| `--no-auth` | | 关 | 不校验签名：任意 access key / secret 签的名都接受，未签名的也接受，且不做授权（见下文） |
 | `--domain` | `FAKES3_DOMAIN` | `localhost` | virtual-host 寻址的基础域名，可重复（或逗号分隔）；`<bucket>.<domain>` 选择 bucket，其它主机名仍按 path-style 处理；传空字符串关闭 |
 | `--inline-threshold` | | `1048576` | 达到这个大小的对象或 part 存进 memfd，小于它的放在堆上 |
 | `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | 对象数据占用内存的上限，见下文。可以写 `2GiB`、`512MiB`、`unlimited`、`auto` |
+
+**`--no-auth`**（库里是 `Config { auth: false, .. }`，Node 里是 `noAuth`）：LocalStack / moto 式的“任意凭证都可以”。
+SDK 用什么 access key 和 secret 签名都行，签名本身不校验。覆盖 SigV4 的 `Authorization` 头和 presigned URL、SigV2 的头和 presigned URL，
+以及流式上传（`STREAMING-AWS4-HMAC-SHA256-PAYLOAD`、`STREAMING-UNSIGNED-PAYLOAD-TRAILER`、`STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`）；
+未签名的请求照常可用。几点说明：
+
+- **完整性校验仍然生效**：aws-chunked 的分块照常解码，trailer 里的校验和（`x-amz-checksum-*`）仍会和数据比对，不一致返回 400 `BadDigest`；
+  `Content-MD5`、header 里的校验和、`x-amz-decoded-content-length` 也一样。不再检查的是签名本身以及由它派生的东西：
+  时钟偏差、`x-amz-content-sha256` 里的负载哈希、signed headers 列表。
+- **不做授权**：ACL、Bucket Policy、Block Public Access 都不求值，已签名和匿名的请求一视同仁，都有 owner 的权限。
+  需要测访问控制时用默认的认证模式。
+- **presigned URL 的过期**：只在使用虚拟时钟（`/_fakes3/clock`）时判断，真实时钟下不检查。
+- 请求日志的 `access_key` 字段记录请求用的 access key（认证模式下它永远是配置的那一个，所以不记录）。
+- 带签名的 POST 表单上传（表单里有 `x-amz-signature` / `signature` 字段）暂不支持，仍返回 501；不带签名的表单可用。
 
 **内存上限**：fakes3 统计所有对象数据实际占用的内存（堆上的小对象、memfd 里的大对象、尚未 Complete 的分段上传的 part），
 超出上限的写入会被拒绝，而不是让进程被 OOM killer 杀掉。
@@ -273,7 +287,7 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 - 对象标签、Range 读取、Content-MD5 校验
 - 访问控制：Bucket/Object ACL（canned、grant 头、请求体）、OwnershipControls（BucketOwnerEnforced 时 ACL 被禁用）、
   PublicAccessBlock、Bucket Policy（含 Condition，显式 Deny 对已签名请求也生效）；未签名的匿名请求在 policy 或公开 ACL 允许时放行，
-  `--no-auth` 时不做授权
+  `--no-auth` 时不做授权（见“`--no-auth`”）
 - CORS：预检 `OPTIONS` 和实际响应上的 CORS 头
 - Lifecycle：过期（含版本控制下的删除标记、非当前版本、`NewerNoncurrentVersions`）和清理未完成的分段上传，按服务端虚拟时钟在 UTC 日期变化后的第一次访问时执行；
   没有规则的 bucket 零开销

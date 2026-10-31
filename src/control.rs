@@ -274,6 +274,7 @@ fn record_json(r: &RequestRecord) -> Value {
         "latency_us": r.latency.as_micros() as u64,
         "bytes_in": r.bytes_in,
         "bytes_out": r.bytes_out,
+        "access_key": r.access_key,
     })
 }
 

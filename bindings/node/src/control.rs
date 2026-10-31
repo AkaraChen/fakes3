@@ -120,6 +120,8 @@ pub struct RequestRecord {
     pub latency_us: f64,
     pub bytes_in: f64,
     pub bytes_out: f64,
+    /// The access key the request was signed with. Only recorded with `noAuth`; otherwise `null`.
+    pub access_key: Option<String>,
 }
 
 /// Settings for the request log.
@@ -173,6 +175,7 @@ fn record(r: fakes3::RequestRecord) -> RequestRecord {
         latency_us: r.latency.as_micros() as f64,
         bytes_in: r.bytes_in as f64,
         bytes_out: r.bytes_out as f64,
+        access_key: r.access_key,
     }
 }
 
