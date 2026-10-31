@@ -26,6 +26,9 @@ pub struct Policy {
     pub public: bool,
     /// Whether a condition refers to the client address, so the server must record peer addresses.
     pub uses_source_ip: bool,
+    /// Whether a condition refers to the tags the object already has (`s3:ExistingObjectTag/<key>`),
+    /// so evaluating the policy needs the object.
+    pub uses_object_tags: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -49,6 +52,8 @@ pub struct Context<'a> {
     /// `s3:prefix` when the request is not a listing: the key whose absence is being judged by
     /// the right to list (RGW answers that way, S3 does not document it).
     pub prefix: Option<&'a str>,
+    /// The tags of the object the request is about, when the policy asks (`uses_object_tags`).
+    pub existing_tags: Option<&'a [(String, String)]>,
 }
 
 impl Context<'_> {
@@ -80,6 +85,7 @@ impl Policy {
             doc,
             public: false,
             uses_source_ip: false,
+            uses_object_tags: false,
         };
         p.public = p.doc.statement.as_slice().iter().any(statement_is_public);
         p.uses_source_ip = p.doc.statement.as_slice().iter().any(|s| {
@@ -87,6 +93,12 @@ impl Policy {
                 .iter()
                 .flat_map(|c| c.0.values())
                 .any(|kv| kv.0.keys().any(|k| k.eq_ignore_ascii_case("aws:SourceIp")))
+        });
+        p.uses_object_tags = p.doc.statement.as_slice().iter().any(|s| {
+            s.condition
+                .iter()
+                .flat_map(|c| c.0.values())
+                .any(|kv| kv.0.keys().any(|k| k.to_ascii_lowercase().starts_with("s3:existingobjecttag/")))
         });
         Ok(p)
     }
@@ -375,6 +387,15 @@ impl Context<'_> {
             "s3:authtype" if self.signed() => {
                 vec![if self.presigned { "REST-QUERY-STRING" } else { "REST-HEADER" }.to_owned()]
             }
+            k if k.starts_with("s3:existingobjecttag/") => {
+                let want = &k["s3:existingobjecttag/".len()..];
+                self.existing_tags
+                    .into_iter()
+                    .flatten()
+                    .filter(|(k, _)| k.eq_ignore_ascii_case(want))
+                    .map(|(_, v)| v.clone())
+                    .collect()
+            }
             "s3:requestobjecttagkeys" => self.request_tags().into_iter().map(|(k, _)| k).collect(),
             k if k.starts_with("s3:requestobjecttag/") => {
                 let want = &k["s3:requestobjecttag/".len()..];
@@ -585,6 +606,7 @@ mod tests {
             presigned: false,
             peer: Some("10.1.2.3".parse().unwrap()),
             prefix: None,
+            existing_tags: None,
         }
     }
 
@@ -678,6 +700,32 @@ mod tests {
             (Verdict::NoMatch, Verdict::Deny, Verdict::Deny)
         );
         assert_eq!(verdict(&alt_root, &ctx(false)), Verdict::NoMatch);
+    }
+
+    #[test]
+    fn existing_object_tags_are_a_condition_key() {
+        let p = parse(
+            r#"{"Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::b/*",
+              "Condition":{"StringEquals":{"s3:ExistingObjectTag/security":"public"}}}]}"#,
+        )
+        .unwrap();
+        assert!(
+            p.uses_object_tags
+                && !parse(r#"{"Statement":{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::b/*"}}"#)
+                    .unwrap()
+                    .uses_object_tags
+        );
+        let tags = vec![("foo".to_owned(), "bar".to_owned()), ("security".to_owned(), "public".to_owned())];
+        let with = |t: Option<&[(String, String)]>| {
+            let c = Context {
+                existing_tags: t,
+                ..ctx(true)
+            };
+            p.evaluate("s3:GetObject", "arn:aws:s3:::b/k", &c)
+        };
+        assert_eq!(with(Some(&tags)), Verdict::Allow);
+        assert_eq!(with(Some(&tags[..1])), Verdict::NoMatch);
+        assert_eq!(with(None), Verdict::NoMatch);
     }
 
     #[test]

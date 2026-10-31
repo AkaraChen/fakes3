@@ -178,6 +178,13 @@ impl FakeS3 {
             return Err(malformed_xml());
         };
         let o = Ownership::parse(rule.object_ownership.as_str()).ok_or_else(malformed_xml)?;
+        // ACLs would stop applying: AWS wants the grants moved elsewhere first.
+        if o == Ownership::Enforced && b.config.acl.read().is_some() {
+            return Err(s3_error!(
+                InvalidBucketAclWithObjectOwnership,
+                "Bucket cannot have ACLs set with ObjectOwnership's BucketOwnerEnforced setting"
+            ));
+        }
         *b.config.ownership.write() = Some(o);
         Ok(S3Response::new(PutBucketOwnershipControlsOutput {}))
     }

@@ -270,6 +270,25 @@ impl Access {
         let policy = bucket.config.policy.read().clone();
         let pab = bucket.config.public_access_block.read().unwrap_or_default();
         let owner = who.user() == Some(bucket.owner);
+        let need = acl_need(op);
+        let object_scope = key.is_some() && !matches!(need, Some((Scope::Bucket, _)));
+        // The object itself, when the decision depends on it.
+        let wants_object = key.is_some() && (object_scope || policy.as_ref().is_some_and(|p| p.uses_object_tags));
+        let version = key.filter(|_| wants_object).and_then(|key| {
+            let objects = bucket.objects.read();
+            objects
+                .get(key)
+                .and_then(|e| match version_id {
+                    Some(id) => e.find(id),
+                    None => e.latest(),
+                })
+                .cloned()
+        });
+        let tags = version.as_ref().and_then(|v| v.obj.as_ref()).map(|o| o.tags.as_slice());
+        let ctx = &Context {
+            existing_tags: tags.filter(|_| policy.as_ref().is_some_and(|p| p.uses_object_tags)),
+            ..*ctx
+        };
         let mut by_policy = false;
         if let Some(p) = &policy {
             match p.evaluate(&action_of(op, version_id.is_some()), &arn(name, key), ctx) {
@@ -279,8 +298,6 @@ impl Access {
             }
         }
         let public = !pab.ignore_public_acls;
-        let need = acl_need(op);
-        let object_scope = key.is_some() && !matches!(need, Some((Scope::Bucket, _)));
         let initiator = || {
             is_upload_op(op)
                 && who
@@ -293,16 +310,6 @@ impl Access {
         }
         let perm = need.map_or(Perm::FullControl, |(_, p)| p);
         let key = key.expect("object-scoped operations have a key");
-        let version = {
-            let objects = bucket.objects.read();
-            objects
-                .get(key)
-                .and_then(|e| match version_id {
-                    Some(id) => e.find(id),
-                    None => e.latest(),
-                })
-                .cloned()
-        };
         match version.as_ref().and_then(|v| v.obj.as_ref().map(|o| (v, o))) {
             Some((v, o)) => {
                 // With ACLs disabled the bucket owner owns everything.
@@ -408,6 +415,7 @@ impl S3Access for Access {
             presigned: identity.presigned(),
             peer,
             prefix: None,
+            existing_tags: None,
         };
         if !self.permit(&bucket, &name, op, key.as_deref(), version_id.as_deref(), identity, &ctx) {
             return Err(denied());
@@ -452,6 +460,7 @@ impl S3Access for Access {
             presigned: identity.presigned(),
             peer,
             prefix: None,
+            existing_tags: None,
         };
         let denied: Vec<_> = req
             .input
@@ -495,6 +504,7 @@ impl S3Access for Access {
             presigned: identity.presigned(),
             peer,
             prefix: None,
+            existing_tags: None,
         };
         if self.permit(&bucket, &req.input.bucket, "PostObject", Some(&req.input.key), None, identity, &ctx) {
             Ok(())

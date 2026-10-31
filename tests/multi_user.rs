@@ -688,3 +688,52 @@ async fn with_auth_each_account_signs_with_its_own_secret() {
     .await;
     assert_eq!(status(send(a, alt_req("GET", "/main-bkt"))).await, 200);
 }
+
+#[tokio::test]
+async fn enforced_ownership_needs_a_bucket_acl_that_is_private() {
+    let (_s, a) = start().await;
+    ok(send(a, main_req("PUT", "/bkt").header("x-amz-acl", "public-read"))).await;
+    let body = ownership("BucketOwnerEnforced");
+    let enforce = || send(a, main_req("PUT", "/bkt").query("ownershipControls").body(body.as_bytes()));
+    let r = enforce().await;
+    assert_eq!((r.status, r.code()), (400, "InvalidBucketAclWithObjectOwnership"), "{}", r.body);
+    ok(send(a, main_req("PUT", "/bkt").query("acl").header("x-amz-acl", "private"))).await;
+    ok(enforce()).await;
+}
+
+#[tokio::test]
+async fn policies_can_ask_for_the_tags_an_object_has() {
+    let (_s, a) = start().await;
+    ok(send(a, main_req("PUT", "/bkt"))).await;
+    for (key, tags) in [
+        ("public", "security=public&foo=bar"),
+        ("private", "security=private"),
+        ("other", "security1=public"),
+    ] {
+        ok(send(
+            a,
+            main_req("PUT", &format!("/bkt/{key}")).header("x-amz-tagging", tags).body(b"v"),
+        ))
+        .await;
+    }
+    let p = policy(
+        r#"{"Effect":"Allow","Principal":"*","Action":["s3:GetObject","s3:PutObjectTagging"],"Resource":"arn:aws:s3:::bkt/*","Condition":{"StringEquals":{"s3:ExistingObjectTag/security":"public"}}}"#,
+    );
+    ok(send(a, main_req("PUT", "/bkt").query("policy").body(p.as_bytes()))).await;
+    assert_eq!(status(send(a, alt_req("GET", "/bkt/public"))).await, 200);
+    assert_eq!(status(send(a, alt_req("GET", "/bkt/private"))).await, 403);
+    assert_eq!(status(send(a, alt_req("GET", "/bkt/other"))).await, 403);
+
+    // The condition looks at the tags before the request changes them.
+    let put = |key: &'static str, tag: &'static str| {
+        let body = format!("<Tagging><TagSet><Tag><Key>security</Key><Value>{tag}</Value></Tag></TagSet></Tagging>");
+        async move {
+            send(a, alt_req("PUT", &format!("/bkt/{key}")).query("tagging").body(body.as_bytes()))
+                .await
+                .status
+        }
+    };
+    assert_eq!(put("private", "public").await, 403);
+    assert_eq!(put("public", "private").await, 200);
+    assert_eq!(put("public", "public").await, 403, "it is private now");
+}
