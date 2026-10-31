@@ -483,3 +483,96 @@ fn cli_reports_unreachable_server() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("cannot connect"));
 }
+
+/// Waits for `used` to reach `want`: buffers are freed when the last reference drops, which for a
+/// finished request can be a moment after the client saw the response.
+async fn expect_memory(s: &Server, want: u64) {
+    for _ in 0..200 {
+        if s.memory().used == want {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(s.memory().used, want);
+}
+
+#[tokio::test]
+async fn reset_releases_accounted_memory() {
+    let s = start().await;
+    assert_eq!(s.memory().used, 0);
+    let big = "x".repeat(100_000);
+    put_object(&s, "bkt", "one", &big).await;
+    assert_eq!(send(&s, "PUT", "/bkt/two", &big).await.status, 200);
+    assert!(s.memory().used >= 200_000);
+    // Multipart parts are accounted too.
+    let up = send(&s, "POST", "/bkt/mp?uploads", "").await.body;
+    let id = up.split("<UploadId>").nth(1).unwrap().split("</UploadId>").next().unwrap();
+    assert_eq!(
+        send(&s, "PUT", &format!("/bkt/mp?partNumber=1&uploadId={id}"), &big).await.status,
+        200
+    );
+    assert!(s.memory().used >= 300_000);
+
+    assert_eq!(send(&s, "POST", "/_fakes3/reset", "").await.status, 200);
+    expect_memory(&s, 0).await;
+    s.shutdown().await;
+}
+
+#[tokio::test]
+async fn snapshots_keep_data_alive_until_deleted() {
+    let s = start().await;
+    let big = "x".repeat(100_000);
+    put_object(&s, "bkt", "k", &big).await;
+    let held = s.memory().used;
+    assert!(held >= 100_000);
+    s.snapshot(Some("a")).unwrap();
+
+    // The snapshot shares the buffer instead of copying it.
+    assert_eq!(s.memory().used, held);
+    // Overwrite and delete: the old data is still referenced by the snapshot.
+    send(&s, "PUT", "/bkt/k", &"y".repeat(50_000)).await;
+    assert_eq!(s.memory().used, held + 50_000);
+    send(&s, "DELETE", "/bkt/k", "").await;
+    assert_eq!(s.memory().used, held);
+    s.reset();
+    expect_memory(&s, held).await;
+
+    // Restoring brings the data back without any new allocation.
+    s.restore("a").unwrap();
+    assert_eq!(s.memory().used, held);
+    assert_eq!(send(&s, "GET", "/bkt/k", "").await.body, big);
+
+    // Rolling back to an empty snapshot frees what only the live store was holding.
+    s.reset();
+    s.snapshot(Some("empty")).unwrap();
+    s.restore("a").unwrap();
+    s.restore("empty").unwrap();
+    s.control().delete_snapshot("a").unwrap();
+    expect_memory(&s, 0).await;
+    s.shutdown().await;
+}
+
+#[tokio::test]
+async fn stats_endpoint_and_cli_report_memory() {
+    let s = std::sync::Arc::new(
+        start_with(Config {
+            memory_limit: fakes3::MemoryLimit::Bytes(10_000_000),
+            ..Config::default()
+        })
+        .await,
+    );
+    put_object(&s, "bkt", "k", &"x".repeat(100_000)).await;
+    let j = send(&s, "GET", "/_fakes3/stats", "").await.json();
+    assert_eq!(j["memory"]["limit"], 10_000_000);
+    assert_eq!(j["memory"]["used"], s.memory().used);
+    assert!(j["memory"]["used"].as_u64().unwrap() >= 100_000);
+    assert_eq!((j["store"]["buckets"].clone(), j["store"]["objects"].clone()), (json!(1), json!(1)));
+    assert_eq!(send(&s, "GET", "/_fakes3", "").await.json()["memory"], j["memory"]);
+
+    let s2 = s.clone();
+    let (ok, out, _) = tokio::task::spawn_blocking(move || ctl(&s2, &["stats"])).await.unwrap();
+    assert!(
+        ok && out.contains("memory") && out.contains("of 9.5 MiB") && out.contains("1 buckets, 1 objects"),
+        "{out}"
+    );
+}

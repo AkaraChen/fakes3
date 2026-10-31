@@ -17,6 +17,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::clock::{self, Clock};
+use crate::memory::MemoryTracker;
 use crate::reqlog::{RequestFilter, RequestLog, RequestRecord, StatusFilter};
 use crate::snapshot::{Counts, StoreSnapshot};
 use crate::store::Store;
@@ -30,6 +31,7 @@ const MAX_BODY: usize = 1 << 20;
 pub struct Control {
     pub(crate) store: Arc<Store>,
     pub(crate) clock: Arc<Clock>,
+    pub(crate) memory: Arc<MemoryTracker>,
     pub(crate) log: RequestLog,
     snapshots: Mutex<BTreeMap<String, SnapshotEntry>>,
     next_snapshot: AtomicU64,
@@ -94,10 +96,11 @@ impl From<clock::OutOfRange> for ControlError {
 }
 
 impl Control {
-    pub(crate) fn new(store: Arc<Store>, clock: Arc<Clock>, log: RequestLog) -> Self {
+    pub(crate) fn new(store: Arc<Store>, clock: Arc<Clock>, memory: Arc<MemoryTracker>, log: RequestLog) -> Self {
         Self {
             store,
             clock,
+            memory,
             log,
             snapshots: Mutex::default(),
             next_snapshot: AtomicU64::new(1),
@@ -184,6 +187,11 @@ impl Control {
         self.log.set_capacity(capacity);
     }
 
+    /// Bytes of object data held and the memory limit.
+    pub fn memory(&self) -> crate::memory::MemoryStats {
+        self.memory.stats()
+    }
+
     /// Bucket, object and upload counts.
     pub fn counts(&self) -> Counts {
         self.store.counts()
@@ -242,6 +250,10 @@ fn clock_json(c: &Clock) -> Value {
 
 fn counts_json(c: Counts) -> Value {
     json!({ "buckets": c.buckets, "objects": c.objects, "uploads": c.uploads })
+}
+
+fn memory_json(m: crate::memory::MemoryStats) -> Value {
+    json!({ "used": m.used, "limit": m.limit })
 }
 
 fn snapshot_json(s: &SnapshotInfo) -> Value {
@@ -375,8 +387,21 @@ impl Control {
                         "version": env!("CARGO_PKG_VERSION"),
                         "clock": clock_json(&self.clock),
                         "store": counts_json(self.counts()),
+                        "memory": memory_json(self.memory.stats()),
                         "snapshots": self.snapshots.lock().len(),
                         "request_log": log_config_json(&self.log),
+                    }),
+                )),
+                _ => not_allowed(),
+            },
+            ["stats"] => match *method {
+                M::GET => Ok(reply(
+                    200,
+                    json!({
+                        "memory": memory_json(self.memory.stats()),
+                        "store": counts_json(self.counts()),
+                        "snapshots": self.snapshots.lock().len(),
+                        "requests": log_config_json(&self.log),
                     }),
                 )),
                 _ => not_allowed(),

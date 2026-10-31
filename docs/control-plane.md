@@ -40,7 +40,8 @@ curl、`fakes3 ctl` 和测试框架的 HTTP 客户端不会发 `Origin`。
 
 | 命令 | 说明 |
 |---|---|
-| `status` | 时钟、数据量、快照数、请求日志状态 |
+| `status` | 时钟、内存、数据量、快照数、请求日志状态 |
+| `stats` | 内存用量（对象数据字节数和上限）、数据量、快照数、请求日志状态 |
 | `reset [--keep-clock] [--keep-requests] [--drop-snapshots]` | 清空数据，见[重置](#重置) |
 | `snapshot create [NAME]` | 保存当前状态；不给名字时用 `snap-<n>` |
 | `snapshot list` | 列出快照 |
@@ -215,9 +216,25 @@ $ curl 'localhost:9000/_fakes3/requests?op=PutObject&bucket=logs&limit=1'
 - `PUT /_fakes3/requests/config`，请求体 `{"enabled": false}`、`{"capacity": 500}` 或两者。缩小容量会丢弃最旧的记录。
   关闭只是停止记录，已有记录保留。
 
-## 其他端点
+## 统计
 
-`GET /_fakes3`（或 `/_fakes3/`）返回版本、时钟、数据量、快照数和请求日志状态，`fakes3 ctl status` 显示的就是它。
+`GET /_fakes3/stats`（`fakes3 ctl stats`）：
+
+```
+$ curl localhost:9000/_fakes3/stats
+{"memory":{"used":314572800,"limit":8589934592},"store":{"buckets":2,"objects":1500,"uploads":1},
+ "snapshots":2,"requests":{"enabled":true,"capacity":10000,"stored":42,"dropped":0}}
+```
+
+`memory.used` 是服务器持有的对象数据字节数（含分段上传的 part，以及仍被快照或进行中的读取引用的数据），`limit` 是
+`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本和时钟，`fakes3 ctl status` 显示的就是它。
+
+**内存与重置、快照的关系。** 数据缓冲区按引用计数在最后一个引用消失时释放并归还额度，所以：
+
+- `reset` 之后 `memory.used` 回到 0——除非还有快照引用着那些数据，此时要删除快照（或 `reset?snapshots=true`）才会释放；
+- 快照不复制数据，所以创建快照不增加 `used`；但快照之后被覆盖或删除的对象，其数据会因为快照还引用着而继续占用额度，
+  在受 `--memory-limit` 限制的服务上，长期保留大量快照可能让后续写入 507。用完的快照请删除；
+- `restore` 不分配新的数据缓冲区，只是让存储重新引用快照里的缓冲区；restore 时存储里“只有当前状态才引用”的数据随之释放。
 
 ## 限制
 
@@ -226,6 +243,7 @@ $ curl 'localhost:9000/_fakes3/requests?op=PutObject&bucket=logs&limit=1'
 - 时钟不能注入 s3s 的签名校验（见[预签名 URL 与签名时间](#预签名-url-与签名时间)）。
 - 操作名由请求形状推断；不认识的为空。
 - 请求日志只记 S3 请求；响应体的流式发送时长和错误码不在记录里。
+- 内存额度按引用计数释放：快照会让被覆盖或删除的数据继续占用 `--memory-limit` 额度（见[统计](#统计)）。
 - 尚未实现故障注入（`/_fakes3/faults`）。
 
 ## Rust API

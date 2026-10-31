@@ -27,6 +27,8 @@ pub struct Ctl {
 enum Command {
     /// Show clock, store, snapshot and request-log state.
     Status,
+    /// Show memory use against the limit, and how much data the store holds.
+    Stats,
     /// Delete all buckets, objects and uploads, and clear the request log and the clock.
     Reset {
         /// Leave the clock as it is.
@@ -144,6 +146,7 @@ async fn execute(ctl: &Ctl) -> Result<()> {
     let api = Api::new(&ctl.endpoint)?;
     let (method, path, body) = match &ctl.command {
         Command::Status => ("GET", "/_fakes3".to_owned(), None),
+        Command::Stats => ("GET", "/_fakes3/stats".to_owned(), None),
         Command::Reset {
             keep_clock,
             keep_requests,
@@ -251,6 +254,16 @@ fn print_human(command: &Command, v: &Value) {
             println!("snapshots      {}", v["snapshots"]);
             print_log_config(&v["request_log"]);
         }
+        Command::Stats => {
+            print_memory(&v["memory"]);
+            let s = &v["store"];
+            println!(
+                "store          {} buckets, {} objects, {} uploads",
+                s["buckets"], s["objects"], s["uploads"]
+            );
+            println!("snapshots      {}", v["snapshots"]);
+            print_log_config(&v["requests"]);
+        }
         Command::Reset { .. } => println!("reset"),
         Command::Snapshot(Snapshot::List) => {
             for s in v["snapshots"].as_array().into_iter().flatten() {
@@ -302,6 +315,30 @@ fn print_clock(c: &Value) {
         "running, host clock"
     };
     println!("clock          {} ({mode})", text(c, "now"));
+}
+
+fn print_memory(m: &Value) {
+    let used = m["used"].as_u64().unwrap_or(0);
+    match m["limit"].as_u64() {
+        Some(limit) => println!(
+            "memory         {} of {} ({}%)",
+            human(used),
+            human(limit),
+            used * 100 / limit.max(1)
+        ),
+        None => println!("memory         {} (no limit)", human(used)),
+    }
+}
+
+/// Formats a byte count with a binary unit, e.g. `1.5 GiB`.
+fn human(n: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+    let (mut v, mut i) = (n as f64, 0);
+    while v >= 1024.0 && i + 1 < UNITS.len() {
+        v /= 1024.0;
+        i += 1;
+    }
+    if i == 0 { format!("{n} B") } else { format!("{v:.1} {}", UNITS[i]) }
 }
 
 fn print_log_config(l: &Value) {

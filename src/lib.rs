@@ -15,6 +15,7 @@
 mod clock;
 mod control;
 mod digest;
+mod memory;
 mod presign;
 mod reqlog;
 mod s3impl;
@@ -26,6 +27,7 @@ use std::sync::Arc;
 
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
+use memory::MemoryTracker;
 use s3s::auth::SimpleAuth;
 use s3s::service::S3ServiceBuilder;
 use tokio::net::TcpListener;
@@ -34,6 +36,7 @@ use tokio::task::JoinHandle;
 
 pub use clock::{Clock, OutOfRange, parse_duration};
 pub use control::{Control, ControlError, ResetOptions, SnapshotInfo};
+pub use memory::{MemoryLimit, MemoryStats};
 pub use reqlog::{DEFAULT_CAPACITY as DEFAULT_REQUEST_LOG_CAPACITY, RequestFilter, RequestRecord, StatusFilter};
 pub use snapshot::Counts;
 
@@ -53,6 +56,10 @@ pub struct Config {
     pub request_log: bool,
     /// Requests kept by the log; the oldest are dropped first.
     pub request_log_capacity: usize,
+    /// Cap on the object data held in memory (including uploaded parts). A write that would pass it
+    /// is refused with HTTP 507 `XFakeS3MemoryLimitExceeded`. The default, [`MemoryLimit::Auto`],
+    /// is 75% of the container's or machine's memory.
+    pub memory_limit: MemoryLimit,
 }
 
 impl Default for Config {
@@ -66,6 +73,7 @@ impl Default for Config {
             inline_threshold: 1 << 20,
             request_log: true,
             request_log_capacity: DEFAULT_REQUEST_LOG_CAPACITY,
+            memory_limit: MemoryLimit::Auto,
         }
     }
 }
@@ -84,9 +92,15 @@ impl Server {
     pub async fn start(config: Config) -> std::io::Result<Self> {
         let listener = TcpListener::bind((config.host.as_str(), config.port)).await?;
         let addr = listener.local_addr()?;
+        let limit = config.memory_limit.resolve();
+        match limit {
+            Some(n) => tracing::info!("memory limit: {} ({:?})", memory::human(n), config.memory_limit),
+            None => tracing::info!("memory limit: none"),
+        }
         let control = Arc::new(Control::new(
             Arc::default(),
             Arc::default(),
+            MemoryTracker::new(limit),
             reqlog::RequestLog::new(config.request_log, config.request_log_capacity),
         ));
         let (stop, mut stopped) = oneshot::channel();
@@ -158,6 +172,11 @@ impl Server {
         self.control.requests(filter)
     }
 
+    /// Bytes of object data currently held, and the limit in force.
+    pub fn memory(&self) -> MemoryStats {
+        self.control.memory.stats()
+    }
+
     /// Stops accepting connections. Requests already in flight finish on their own.
     pub async fn shutdown(mut self) {
         if let Some(stop) = self.stop.take() {
@@ -182,6 +201,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
     let fake = s3impl::FakeS3 {
         store: control.store.clone(),
         inline_threshold: config.inline_threshold,
+        memory: control.memory.clone(),
         clock: control.clock.clone(),
     };
     let mut b = S3ServiceBuilder::new(fake);
