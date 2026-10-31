@@ -185,7 +185,7 @@ await server.stop();
 | `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
 | `memoryLimit` | `"auto"` | 对象数据占用内存的上限：字节数，或 `"512MiB"`、`"2GiB"`、`"unlimited"`、`"auto"`；超出时写入返回 HTTP 507 |
 
-`FakeS3Server` 有只读属性 `endpoint`、`host`、`port`、`accessKey`、`secretKey`，以及方法 `memory(): { used, limit }`（当前用量和上限，字节；无上限时 `limit` 为 `null`），`stop(): Promise<void>`（可重复调用，调用后端口立即释放）。
+`FakeS3Server` 有只读属性 `endpoint`、`host`、`port`、`accessKey`、`secretKey`，以及方法 `memory(): { used, limit }`（当前用量和上限，字节；无上限时没有 `limit` 字段），`stop(): Promise<void>`（可重复调用，调用后端口立即释放）。
 类型声明由 `napi build` 生成。
 
 预编译产物覆盖 Linux 的 x64 / arm64，glibc 和 musl（Alpine）都有，通过 `optionalDependencies` 里的

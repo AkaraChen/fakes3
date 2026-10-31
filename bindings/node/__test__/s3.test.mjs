@@ -118,7 +118,7 @@ test('memoryLimit accepts bytes and "unlimited"; rejects garbage', async () => {
   const open = await start({ memoryLimit: 'unlimited' })
   try {
     assert.equal(bytes.memory().limit, 4096)
-    assert.equal(open.memory().limit, null)
+    assert.equal(open.memory().limit, undefined)
     await assert.rejects(start({ memoryLimit: 'lots' }), /invalid memoryLimit/)
   } finally {
     await Promise.all([bytes.stop(), open.stop()])

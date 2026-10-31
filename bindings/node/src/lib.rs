@@ -36,7 +36,7 @@ pub struct StartOptions {
 pub struct MemoryStats {
     /// Bytes of object data currently held.
     pub used: f64,
-    /// The configured limit in bytes, or `null` when unlimited.
+    /// The configured limit in bytes, omitted (`undefined`) when unlimited.
     pub limit: Option<f64>,
 }
 
