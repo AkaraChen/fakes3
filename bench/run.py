@@ -248,7 +248,9 @@ def measure(server, fn):
 
 
 def run_tool(*args):
-    r = sh(str(ROOT / "bench/bin/suite"), *args)
+    r = sh(str(ROOT / "bench/bin/suite"), *args, check=False)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout).strip()[-500:])
     return json.loads(r.stdout)
 
 
