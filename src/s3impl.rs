@@ -1804,7 +1804,7 @@ mod tests {
 
     #[test]
     fn full_object_checksum_matches_crc_of_whole_object() {
-        let data: Vec<u8> = (0..3_000_000u32).map(|i| (i * 2_654_435_761) as u8).collect();
+        let data: Vec<u8> = (0..3_000_000u32).map(|i| i.wrapping_mul(2_654_435_761) as u8).collect();
         let cuts = [0, 1_048_576, 2_500_000, data.len()];
         for alg in [CRC32, CRC32C, CRC64NVME] {
             let parts: Vec<Checksum> = cuts.windows(2).map(|w| crc_of(alg, &data[w[0]..w[1]])).collect();
