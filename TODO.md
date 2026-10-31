@@ -43,7 +43,7 @@
 - [x] 内存上限（`--memory-limit`）和超出上限时的明确报错（507 `XFakeS3MemoryLimitExceeded`）
 - [x] 评估每 bucket 的 `RwLock<BTreeMap>` 是否是瓶颈：CI（4 核）上 64 并发 PUT 与 16 并发吞吐持平（约 2.3 万 ops/s），
       服务端只用了约 0.74 核，瓶颈在压测客户端而不是锁，暂不更换。
-- [x] 快照没有换成 `im::OrdMap`：实测持久化 map 让每次写入的“构造并插入”慢 2.2～2.6 倍，而复制 `BTreeMap` 在 10 万个对象时只要几毫秒（数据见
+- [x] 快照没有换成 `im::OrdMap`：实测持久化 map 让每次写入的“构造并插入”慢 2.2～2.6 倍（HTTP 层面吞吐低约 1.5%），而复制 `BTreeMap` 在 10 万个对象时只要几毫秒（数据见
       [docs/control-plane.md](docs/control-plane.md#快照的实现和选型)）；需要时只改 `store::Index` 一处
 
 ## 一致性验证
