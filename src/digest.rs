@@ -133,7 +133,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn pipelined_matches_inline() {
-        let data: Vec<u8> = (0..5_000_000u32).map(|i| (i * 2_654_435_761) as u8).collect();
+        let data: Vec<u8> = (0..5_000_000u32).map(|i| i.wrapping_mul(2_654_435_761) as u8).collect();
         let data = Bytes::from(data);
         let mut p = Streaming::new(true);
         for chunk in data.chunks(65_536) {

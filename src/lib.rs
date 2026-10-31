@@ -14,6 +14,7 @@
 
 mod clock;
 mod digest;
+mod memory;
 mod objext;
 mod objops;
 mod s3impl;
@@ -24,6 +25,7 @@ use std::sync::Arc;
 
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
+use memory::MemoryTracker;
 use s3s::auth::SimpleAuth;
 use s3s::service::S3ServiceBuilder;
 use tokio::net::TcpListener;
@@ -31,6 +33,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 pub use clock::Clock;
+pub use memory::{MemoryLimit, MemoryStats};
 
 /// Server settings. `Default` listens on a random localhost port with the default credentials.
 #[derive(Clone, Debug)]
@@ -44,6 +47,10 @@ pub struct Config {
     pub auth: bool,
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     pub inline_threshold: usize,
+    /// Cap on the object data held in memory (including uploaded parts). A write that would pass it
+    /// is refused with HTTP 507 `XFakeS3MemoryLimitExceeded`. The default, [`MemoryLimit::Auto`],
+    /// is 75% of the container's or machine's memory.
+    pub memory_limit: MemoryLimit,
 }
 
 impl Default for Config {
@@ -55,6 +62,7 @@ impl Default for Config {
             secret_key: "fakes3secret".into(),
             auth: true,
             inline_threshold: 1 << 20,
+            memory_limit: MemoryLimit::Auto,
         }
     }
 }
@@ -64,6 +72,7 @@ impl Default for Config {
 pub struct Server {
     addr: SocketAddr,
     clock: Arc<Clock>,
+    memory: Arc<MemoryTracker>,
     stop: Option<oneshot::Sender<()>>,
     task: JoinHandle<()>,
 }
@@ -75,7 +84,13 @@ impl Server {
         let addr = listener.local_addr()?;
         let clock = Arc::new(Clock::default());
         let (stop, mut stopped) = oneshot::channel();
-        let service = service(&config, clock.clone());
+        let limit = config.memory_limit.resolve();
+        match limit {
+            Some(n) => tracing::info!("memory limit: {} ({:?})", memory::human(n), config.memory_limit),
+            None => tracing::info!("memory limit: none"),
+        }
+        let memory = MemoryTracker::new(limit);
+        let service = service(&config, clock.clone(), memory.clone());
         let task = tokio::spawn(async move {
             let http = ConnBuilder::new(TokioExecutor::new());
             loop {
@@ -99,6 +114,7 @@ impl Server {
         Ok(Self {
             addr,
             clock,
+            memory,
             stop: Some(stop),
             task,
         })
@@ -116,6 +132,11 @@ impl Server {
     /// The server's clock, for tests that need to move time.
     pub fn clock(&self) -> &Clock {
         &self.clock
+    }
+
+    /// Bytes of object data currently held, and the limit in force.
+    pub fn memory(&self) -> MemoryStats {
+        self.memory.stats()
     }
 
     /// Stops accepting connections. Requests already in flight finish on their own.
@@ -138,10 +159,11 @@ type Service = Arc<
         + Sync,
 >;
 
-fn service(config: &Config, clock: Arc<Clock>) -> ServiceFn {
+fn service(config: &Config, clock: Arc<Clock>, memory: Arc<MemoryTracker>) -> ServiceFn {
     let fake = s3impl::FakeS3 {
         store: store::Store::default(),
         inline_threshold: config.inline_threshold,
+        memory,
         clock,
     };
     let mut b = S3ServiceBuilder::new(fake);
