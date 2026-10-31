@@ -86,8 +86,21 @@ s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 - 认证：SigV4（包括 presigned URL 和带 trailer 的流式上传）、SigV2
 - 对象标签、Range 读取、Content-MD5 校验
 
-还没做的功能见 [TODO.md](TODO.md)，主要是 Object Lock、ACL/Policy、CORS、Lifecycle、SSE，以及测试控制面
-（reset、快照、虚拟时钟、故障注入）。
+还没做的功能见 [TODO.md](TODO.md)，主要是 Object Lock、ACL/Policy、CORS、Lifecycle、SSE，以及测试控制面里的故障注入。
+
+## 测试控制面
+
+同一个端口上的 `/_fakes3/` 前缀是一组 JSON HTTP API，`fakes3 ctl` 是它的命令行客户端，Rust 进程内使用时是 `fakes3::Server` 上的方法：
+
+```bash
+fakes3 ctl reset                              # 清空所有 bucket、对象和上传，同时清空请求日志和时钟
+fakes3 ctl snapshot create seeded             # 保存当前状态（不复制对象数据）
+fakes3 ctl snapshot restore seeded            # 回滚
+fakes3 ctl clock advance 31d                  # 推进服务器时间（也可以 freeze / set），预签名 URL 会跟着过期
+fakes3 ctl requests list --op PutObject       # 请求日志：按 bucket、操作、状态码等过滤，用来断言调用次数和顺序
+```
+
+端点、命令、各操作的语义和限制见 [docs/control-plane.md](docs/control-plane.md)。控制面没有认证，只适合在测试环境里使用。
 
 ## 兼容性
 
