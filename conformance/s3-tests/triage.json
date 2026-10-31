@@ -1,0 +1,606 @@
+{
+ "groups": [
+  {
+   "id": "create-existing-bucket",
+   "category": "bug",
+   "title": "CreateBucket on a bucket the caller already owns returns 409",
+   "why": "fakes3 answers 409 `BucketAlreadyOwnedByYou`. AWS (us-east-1, the only region fakes3 pretends to be) answers 200 and keeps the bucket (legacy behaviour documented under CreateBucket errors). `test_bucket_create_exists` only passes if no error is raised at all (its own `e.status` would raise AttributeError); the other three create the same bucket twice through boto3's resource API. LocalStack passes `recreate_not_overriding` and `create_exists`. The same call breaks the S3 Select test `test_json_column_sum_min_max`, which creates its bucket twice.",
+   "tests": [
+    "test_bucket_create_exists",
+    "test_bucket_recreate_not_overriding",
+    "test_bucket_list_return_data_versioning",
+    "test_versioning_concurrent_multi_object_delete",
+    "test_json_column_sum_min_max"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "list-delimiter-echo",
+   "category": "bug",
+   "title": "ListObjects echoes an empty `Delimiter`",
+   "why": "`assert not 'Delimiter' in response` fails: with `delimiter=` (empty) the response carries `<Delimiter></Delimiter>`; AWS omits it. MinIO and LocalStack pass.",
+   "tests": [
+    "test_bucket_list_delimiter_empty",
+    "test_bucket_listv2_delimiter_empty"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "list-delimiter-prefix-truncation",
+   "category": "bug",
+   "title": "ListObjects with delimiter + prefix + max-keys reports the wrong IsTruncated / paging",
+   "why": "`assert response['IsTruncated'] == is_truncated` (`assert True == False`) in the paged walk over keys with `_` / common prefixes. The v2 variants pass on MinIO and LocalStack.",
+   "tests": [
+    "test_bucket_list_delimiter_prefix",
+    "test_bucket_listv2_delimiter_prefix",
+    "test_bucket_list_delimiter_prefix_underscore",
+    "test_bucket_listv2_delimiter_prefix_underscore"
+   ],
+   "cost": "medium"
+  },
+  {
+   "id": "list-encoding-space",
+   "category": "bug",
+   "title": "`encoding-type=url` encodes a space as `+` instead of `%20`",
+   "why": "Common prefix `quux ab/` comes back as `quux+ab/`; boto3 only decodes `%XX`, so the test (and LocalStack, which passes) expect `quux%20ab/`.",
+   "tests": [
+    "test_bucket_list_encoding_basic",
+    "test_bucket_listv2_encoding_basic"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "list-prefix-newline",
+   "category": "bug",
+   "title": "ListObjects `Prefix` echo of a control character is URL-encoded in the wrong place",
+   "why": "Prefix `\\n` comes back as `%0A` after boto3 decoding (`assert '%0A' == '\\n'`), i.e. the value is encoded although the request did not ask for `encoding-type=url`, or encoded twice. Fails on MinIO and LocalStack too, so the exact AWS behaviour is unconfirmed.",
+   "tests": [
+    "test_bucket_list_prefix_unreadable"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "list-marker-owner",
+   "category": "bug",
+   "title": "ListObjects v1 omits `<Marker/>` and `<Owner>`; v2 FetchOwner ignored",
+   "why": "`KeyError: 'Marker'` (empty marker must be echoed), `KeyError: 'Owner'` (v1 returns Owner per key by default) and `assert 'Owner' in objs_list[0]` with `fetch-owner=true`. MinIO and LocalStack pass the `Marker` and `fetchowner` cases.",
+   "tests": [
+    "test_bucket_list_marker_none",
+    "test_bucket_list_return_data",
+    "test_bucket_listv2_fetchowner_notempty"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "delete-objects-limit",
+   "category": "bug",
+   "title": "DeleteObjects accepts more than 1000 keys",
+   "why": "AWS answers 400 `MalformedXML`; fakes3 deletes all 1001 (`ClientError not raised`). MinIO passes.",
+   "tests": [
+    "test_multi_object_delete_key_limit",
+    "test_multi_objectv2_delete_key_limit"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "content-md5-validation",
+   "category": "bug",
+   "title": "Content-MD5 validation: empty value accepted, malformed value reported as BadDigest",
+   "why": "Empty `Content-MD5:` is accepted (AWS: 400 `InvalidDigest`); a value that is not 16 base64-decoded bytes gives `BadDigest` (AWS: `InvalidDigest`). `BadDigest` is for a well-formed digest that does not match the body.",
+   "tests": [
+    "test_object_create_bad_md5_empty",
+    "test_object_create_bad_md5_invalid_short"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "policy-status",
+   "category": "bug",
+   "title": "GetBucketPolicyStatus returns NoSuchBucketPolicy for buckets without a policy",
+   "why": "The five `*_bucket_policy_status` tests compute `IsPublic` from ACL / policy; fakes3 returns 404 `NoSuchBucketPolicy` whenever no policy document exists, so public-ACL buckets cannot be reported. MinIO passes two of the five.",
+   "tests": [
+    "test_get_bucket_policy_status",
+    "test_get_public_acl_bucket_policy_status",
+    "test_get_authpublic_acl_bucket_policy_status",
+    "test_get_publicpolicy_acl_bucket_policy_status",
+    "test_get_nonpublicpolicy_acl_bucket_policy_status"
+   ],
+   "cost": "medium"
+  },
+  {
+   "id": "lifecycle-validation",
+   "category": "bug",
+   "title": "Lifecycle: rule without ID is returned without one; invalid transition `Date` accepted",
+   "why": "AWS generates a rule ID when none is given (`assert 'ID' in lc_rule`) and rejects `Transitions[].Date` that is not ISO 8601 midnight (`20220927`) with 400 `MalformedXML`/`InvalidArgument`. MinIO passes the first, MinIO and LocalStack the second.",
+   "tests": [
+    "test_lifecycle_get_no_id",
+    "test_lifecycle_transition_set_invalid_date"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "policy-notprincipal",
+   "category": "bug",
+   "title": "Bucket policy: `Effect: Allow` with `NotPrincipal` is accepted",
+   "why": "AWS rejects it with 400 `MalformedPolicy` (NotPrincipal is only valid with Deny). MinIO passes.",
+   "tests": [
+    "test_bucket_policy_allow_notprincipal"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "object-lock-edges",
+   "category": "bug",
+   "title": "Object Lock: GOVERNANCE\u2192COMPLIANCE change without bypass allowed; invalid default retention reports InvalidArgument",
+   "why": "`put_object_retention` changing the mode of a GOVERNANCE-locked object without `x-amz-bypass-governance-retention` must be 403 `AccessDenied`; `Days`/`Years` <= 0 in a bucket default must be `InvalidRetentionPeriod`, fakes3 says `InvalidArgument`.",
+   "tests": [
+    "test_object_lock_changing_mode_from_governance_without_bypass",
+    "test_object_lock_put_obj_lock_invalid_days",
+    "test_object_lock_put_obj_lock_invalid_years"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "sse-headers-on-read",
+   "category": "bug",
+   "title": "SSE request headers on GET/HEAD are ignored",
+   "why": "`x-amz-server-side-encryption(-aws-kms-key-id)` on GetObject/HeadObject must be 400 (AWS: only valid on writes). fakes3 serves the object (`ClientError not raised`). MinIO passes the GET case.",
+   "tests": [
+    "test_sse_kms_read_declare",
+    "test_sse_s3_default_method_head"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "sse-c-part-key",
+   "category": "bug",
+   "title": "SSE-C: UploadPart with a key that differs from CreateMultipartUpload returns 403, AWS returns 400",
+   "why": "`assert 403 == 400` in `test_encryption_sse_c_multipart_invalid_chunks_1` (MinIO and LocalStack pass) and in the three `test_copy_part_enc[\u2026-sse-c-\u2026]` cases that upload a part with the source's SSE-C key.",
+   "tests": [
+    "test_encryption_sse_c_multipart_invalid_chunks_1",
+    "test_copy_part_enc[sse-c-sse-c-*",
+    "test_copy_part_enc[sse-kms-sse-c-*",
+    "test_copy_part_enc[sse-s3-sse-c-*"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "get-part-checksum-type",
+   "category": "bug",
+   "title": "GetObject `?partNumber=N` response lacks `x-amz-checksum-type`",
+   "why": "`KeyError: 'ChecksumType'` at `client.get_object(..., PartNumber=1)` for all five algorithms; HeadObject and GetObjectAttributes already report it.",
+   "tests": [
+    "test_multipart_use_cksum_helper_crc32",
+    "test_multipart_use_cksum_helper_crc32c",
+    "test_multipart_use_cksum_helper_crc64nvme",
+    "test_multipart_use_cksum_helper_sha1",
+    "test_multipart_use_cksum_helper_sha256"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "complete-bad-checksum",
+   "category": "bug",
+   "title": "CompleteMultipartUpload accepts a malformed request-level checksum",
+   "why": "`ChecksumSHA256='bad'` on CompleteMultipartUpload must be 400 `BadDigest` (also when a part's checksum is omitted); fakes3 completes the upload.",
+   "tests": [
+    "test_multipart_checksum_sha256"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "request-id",
+   "category": "bug",
+   "title": "Responses carry an empty request id",
+   "why": "`ResponseMetadata.RequestId` is `''` and the error body has no `<RequestId>` element (`'NoneType' object has no attribute 'text'`). AWS (and MinIO, LocalStack) always send `x-amz-request-id` and `<RequestId>`, and clients log it.",
+   "tests": [
+    "test_object_requestid_matches_header_on_error"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "default-content-type",
+   "category": "bug",
+   "title": "GetObject without a stored Content-Type omits the header",
+   "why": "`KeyError: 'ContentType'`: AWS answers `binary/octet-stream` for objects uploaded without one (MinIO passes).",
+   "tests": [
+    "test_object_acl_full_control_verify_attributes"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "put-version-id",
+   "category": "bug",
+   "title": "PutObject returns `x-amz-version-id` for unversioned / suspended buckets",
+   "why": "`assert not 'VersionId' in response`: the header must only appear when versioning is Enabled (fakes3 returns a VersionId). MinIO and LocalStack pass the single-part case.",
+   "tests": [
+    "test_versioning_bucket_atomic_upload_return_version_id",
+    "test_versioning_bucket_multipart_upload_return_version_id"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "versioning-mfa-disabled",
+   "category": "bug",
+   "title": "PutBucketVersioning with `MFADelete: Disabled` is rejected",
+   "why": "403 `AccessDenied: Mfa Authentication must be used`. A `Disabled` value (what boto3 sends when asked to keep MFA off) must not require the `x-amz-mfa` header; only changing MFADelete to Enabled / toggling it does. MinIO and LocalStack pass.",
+   "tests": [
+    "test_versioning_obj_create_read_remove",
+    "test_versioning_obj_create_read_remove_head"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "excess-tags-500",
+   "category": "bug",
+   "title": "PutObjectTagging with 11 tags returns 500",
+   "why": "`assert 500 == 400`: must be 400 `InvalidTag`; a 500 means an unhandled error path.",
+   "tests": [
+    "test_put_excess_tags"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "tagging-header-order",
+   "category": "bug",
+   "title": "`x-amz-tagging` tags are returned in header order, AWS returns them sorted by key",
+   "why": "`foo=bar&bar` \u2192 fakes3 `[foo, bar]`, expected `[bar, foo]`. MinIO passes.",
+   "tests": [
+    "test_put_obj_with_tags"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "cors-wildcard-origin",
+   "category": "bug",
+   "title": "CORS: wildcard origins (`*.suffix`) do not match",
+   "why": "`access-control-allow-origin` missing for `Origin: foo.suffix` against a rule with `AllowedOrigins: ['*.suffix']`. AWS allows a single `*` anywhere in the origin.",
+   "tests": [
+    "test_cors_origin_response"
+   ],
+   "cost": "medium"
+  },
+  {
+   "id": "post-policy-extras",
+   "category": "bug",
+   "title": "POST policy uploads: invalid expiration format accepted, redirect Location not URL-encoded, `tagging` form field ignored, checksum fields rejected",
+   "why": "`test_post_object_invalid_date_format` gets 204 instead of 400; `success_action_redirect` Location ends in `etag=\"\u2026\"` while AWS encodes the quotes as `%22`; the `tagging` form field is not applied (`assert [] == [{'Key': '0', \u2026}]`); `x-amz-checksum-*` form fields give 403 instead of 204.",
+   "tests": [
+    "test_post_object_invalid_date_format",
+    "test_post_object_success_redirect_action",
+    "test_post_object_tags_anonymous_request",
+    "test_post_object_upload_checksum"
+   ],
+   "cost": "medium"
+  },
+  {
+   "id": "invalid-utf8-key",
+   "category": "bug",
+   "title": "GET of a key that is not valid UTF-8 after percent-decoding returns 404",
+   "why": "`Key='\\xae\\x8a-'` must be 400 with message `Couldn't parse the specified URI.` (`fails_on_rgw`, i.e. AWS behaviour); fakes3 answers 404.",
+   "tests": [
+    "test_object_read_unreadable"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "content-encoding-format",
+   "category": "bug",
+   "title": "Content-Encoding list re-serialised without the space (`deflate,gzip`)",
+   "why": "Stored as `deflate, gzip` with `aws-chunked`; fakes3 returns `deflate,gzip`. AWS returns the header the client sent minus `aws-chunked`. Unconfirmed against AWS; fails on MinIO and LocalStack too.",
+   "tests": [
+    "test_object_content_encoding_aws_chunked"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "delete-marker-header",
+   "category": "bug",
+   "title": "HEAD of a deleted key in an unversioned bucket has no `x-amz-delete-marker: false`",
+   "why": "`KeyError: 'x-amz-delete-marker'` on the 404. The test expects the header; whether AWS sends it for unversioned buckets is unconfirmed (MinIO and LocalStack fail too).",
+   "tests": [
+    "test_delete_marker_nonversioned"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "v2-put-contentlength",
+   "category": "bug",
+   "title": "SigV2 PutObject with a truncated Content-Length answers 403 instead of 400 BadDigest",
+   "why": "`assert 403 == 400`; root cause not isolated (probably the same signature path as the SigV2 group, but PutObject paths sign correctly, so it may be a fakes3 body-length check).",
+   "tests": [
+    "test_object_create_bad_contentlength_mismatch_below_aws2"
+   ]
+  },
+  {
+   "id": "bucket-logging",
+   "category": "unimplemented",
+   "title": "PutBucketLogging / bucket logging (NotImplemented)",
+   "why": "`PutBucketLogging is not implemented yet` (501). 5 AWS-applicable tests here; a further 31+ `bucket_logging` tests are marked `fails_on_aws` (they test RGW's journal/flush extension) and fail the same way.",
+   "tests": [
+    "test_put_bucket_logging",
+    "test_rm_bucket_logging",
+    "test_put_bucket_logging_errors",
+    "test_put_bucket_logging_permissions",
+    "test_put_bucket_logging_policy_wildcard"
+   ],
+   "cost": "large"
+  },
+  {
+   "id": "expected-bucket-owner",
+   "category": "unimplemented",
+   "title": "`x-amz-expected-bucket-owner` is not enforced",
+   "why": "A wrong ExpectedBucketOwner must be 403 `AccessDenied`; fakes3 ignores the header (`ClientError not raised`).",
+   "tests": [
+    "test_expected_bucket_owner"
+   ],
+   "cost": "cheap"
+  },
+  {
+   "id": "list-buckets-pagination",
+   "category": "unimplemented",
+   "title": "ListBuckets `MaxBuckets` / `ContinuationToken`",
+   "why": "`list_buckets(MaxBuckets=1)` returns every bucket in the account (`assert 5 == 0` on the first call). The test also assumes an empty account, but the naming tests leave buckets such as `foo-.bar` behind (their names do not carry the test prefix, so the suite's cleanup skips them); it fails the same way in a serial run.",
+   "tests": [
+    "test_list_buckets_paginated"
+   ],
+   "cost": "medium"
+  },
+  {
+   "id": "torrent",
+   "category": "unimplemented",
+   "title": "GetObjectTorrent (`?torrent`)",
+   "why": "`assert 501 == 404`: fakes3 answers NotImplemented; AWS answers 404 NoSuchKey for a missing key and has deprecated the API for new buckets.",
+   "tests": [
+    "test_get_object_torrent"
+   ]
+  },
+  {
+   "id": "sigv2-bucket-resource",
+   "category": "s3s",
+   "title": "SigV2: bucket-level requests signed by botocore fail with SignatureDoesNotMatch",
+   "why": "botocore signs the CanonicalizedResource of a path-style bucket request as `/bucket/` (trailing slash) although the request line is `/bucket`; verified with a stub server and boto3 1.43.123 (`CreateBucket`, `ListObjects`, `HeadBucket` sign `/bkt/`, `PutObject` signs `/bkt/k`). s3s builds the StringToSign from `req_uri.path()` verbatim (`s3s-sigv2` `create_string_to_sign`, called from `ops/signature.rs` `v2_check_header_auth`), so the signatures differ. Every SigV2 bucket-level call from boto3 is affected, not only these tests.",
+   "tests": [
+    "test_bucket_create_bad_authorization_invalid_aws2",
+    "test_bucket_create_bad_date_none_aws2",
+    "test_bucket_create_bad_ua_empty_aws2",
+    "test_bucket_create_bad_ua_none_aws2",
+    "test_cors_presigned_get_object_v2",
+    "test_cors_presigned_put_object_v2",
+    "test_cors_presigned_get_object_tenant_v2",
+    "test_cors_presigned_put_object_tenant_v2"
+   ],
+   "cost": "medium"
+  },
+  {
+   "id": "sigv2-date",
+   "category": "s3s",
+   "title": "SigV2: bad `x-amz-date` / `Date` is 400 InvalidRequest, AWS says 403",
+   "why": "s3s `v2_check_header_auth` parses `x-amz-date` with the SigV4 ISO-8601 parser (`invalid x-amz-date`) and `Date` as HTTP-date (`invalid date`, `missing date`), all mapped to 400 `InvalidRequest`; AWS answers 403 `AccessDenied` / `RequestTimeTooSkewed` and accepts RFC 1123 in `x-amz-date` for SigV2.",
+   "tests": [
+    "test_bucket_create_bad_date_after_today_aws2",
+    "test_bucket_create_bad_date_before_epoch_aws2",
+    "test_bucket_create_bad_date_before_today_aws2",
+    "test_bucket_create_bad_date_empty_aws2",
+    "test_bucket_create_bad_date_invalid_aws2",
+    "test_object_create_bad_date_after_end_aws2",
+    "test_object_create_bad_date_before_epoch_aws2",
+    "test_object_create_bad_date_before_today_aws2",
+    "test_object_create_bad_date_empty_aws2",
+    "test_object_create_bad_date_invalid_aws2"
+   ],
+   "cost": "large"
+  },
+  {
+   "id": "sigv4-date-header",
+   "category": "s3s",
+   "title": "SigV4: RFC 1123 `X-Amz-Date` together with `Date` is reported as `missing header: x-amz-date`",
+   "why": "`extract_amz_date` in s3s `ops/signature.rs:750` raises `InvalidRequest: missing header: x-amz-date` when the header is not in the compact ISO-8601 form; LocalStack accepts the request.",
+   "tests": [
+    "test_object_create_date_and_amz_date",
+    "test_object_create_amz_date_and_no_date"
+   ],
+   "cost": "large"
+  },
+  {
+   "id": "chunked-transfer-encoding",
+   "category": "s3s",
+   "title": "PutObject with `Transfer-Encoding: chunked` (no Content-Length) is rejected",
+   "why": "`MissingContentLength: missing header: content-length`, raised in s3s `ops/signature.rs` (lines 709/875) before fakes3 sees the request. LocalStack accepts it.",
+   "tests": [
+    "test_object_write_with_chunked_transfer_encoding"
+   ],
+   "cost": "large"
+  },
+  {
+   "id": "post-policy-status",
+   "category": "s3s",
+   "title": "POST policy violations are 400 InvalidPolicyDocument, AWS says 403 AccessDenied",
+   "why": "Condition checks live in s3s `post_policy.rs` (`InvalidPolicyDocument`); AWS answers 403 `AccessDenied: Invalid according to Policy`. MinIO passes all four.",
+   "tests": [
+    "test_post_object_invalid_request_field_value",
+    "test_post_object_missing_policy_condition",
+    "test_post_object_request_missing_policy_specified_field",
+    "test_post_object_wrong_bucket"
+   ],
+   "cost": "large"
+  },
+  {
+   "id": "header-overwritten",
+   "category": "test-defect",
+   "title": "Test mutates a header that boto3 re-signs afterwards (the request is valid)",
+   "why": "The tests add/remove `Authorization`, `Content-Length` or `x-amz-date` in a `before-call` hook, but botocore's signer rewrites those after the hook (checked with boto3 1.43.123 against a stub server: `Authorization` is replaced, `Content-Length` restored, `Date` re-added). The server correctly accepts the valid request, so `ClientError not raised`. They also fail on MinIO and LocalStack. Most are `fails_on_rgw` with a TODO saying so.",
+   "tests": [
+    "test_bucket_create_bad_authorization_empty",
+    "test_bucket_create_bad_authorization_none",
+    "test_object_create_bad_authorization_empty",
+    "test_object_create_bad_authorization_none",
+    "test_object_create_bad_authorization_incorrect_aws2",
+    "test_object_create_bad_authorization_invalid_aws2",
+    "test_object_create_bad_contentlength_none",
+    "test_object_create_bad_date_none_aws2"
+   ]
+  },
+  {
+   "id": "acl-sort-py3",
+   "category": "test-defect",
+   "title": "`check_grants` sorts grants by a key that is None for group grantees (Python 3 TypeError)",
+   "why": "`got.sort(key=lambda x: x['Grantee'].get('DisplayName'))` runs whenever the first grant has a DisplayName; a group grant (AllUsers/AuthenticatedUsers) has none, so Python 3 raises `TypeError: '<' not supported between instances of 'NoneType' and 'str'`. fakes3 lists the owner first, like AWS; MinIO and LocalStack fail identically.",
+   "tests": [
+    "test_bucket_acl_canned",
+    "test_bucket_acl_canned_publicreadwrite",
+    "test_bucket_acl_canned_authenticatedread",
+    "test_put_bucket_acl_grant_group_read",
+    "test_object_acl_canned_during_create",
+    "test_object_acl_canned",
+    "test_object_acl_canned_publicreadwrite",
+    "test_object_acl_canned_authenticatedread",
+    "test_versioned_object_acl",
+    "test_versioned_object_acl_no_version_specified"
+   ]
+  },
+  {
+   "id": "kms-key-arn",
+   "category": "test-defect",
+   "title": "SSE-KMS tests expect the key id echoed verbatim; AWS (and fakes3) return the key ARN",
+   "why": "`assert 'arn:aws:kms:us-east-1:000000000000:key/testkey-1' == 'testkey-1'` for `x-amz-server-side-encryption-aws-kms-key-id`. AWS always returns the full key ARN; RGW echoes what was sent. The `test_copy_enc` / `test_copy_part_enc` cases with an SSE-KMS destination fail on the same comparison (`assert False` inside the `assert` lambda). Fails on MinIO and LocalStack too.",
+   "tests": [
+    "test_bucket_policy_put_obj_kms_noenc",
+    "test_sse_kms_method_head",
+    "test_sse_kms_default_upload_1b",
+    "test_sse_kms_default_upload_1kb",
+    "test_sse_kms_default_upload_1mb",
+    "test_sse_kms_default_upload_8mb",
+    "test_sse_kms_default_post_object_authenticated_request",
+    "test_copy_enc[*sse-kms-STANDARD-STANDARD-*",
+    "test_copy_part_enc[*sse-kms-STANDARD-STANDARD-*"
+   ]
+  },
+  {
+   "id": "get-part-out-of-range",
+   "category": "test-defect",
+   "title": "GetObject `?partNumber` out of range: test expects 400 InvalidPart (RGW), AWS answers 416 InvalidPartNumber",
+   "why": "`assert 416 == 400` (and `'InvalidRequest' == 'InvalidPart'` for the SSE-C variant). fakes3 follows the S3 API reference (416). Fails on MinIO and LocalStack too.",
+   "tests": [
+    "test_multipart_get_part",
+    "test_multipart_single_get_part",
+    "test_non_multipart_get_part",
+    "test_non_multipart_sse_c_get_part",
+    "test_multipart_sse_c_get_part"
+   ]
+  },
+  {
+   "id": "sse-c-wrong-key-read",
+   "category": "test-defect",
+   "title": "SSE-C read with the wrong key: test expects 400, AWS answers 403",
+   "why": "`assert 403 == 400` for GET with a well-formed but different customer key; S3 reports 403 `AccessDenied` for a key that does not match the stored MD5 (400 is for malformed/missing headers). Fails on MinIO too.",
+   "tests": [
+    "test_encryption_sse_c_other_key",
+    "test_encryption_sse_c_multipart_bad_download"
+   ]
+  },
+  {
+   "id": "default-encryption",
+   "category": "test-defect",
+   "title": "GetBucketEncryption / DeleteBucketEncryption on a fresh bucket expect NotFound; AWS has had SSE-S3 default encryption on every bucket since January 2023",
+   "why": "`assert '' == 'ServerSideEncryptionConfigurationNotFoundError'`: fakes3 (like current AWS) reports the default AES256 configuration instead of an error. Fails on MinIO too.",
+   "tests": [
+    "test_get_bucket_encryption_s3",
+    "test_get_bucket_encryption_kms",
+    "test_delete_bucket_encryption_s3",
+    "test_delete_bucket_encryption_kms"
+   ]
+  },
+  {
+   "id": "recreate-bucketalreadyexists",
+   "category": "test-defect",
+   "title": "Re-creating an owned bucket expected to fail with BucketAlreadyExists (RGW)",
+   "why": "Same call as the CreateBucket group above but the test insists on 409 `BucketAlreadyExists`; on AWS us-east-1 this is a 200. The two groups cannot both pass.",
+   "tests": [
+    "test_bucket_recreate_overwrite_acl",
+    "test_bucket_recreate_new_acl"
+   ]
+  },
+  {
+   "id": "conditional-put-etag",
+   "category": "test-defect",
+   "title": "PutObject `If-None-Match: <etag>` expected to give 412 (RGW extension; AWS accepts only `*`)",
+   "why": "Each test passes the `*` cases and then sends `IfNoneMatch=<etag>` expecting 412. The S3 API reference documents only `If-None-Match: *` for PutObject / CompleteMultipartUpload. MinIO passes (it implements the extension); LocalStack fails.",
+   "tests": [
+    "test_put_object_if_match",
+    "test_put_object_current_if_match",
+    "test_put_current_object_if_none_match",
+    "test_multipart_put_object_if_match",
+    "test_multipart_put_current_object_if_none_match"
+   ]
+  },
+  {
+   "id": "complete-idempotent",
+   "category": "test-defect",
+   "title": "Second CompleteMultipartUpload on a finished upload expected to succeed (RGW `check_previously_completed`)",
+   "why": "`NoSuchUpload` on the repeated complete (the tests comment it as an 'extra' complete); `test_multipart_resend_first_finishes_last` lists PartNumber 1 twice in the complete request and gets `InvalidPart`. All fail on MinIO and LocalStack.",
+   "tests": [
+    "test_multipart_upload_small",
+    "test_multipart_upload",
+    "test_multipart_reupload_checksum_and_etag",
+    "test_multipart_resend_first_finishes_last"
+   ]
+  },
+  {
+   "id": "presign-expiry-range",
+   "category": "test-defect",
+   "title": "Presigned URL with negative / over-long X-Amz-Expires: test expects 403, S3 answers 400",
+   "why": "`assert 400 == 403`. S3 rejects out-of-range `X-Amz-Expires` with 400 `AuthorizationQueryParametersError`; the test encodes RGW's 403.",
+   "tests": [
+    "test_object_raw_get_x_amz_expires_out_max_range",
+    "test_object_raw_get_x_amz_expires_out_positive_range",
+    "test_object_raw_put_authenticated_expired"
+   ]
+  },
+  {
+   "id": "sse-kms-default-key",
+   "category": "test-defect",
+   "title": "SSE-KMS without a key id expected to fail; AWS falls back to the managed `aws/s3` key",
+   "why": "`ClientError not raised` for `x-amz-server-side-encryption: aws:kms` alone. MinIO and LocalStack reject it, AWS accepts it.",
+   "tests": [
+    "test_sse_kms_no_key"
+   ]
+  },
+  {
+   "id": "policy-owner-denied",
+   "category": "test-defect",
+   "title": "Test expects a bucket policy with only an Allow to deny the owner",
+   "why": "Referer-conditioned `Allow` policy; the test then expects the bucket owner's own GET to be 403. An Allow can never remove the owner's access, so only RGW's policy engine behaves like that (`fails_on_rgw` TODO says it is being fixed).",
+   "tests": [
+    "test_bucket_policy_set_condition_operator_end_with_IfExists"
+   ]
+  },
+  {
+   "id": "unicode-metadata",
+   "category": "test-defect",
+   "title": "Non-ASCII user metadata expected to round-trip verbatim; AWS returns RFC 2047 `=?UTF-8?B?\u2026?=`",
+   "why": "`'=?UTF-8?B?SGVsbG8gV29ybGTDqQ==?=' == 'Hello World\\xe9'`. fakes3 deliberately encodes like AWS (via `s3s-rfc2047`); boto3 does not decode.",
+   "tests": [
+    "test_object_set_get_unicode_metadata"
+   ]
+  },
+  {
+   "id": "lifecycle-delete-marker-debug",
+   "category": "test-defect",
+   "title": "Needs RGW's accelerated lifecycle clock (`rgw_lc_debug_interval`)",
+   "why": "The test waits `lc_debug_interval` seconds for 'one day' to pass; AWS and fakes3 count real days (fakes3 has a virtual clock, but s3-tests cannot drive it).",
+   "tests": [
+    "test_delete_marker_expiration"
+   ]
+  },
+  {
+   "id": "logging-policy-no-resource",
+   "category": "test-defect",
+   "title": "Bucket policy used by the test has no `Resource` (invalid on AWS too)",
+   "why": "`MalformedPolicy: Syntax errors in policy` for a statement with only Principal/Action; AWS rejects it as well. The test relies on RGW.",
+   "tests": [
+    "test_bucket_logging_owner"
+   ]
+  }
+ ]
+}

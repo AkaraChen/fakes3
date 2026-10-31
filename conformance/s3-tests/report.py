@@ -109,16 +109,38 @@ def base_name(tid):
     return re.sub(r"\[.*\]$", "", tid.split("::")[-1])
 
 
-def classify(tid, t, identity):
-    """Automatic category for a non-passing test, or None when it needs a human."""
-    f = tid.split("::")[0].rsplit("/", 1)[-1]
-    if set(t["markers"]) & NOT_AWS:
-        return "not-aws"
-    if f in OTHER_SERVICE:
-        return "other-service"
-    if base_name(tid) in identity:
-        return "identity"
-    return None
+def glob_re(pat):
+    return re.compile("".join(".*" if c == "*" else re.escape(c) for c in pat) + r"\Z")
+
+
+class Triage:
+    """Hand-written failure groups (triage.json) first, then rules from markers, files and call graph."""
+
+    def __init__(self, path, identity):
+        self.identity = identity
+        self.groups = {}
+        self.rules = []  # (regex, group)
+        if path and os.path.exists(path):
+            for g in json.load(open(path))["groups"]:
+                self.groups[g["id"]] = g
+                self.rules += [(glob_re(t), g["id"]) for t in g["tests"]]
+
+    def classify(self, tid, t):
+        """-> (category, group id or None)"""
+        f = tid.split("::")[0].rsplit("/", 1)[-1]
+        name = tid.split("::")[-1]
+        if set(t["markers"]) & NOT_AWS:
+            return "marked-not-aws", None
+        for rx, gid in self.rules:
+            if rx.match(name) or rx.match(base_name(tid)):
+                return self.groups[gid]["category"], gid
+        if f in ("test_iam.py", "test_sts.py"):
+            return "identity", "auto-" + f[5:-3]
+        if f in OTHER_SERVICE:
+            return "unimplemented", "auto-" + f[5:-3]
+        if base_name(tid) in self.identity:
+            return "identity", "auto-multi-user"
+        return "untriaged", None
 
 
 def signature(t):
@@ -141,11 +163,97 @@ def pct(passed, total):
     return f"{100 * passed / total:.1f}%" if total else "-"
 
 
+AUTO_WHY = {
+    "multi-user": "The test's call graph reaches `get_alt_*`, `get_tenant_*` or `get_iam_*` (found by static analysis of the s3-tests source). The runner maps every identity to the one credential the servers know, so a second user is the bucket owner and the expected `AccessDenied` / owner mismatch cannot happen. Individual failures were not inspected one by one: a real bug can hide behind the missing second identity.",
+    "iam": "IAM API calls (`PutUserPolicy`, `CreateUser`, …) go to a server that has no IAM service.",
+    "sts": "STS (`AssumeRole`, `GetSessionToken`, `GetCallerIdentity`, web identity) needs an STS service and, for web identity, an external Keycloak configured in `[webidentity]`.",
+    "s3select": "S3 Select: `SelectObjectContent` is implemented only in part (NotImplemented for several query shapes); the remaining shapes below fail on the engine's output.",
+    "s3control": "S3 Control API (account-level public access block) is served from a different endpoint than S3.",
+    "sns": "SNS topics / bucket notifications delivery.",
+}
+CATEGORIES = [
+    ("bug", "Real fakes3 bug (wrong status / code / header / body vs AWS)"),
+    ("unimplemented", "Unimplemented feature"),
+    ("identity", "Needs several users / tenants / IAM / STS (the servers know one credential)"),
+    ("s3s", "s3s limitation (verified in the s3s source)"),
+    ("test-defect", "Test is not AWS-compatible / RGW-specific / ineffective with boto3 (not marked by s3-tests)"),
+    ("marked-not-aws", "Marked `fails_on_aws` by s3-tests itself (excluded from the baseline)"),
+    ("untriaged", "Not yet triaged"),
+]
+
+
+def esc(x):
+    return x.replace("|", "\\|").replace("\n", " ")
+
+
+def rollup(rows, limit=40):
+    """[(tid, t)] -> markdown bullets of 'N x error: sample names', biggest first."""
+    sigs = collections.defaultdict(list)
+    for tid, t in rows:
+        sigs[signature(t)].append(tid.split("::")[-1])
+    lines = []
+    for sig, names in sorted(sigs.items(), key=lambda kv: -len(kv[1])):
+        shown = ", ".join(f"`{n}`" for n in names[:3]) + (f", … ({len(names)})" if len(names) > 3 else "")
+        lines.append(f"- {len(names)} × `{esc(sig)}` — {shown}")
+    return lines[:limit] + ([f"- … {len(lines) - limit} more error shapes"] if len(lines) > limit else [])
+
+
+def failure_sections(tests, triage, others, w):
+    """The categorised list of every failing test of one server."""
+    buckets = collections.defaultdict(lambda: collections.defaultdict(list))  # category -> group -> [(tid, t)]
+    for tid, t in sorted(tests.items()):
+        if t["status"] in ("fail", "error"):
+            cat, gid = triage.classify(tid, t)
+            buckets[cat][gid].append((tid, t))
+    total = lambda cat: sum(len(v) for v in buckets[cat].values())  # noqa: E731
+    w("| category | failing tests | groups |")
+    w("|---|--:|--:|")
+    for cat, label in CATEGORIES:
+        if buckets[cat]:
+            w(f"| {label} | {total(cat)} | {len(buckets[cat])} |")
+    w("")
+    for cat, label in CATEGORIES:
+        if not buckets[cat]:
+            continue
+        w(f"### {label}: {total(cat)} tests\n")
+        groups = buckets[cat]
+        if cat in ("marked-not-aws", "untriaged"):
+            w("\n".join(rollup([r for rows in groups.values() for r in rows])) + "\n")
+            continue
+        for gid, rows in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+            g = triage.groups.get(gid)
+            names = [tid.split("::")[-1] for tid, _ in rows]
+            if g:
+                passers = sorted(s for s in others if all(others[s].get(tid, {}).get("status") == "pass" for tid, _ in rows))
+                extra = f" Cost: **{g['cost']}**." if g.get("cost") else ""
+                ref = f" Also passes on: {', '.join(passers)}." if passers else ""
+                w(f"#### {g['title']} ({len(rows)})\n")
+                w(f"{g['why']}{extra}{ref}\n")
+            else:
+                w(f"#### {gid.removeprefix('auto-').replace('-', ' ')} ({len(rows)})\n")
+                w(AUTO_WHY.get(gid.removeprefix("auto-"), "") + "\n")
+                w("\n".join(rollup(rows)) + "\n")
+                continue
+            w("Tests: " + ", ".join(f"`{n}`" for n in names) + "\n")
+    return buckets
+
+
+def skip_reasons(tests, w):
+    c = collections.Counter(t.get("message", "")[:100] for t in tests.values() if t["status"] == "skip")
+    if c:
+        w("| skipped | reason |")
+        w("|--:|---|")
+        for reason, n in c.most_common():
+            w(f"| {n} | {esc(reason.removeprefix('Skipped: '))} |")
+        w("")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("results")
     ap.add_argument("--src")
     ap.add_argument("--json")
+    ap.add_argument("--triage", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "triage.json"))
     ap.add_argument("--target", default="fakes3", help="server whose failures are broken down")
     a = ap.parse_args()
 
@@ -153,6 +261,7 @@ def main():
     data = {s: load(os.path.join(a.results, s)) for s in servers}
     metas = {s: meta(os.path.join(a.results, s)) for s in servers}
     identity = identity_tests(a.src) if a.src else set()
+    triage = Triage(a.triage, identity)
     aws = lambda tid, t: not (set(t["markers"]) & NOT_AWS)  # noqa: E731
 
     out = []
@@ -170,48 +279,28 @@ def main():
               f"{f'{sec // 60}m{sec % 60:02d}s' if sec is not None else '-'} |")
         w("")
 
+    w("## By file (AWS-applicable tests)\n")
+    w("| file | " + " | ".join(f"{s} pass/total" for s in servers) + " |")
+    w("|---|" + "--:|" * len(servers))
+    files = sorted({tid.split("::")[0] for s in servers for tid in data[s]})
+    for f in files:
+        cells = []
+        for s in servers:
+            (p, _, _, _), n = counts(data[s], lambda tid, t, f=f: tid.startswith(f + "::") and aws(tid, t))
+            cells.append(f"{p}/{n}")
+        w(f"| {f.rsplit('/', 1)[-1]} | " + " | ".join(cells) + " |")
+    w("")
+
     summary = {"s3tests_ref": ref, "servers": {}}
     for s in servers:
-        tests = data[s]
-        w(f"## {s}: by file (AWS-applicable tests)\n")
-        w("| file | pass | fail | error | skip | total |")
-        w("|---|--:|--:|--:|--:|--:|")
-        files = sorted({tid.split("::")[0] for tid in tests})
-        for f in files:
-            (p, fl, e, k), n = counts(tests, lambda tid, t, f=f: tid.startswith(f + "::") and aws(tid, t))
-            w(f"| {f.rsplit('/', 1)[-1]} | {p} | {fl} | {e} | {k} | {n} |")
-        w("")
-
-        cats = collections.Counter()
-        for tid, t in tests.items():
-            if t["status"] in ("fail", "error"):
-                cats[classify(tid, t, identity) or "needs-triage"] += 1
-        w(f"### {s}: failing tests by automatic category\n")
-        w("| category | tests |")
-        w("|---|--:|")
-        for c, n in cats.most_common():
-            w(f"| {c} | {n} |")
-        w("")
-        summary["servers"][s] = {
-            "tests": {tid: {**t, "category": classify(tid, t, identity)} for tid, t in tests.items()},
-        }
-
+        summary["servers"][s] = {tid: {**t, "category": triage.classify(tid, t)[0], "group": triage.classify(tid, t)[1]}
+                                 for tid, t in data[s].items()}
     tgt = a.target
     if tgt in data:
-        sigs = collections.defaultdict(list)
-        for tid, t in data[tgt].items():
-            if t["status"] in ("fail", "error") and classify(tid, t, identity) is None:
-                sigs[signature(t)].append(tid)
-        w(f"## {tgt}: untriaged failures grouped by error (AWS-applicable, single-identity)\n")
-        w("| tests | error | also passes on |")
-        w("|--:|---|---|")
-        others = [s for s in servers if s != tgt]
-        for sig, ids in sorted(sigs.items(), key=lambda kv: -len(kv[1])):
-            passers = [s for s in others if all(data[s].get(i, {}).get("status") == "pass" for i in ids)]
-            esc = sig.replace("|", "\\|")
-            w(f"| {len(ids)} | {esc} | {', '.join(passers) or '-'} |")
-        w("")
-        summary["signatures"] = {k: v for k, v in sigs.items()}
+        w(f"## {tgt}: failures by category\n")
+        failure_sections(data[tgt], triage, {s: data[s] for s in servers if s != tgt}, w)
+        w(f"## {tgt}: skipped tests\n")
+        skip_reasons(data[tgt], w)
 
     print("\n".join(out))
     if a.json:

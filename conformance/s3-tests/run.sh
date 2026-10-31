@@ -86,7 +86,6 @@ iam path prefix = /s3t/
 display_name = fakes3
 user_id = fakes3
 email = main@example.com
-api_name = default
 access_key = $AK
 secret_key = $SK
 lc_debug_interval = 1

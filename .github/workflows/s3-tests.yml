@@ -92,7 +92,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: s3-tests-*
-          path: conformance/s3-tests/results
+          path: /tmp/artifacts
 
       - name: Fetch s3-tests sources
         run: |
@@ -103,10 +103,13 @@ jobs:
 
       - name: Render report
         run: |
-          # download-artifact names directories s3-tests-<server>/; the report wants <server>/
-          cd conformance/s3-tests/results
-          for d in s3-tests-*; do mv "$d" "${d#s3-tests-}"; done
-          cd -
+          # With one matching artifact download-artifact extracts it without its own directory, so
+          # find each server's results by meta.json and lay them out as results/<server>/.
+          while read -r meta; do
+            server=$(jq -r .server "$meta")
+            mkdir -p "conformance/s3-tests/results/$server"
+            cp -r "$(dirname "$meta")"/. "conformance/s3-tests/results/$server/"
+          done < <(find /tmp/artifacts -name meta.json)
           python3 conformance/s3-tests/report.py conformance/s3-tests/results \
             --src /tmp/s3-tests --json conformance/s3-tests/results/summary.json \
             | tee conformance/s3-tests/results/REPORT.md >> "$GITHUB_STEP_SUMMARY"
