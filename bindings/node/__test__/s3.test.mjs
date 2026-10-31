@@ -256,7 +256,7 @@ test('requests: list, filter, count, clear, configure', async () => {
     assert.deepEqual(log.list({ status: 404 }).map((r) => r.operation), ['GetObject'])
     assert.deepEqual(log.list({ status: 'error' }).map((r) => r.status), [404])
     assert.equal(log.list({ status: '2xx' }).length, 3)
-    assert.equal(log.list({ method: 'put' }).length, 2)
+    assert.equal(log.list({ method: 'put' }).length, 3) // CreateBucket is a PUT too
     assert.deepEqual(log.list({ after: all[2].seq }).map((r) => r.operation), ['GetObject'])
     assert.equal(log.list({ limit: 1 })[0].operation, 'GetObject') // the most recent match
     assert.equal(log.count({ operation: 'PutObject', limit: 1 }), 2)
