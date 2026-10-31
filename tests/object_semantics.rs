@@ -358,7 +358,7 @@ async fn default_retention_and_delete_objects() {
         c.put("/bkt?object-lock", &[], &cfg(&rule("<Mode>GOVERNANCE</Mode><Days>0</Days>")))
             .await
             .code(),
-        "InvalidArgument"
+        "InvalidRetentionPeriod"
     );
     let r = c
         .put("/bkt?object-lock", &[], &cfg(&rule("<Mode>COMPLIANCE</Mode><Days>2</Days>")))

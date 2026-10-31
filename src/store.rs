@@ -184,7 +184,9 @@ pub fn new_version_id() -> String {
 }
 
 impl Bucket {
-    /// Stores `obj` as the newest version of `key` and returns the version id to report, if any.
+    /// Stores `obj` as the newest version of `key` and returns the version id to report: only
+    /// buckets with versioning Enabled report one (a suspended bucket writes the `null` version
+    /// silently, like the PutObject reference's suspended-bucket example).
     pub fn put(&self, objects: &mut Index, key: String, obj: Object) -> Option<String> {
         let mode = *self.versioning.read();
         let entry = objects.entry(key).or_default();
@@ -201,7 +203,7 @@ impl Bucket {
             obj: Some(obj),
             last_modified,
         }));
-        (mode != Versioning::Unversioned).then_some(id)
+        (mode == Versioning::Enabled).then_some(id)
     }
 
     /// A DELETE without a version id. Returns the id of the delete marker created, if any.

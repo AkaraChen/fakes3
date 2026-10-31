@@ -225,6 +225,17 @@ async fn ingest(
     algorithm: Option<&ChecksumAlgorithm>,
     trailers: Option<Trailers>,
 ) -> S3Result<Ingested> {
+    // A Content-MD5 that is not 16 base64-decoded bytes (or is empty) is InvalidDigest; BadDigest is
+    // for a well-formed digest that does not match.
+    let want_md5 = content_md5
+        .map(|cm| {
+            base64_simd::STANDARD
+                .decode_to_vec(cm)
+                .ok()
+                .filter(|d| d.len() == 16)
+                .ok_or_else(|| s3_error!(InvalidDigest, "The Content-MD5 you specified was invalid."))
+        })
+        .transpose()?;
     let mut hasher = hasher_for(&expected, algorithm)?;
     // Large bodies hash MD5 on another thread, overlapping with the work below.
     let mut md5 = digest::Streaming::new(content_length.is_some_and(|n| n as usize >= sink.threshold));
@@ -258,14 +269,13 @@ async fn ingest(
     }
     let md5 = md5.finish().await;
 
-    if let Some(cm) = content_md5 {
-        let want = base64_simd::STANDARD.decode_to_vec(cm).map_err(|_| s3_error!(InvalidDigest))?;
-        if want != md5 {
-            return Err(s3_error!(
-                BadDigest,
-                "The Content-MD5 you specified did not match what we received."
-            ));
-        }
+    if let Some(want) = want_md5
+        && want != md5
+    {
+        return Err(s3_error!(
+            BadDigest,
+            "The Content-MD5 you specified did not match what we received."
+        ));
     }
 
     if let Some(t) = trailers.and_then(|t| t.take()) {
@@ -336,10 +346,12 @@ type Tags = Vec<(String, String)>;
 
 fn parse_tagging_header(h: Option<&str>) -> S3Result<Tags> {
     let Some(h) = h else { return Ok(Vec::new()) };
-    let tags: Tags = form_urlencoded::parse(h.as_bytes())
+    let mut tags: Tags = form_urlencoded::parse(h.as_bytes())
         .map(|(k, v)| (k.into_owned(), v.into_owned()))
         .collect();
     validate_tags(&tags)?;
+    // S3 keeps the tags of an `x-amz-tagging` header ordered by key, not as they were sent.
+    tags.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(tags)
 }
 
@@ -354,10 +366,7 @@ fn tags_from_set(set: TagSet) -> S3Result<Tags> {
 
 fn validate_tags(tags: &Tags) -> S3Result<()> {
     if tags.len() > 10 {
-        return Err(S3Error::with_message(
-            S3ErrorCode::Custom("BadRequest".into()),
-            "Object tags cannot be greater than 10",
-        ));
+        return Err(s3_error!(InvalidTag, "Object tags cannot be greater than 10"));
     }
     let mut seen = HashSet::new();
     for (k, v) in tags {
@@ -581,6 +590,28 @@ fn part_range(o: &StoreObject, n: i32) -> S3Result<std::ops::Range<u64>> {
     Ok(start..start + sizes[n as usize - 1])
 }
 
+/// What a read reports as `Content-Type`: the stored value, or S3's default for objects written
+/// without one.
+fn content_type(m: &ObjectMeta) -> Option<ContentType> {
+    m.content_type.clone().or_else(|| Some("binary/octet-stream".to_owned()))
+}
+
+/// The checksum a GET / HEAD reports, and its type. Like S3, only when the client asks for it
+/// (`x-amz-checksum-mode`), and not for a byte range. A `?partNumber=` read reports the part's
+/// own checksum, with the object's checksum type.
+fn read_checksum(o: &StoreObject, mode: bool, ranged: bool, part: Option<i32>) -> (Checksum, Option<ChecksumType>) {
+    if !mode || ranged {
+        return (Checksum::default(), None);
+    }
+    let checksum = match (part, o.ext.as_ref().and_then(|e| e.part_checksums.as_ref())) {
+        (Some(n), Some(parts)) if o.part_sizes.is_some() => {
+            usize::try_from(n - 1).ok().and_then(|i| parts.get(i)).cloned().unwrap_or_default()
+        }
+        _ => o.checksum.clone(),
+    };
+    (checksum, o.checksum_type.clone())
+}
+
 pub(crate) fn obj(v: &Version) -> &StoreObject {
     v.obj.as_ref().expect("resolved versions are never delete markers")
 }
@@ -706,11 +737,14 @@ fn list(objects: &Index, prefix: &str, delimiter: Option<&str>, after: Option<&s
     }
 }
 
-/// `encoding-type=url` escaping: form-style (space becomes `+`), but `/` stays literal like
-/// S3 and MinIO leave it; some clients (minio-dotnet) don't decode common prefixes.
+/// `encoding-type=url` escaping: percent-encoding, a space is `%20` (percent-only decoders such as
+/// botocore's and form decoders such as `URLDecoder` both read it; `+` would only survive the
+/// latter) and a literal `+` is `%2B`. `/` stays literal like S3 and MinIO leave it; some clients
+/// (minio-dotnet) don't decode common prefixes.
 fn url_encode(s: &str) -> String {
     form_urlencoded::byte_serialize(s.as_bytes())
         .collect::<String>()
+        .replace('+', "%20")
         .replace("%2F", "/")
 }
 
@@ -762,10 +796,9 @@ impl S3 for FakeS3 {
             bucket.cfg.enable_lock();
         }
         let mut buckets = self.store.buckets.write();
-        if buckets.contains_key(&name) {
-            return Err(s3_error!(BucketAlreadyOwnedByYou));
-        }
-        buckets.insert(name.clone(), Arc::new(bucket));
+        // us-east-1 answers 200 for a bucket the caller already owns and leaves it as it is (the
+        // legacy behaviour in the CreateBucket error list); other regions say BucketAlreadyOwnedByYou.
+        buckets.entry(name.clone()).or_insert_with(|| Arc::new(bucket));
         Ok(S3Response::new(CreateBucketOutput {
             location: Some(format!("/{name}")),
             ..Default::default()
@@ -830,8 +863,9 @@ impl S3 for FakeS3 {
             Some(MFADelete::DISABLED) => Some(false),
             Some(_) => return Err(s3_error!(MalformedXML)),
         };
-        // Changing MFA Delete, or the versioning state of a bucket that has it on, takes a token.
-        if mfa_delete.is_some() || b.cfg.mfa_delete() == Some(true) {
+        // Turning MFA Delete on, or touching a bucket that has it on, takes a token; `Disabled` on a
+        // bucket where it is off (what clients send to keep it that way) does not.
+        if mfa_delete == Some(true) || b.cfg.mfa_delete() == Some(true) {
             match req.input.mfa.as_deref() {
                 None => return Err(s3_error!(AccessDenied, "Mfa Authentication must be used for this request")),
                 Some(m) => objops::check_mfa_header(m)?,
@@ -1086,6 +1120,7 @@ impl S3 for FakeS3 {
             input.sse_customer_key.as_deref(),
             input.sse_customer_key_md5.as_deref(),
         )?;
+        objext::reject_write_headers(&req.headers, o.ext.as_deref())?;
         let archive = self.archive_state(&input.bucket, &input.key, o);
         if let Some(a) = &archive {
             a.require_readable(false)?;
@@ -1123,12 +1158,7 @@ impl S3 for FakeS3 {
             1 => StreamingBlob::from_bytes(segments.into_iter().next().unwrap()),
             _ => StreamingBlob::wrap(futures::stream::iter(segments.into_iter().map(Ok::<_, std::io::Error>))),
         };
-        // Like S3, only report checksums for whole-object reads when the client asks for them.
-        let (checksum, ctype) = if content_range.is_none() && input.checksum_mode.is_some() {
-            (o.checksum.clone(), o.checksum_type.clone())
-        } else {
-            (Checksum::default(), None)
-        };
+        let (checksum, ctype) = read_checksum(o, input.checksum_mode.is_some(), input.range.is_some(), input.part_number);
         let m = &o.meta;
         let mut out = with_checksum!(
             GetObjectOutput {
@@ -1138,7 +1168,7 @@ impl S3 for FakeS3 {
                 accept_ranges: Some("bytes".into()),
                 e_tag: Some(ETag::Strong(o.e_tag.clone())),
                 last_modified: Some(ts(o.last_modified)),
-                content_type: input.response_content_type.or_else(|| m.content_type.clone()),
+                content_type: input.response_content_type.or_else(|| content_type(m)),
                 content_encoding: input.response_content_encoding.or_else(|| m.content_encoding.clone()),
                 content_disposition: input.response_content_disposition.or_else(|| m.content_disposition.clone()),
                 content_language: input.response_content_language.or_else(|| m.content_language.clone()),
@@ -1168,6 +1198,7 @@ impl S3 for FakeS3 {
             input.sse_customer_key.as_deref(),
             input.sse_customer_key_md5.as_deref(),
         )?;
+        objext::reject_write_headers(&req.headers, o.ext.as_deref())?;
         check_conditions(
             o,
             input.if_match.as_ref(),
@@ -1194,11 +1225,7 @@ impl S3 for FakeS3 {
             ),
             None => (size, None),
         };
-        let (checksum, ctype) = if input.checksum_mode.is_some() && content_range.is_none() {
-            (o.checksum.clone(), o.checksum_type.clone())
-        } else {
-            (Checksum::default(), None)
-        };
+        let (checksum, ctype) = read_checksum(o, input.checksum_mode.is_some(), input.range.is_some(), input.part_number);
         let partial = content_range.is_some();
         let m = &o.meta;
         let mut out = with_checksum!(
@@ -1208,7 +1235,7 @@ impl S3 for FakeS3 {
                 accept_ranges: Some("bytes".into()),
                 e_tag: Some(ETag::Strong(o.e_tag.clone())),
                 last_modified: Some(ts(o.last_modified)),
-                content_type: m.content_type.clone(),
+                content_type: content_type(m),
                 content_encoding: m.content_encoding.clone(),
                 content_disposition: m.content_disposition.clone(),
                 content_language: m.content_language.clone(),
@@ -1275,6 +1302,12 @@ impl S3 for FakeS3 {
 
     async fn delete_objects(&self, req: S3Request<DeleteObjectsInput>) -> S3Result<S3Response<DeleteObjectsOutput>> {
         let b = self.bucket(&req.input.bucket)?;
+        if req.input.delete.objects.len() > 1000 {
+            return Err(s3_error!(
+                MalformedXML,
+                "The XML you provided was not well-formed or did not validate against our published schema"
+            ));
+        }
         let quiet = req.input.delete.quiet.unwrap_or(false);
         let mut deleted = Vec::new();
         let mut errors = Vec::new();
@@ -1529,7 +1562,7 @@ impl S3 for FakeS3 {
         let mut out = ListObjectsV2Output {
             name: Some(input.bucket),
             prefix: Some(prefix),
-            delimiter: input.delimiter,
+            delimiter: input.delimiter.filter(|d| !d.is_empty()),
             max_keys: Some(max_keys as i32),
             key_count: Some(key_count),
             is_truncated: Some(l.truncated),
@@ -1541,6 +1574,9 @@ impl S3 for FakeS3 {
             encoding_type: input.encoding_type,
             ..Default::default()
         };
+        if input.fetch_owner == Some(true) {
+            out.contents.iter_mut().flatten().for_each(|o| o.owner = Some(owner()));
+        }
         if input
             .optional_object_attributes
             .iter()
@@ -1572,12 +1608,17 @@ impl S3 for FakeS3 {
             input.marker.as_deref(),
             max_keys,
         );
-        let next_marker = if input.delimiter.is_some() { l.next } else { None };
+        let next_marker = if input.delimiter.as_deref().is_some_and(|d| !d.is_empty()) {
+            l.next
+        } else {
+            None
+        };
         let mut out = ListObjectsOutput {
             name: Some(input.bucket),
             prefix: Some(prefix),
-            delimiter: input.delimiter,
-            marker: input.marker,
+            delimiter: input.delimiter.filter(|d| !d.is_empty()),
+            // Always echoed, empty when the request had none.
+            marker: Some(input.marker.unwrap_or_default()),
             max_keys: Some(max_keys as i32),
             is_truncated: Some(l.truncated),
             next_marker,
@@ -1586,6 +1627,8 @@ impl S3 for FakeS3 {
             encoding_type: input.encoding_type,
             ..Default::default()
         };
+        // ListObjects (v1) returns the owner of every key.
+        out.contents.iter_mut().flatten().for_each(|o| o.owner = Some(owner()));
         if wants_url(&out.encoding_type) {
             enc(&mut out.prefix);
             enc(&mut out.delimiter);
@@ -1698,7 +1741,7 @@ impl S3 for FakeS3 {
         let mut out = ListObjectVersionsOutput {
             name: Some(input.bucket),
             prefix: Some(prefix),
-            delimiter: input.delimiter,
+            delimiter: input.delimiter.filter(|d| !d.is_empty()),
             // S3 always writes the (possibly empty) markers.
             key_marker: Some(input.key_marker.unwrap_or_default()),
             version_id_marker: Some(input.version_id_marker.unwrap_or_default()),
@@ -1783,7 +1826,7 @@ impl S3 for FakeS3 {
             let uploads = b.uploads.read();
             let up = uploads.get(&id).ok_or_else(|| s3_error!(NoSuchUpload))?;
             // An SSE-C upload takes its key with every part.
-            objext::check_read_key(
+            objext::check_part_key(
                 up.ext.as_ref(),
                 input.sse_customer_algorithm.as_deref(),
                 input.sse_customer_key.as_deref(),
@@ -1869,7 +1912,7 @@ impl S3 for FakeS3 {
         let (algorithm, sse) = {
             let uploads = b.uploads.read();
             let up = uploads.get(&id).ok_or_else(|| s3_error!(NoSuchUpload))?;
-            objext::check_read_key(
+            objext::check_part_key(
                 up.ext.as_ref(),
                 input.sse_customer_algorithm.as_deref(),
                 input.sse_customer_key.as_deref(),
@@ -2020,7 +2063,7 @@ impl S3 for FakeS3 {
         let mut out = ListMultipartUploadsOutput {
             bucket: Some(input.bucket),
             prefix: Some(prefix),
-            delimiter: input.delimiter,
+            delimiter: input.delimiter.filter(|d| !d.is_empty()),
             key_marker: input.key_marker,
             upload_id_marker: input.upload_id_marker,
             max_uploads: Some(max as i32),
@@ -2102,9 +2145,9 @@ impl S3 for FakeS3 {
                 None => CRC64NVME,
             };
             let checksum = multipart_checksum(alg_idx, &up.checksum_type, &checksums);
-            // A client-computed full-object checksum must match ours.
-            if up.checksum_type.as_str() == ChecksumType::FULL_OBJECT
-                && let (Some(want), Some(have)) = (slot(&claimed_whole, alg_idx), slot(&checksum, alg_idx))
+            // A request-level checksum (the full-object value, or the composite `<digest>-<parts>`)
+            // must match ours; anything else, a malformed value included, is a BadDigest.
+            if let (Some(want), Some(have)) = (slot(&claimed_whole, alg_idx), slot(&checksum, alg_idx))
                 && want != have
             {
                 return Err(s3_error!(
@@ -2320,13 +2363,16 @@ mod tests {
     }
 
     #[test]
-    fn url_encoding_round_trips_through_form_decoding() {
+    fn url_encoding_round_trips_through_percent_and_form_decoding() {
         let key = "sp ace/üñí©ødé/a+b=c&d?e#f.txt";
         let enc = url_encode(key);
         assert!(enc.contains("%2B") && !enc.contains(' '));
-        assert!(enc.starts_with("sp+ace/"), "{enc}");
+        assert!(enc.starts_with("sp%20ace/"), "{enc}");
+        assert!(!enc.contains('+'), "{enc}");
         let dec: String = form_urlencoded::parse(format!("k={enc}").as_bytes()).next().unwrap().1.into_owned();
         assert_eq!(dec, key);
+        let pct = percent_encoding::percent_decode_str(&enc).decode_utf8().unwrap();
+        assert_eq!(pct, key);
     }
 
     fn entry(versions: Vec<Option<&str>>) -> Entry {

@@ -41,6 +41,7 @@ mod objext;
 mod objops;
 mod policy;
 mod presign;
+mod reqid;
 mod reqlog;
 mod s3impl;
 mod snapshot;
@@ -288,9 +289,10 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
             if req.uri().path().starts_with(control::PREFIX) {
                 return Ok(control.handle(req).await);
             }
-            let mut logged = control.log.start(&req, || control.clock.now());
+            let id = reqid::RequestId::next();
+            let mut logged = control.log.start(&req, id, || control.clock.now());
             merge_duplicate_headers(req.headers_mut());
-            let resp = if req.method() == http::Method::OPTIONS {
+            let mut resp = if req.method() == http::Method::OPTIONS {
                 // s3s does not route OPTIONS; preflights are answered from the bucket's CORS rules.
                 cors::preflight(&control.store, &sh.domains, &req)
             } else {
@@ -307,6 +309,10 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 let expired = control.clock.is_virtual() && req.uri().query().is_some_and(|q| presign::is_expired(q, control.clock.now()));
                 let mut resp = if expired {
                     presign::expired_response()
+                } else if let Some(refused) =
+                    access::expected_owner_mismatch(req.headers()).or_else(|| digest::empty_content_md5(req.headers()))
+                {
+                    refused
                 } else if sh.auth {
                     hyper::service::Service::call(&sh.s3, req).await?
                 } else {
@@ -328,6 +334,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 }
                 resp
             };
+            id.decorate(&mut resp);
             if let Some(p) = logged {
                 control.log.finish(p, &resp);
             }

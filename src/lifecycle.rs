@@ -130,9 +130,13 @@ pub(crate) fn http_date(at: i64) -> Option<String> {
 }
 
 impl Lifecycle {
-    pub fn new(config: BucketLifecycleConfiguration) -> S3Result<Self> {
+    pub fn new(mut config: BucketLifecycleConfiguration) -> S3Result<Self> {
         if config.rules.is_empty() || config.rules.len() > 1000 {
             return Err(malformed());
+        }
+        // A rule submitted without an ID gets a generated one, which GET returns.
+        for r in config.rules.iter_mut().filter(|r| r.id.is_none()) {
+            r.id = Some(uuid::Uuid::new_v4().simple().to_string());
         }
         let mut ids = HashSet::new();
         let mut rules = Vec::with_capacity(config.rules.len());

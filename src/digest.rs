@@ -121,6 +121,20 @@ impl Streaming {
     }
 }
 
+/// s3s treats an empty `Content-MD5` header as absent, so the handlers never see it; S3 answers
+/// 400 `InvalidDigest`.
+pub fn empty_content_md5(headers: &http::HeaderMap) -> Option<s3s::HttpResponse> {
+    headers.get("content-md5").is_some_and(|v| v.is_empty()).then(|| {
+        s3s::S3Error::with_message(s3s::S3ErrorCode::InvalidDigest, "The Content-MD5 you specified was invalid.")
+            .to_http_response()
+            .unwrap_or_else(|_| {
+                let mut r = s3s::HttpResponse::new(s3s::Body::empty());
+                *r.status_mut() = http::StatusCode::BAD_REQUEST;
+                r
+            })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

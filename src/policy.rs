@@ -462,6 +462,10 @@ fn validate(bucket: &str, doc: &m::Policy) -> S3Result<()> {
         if st.principal.is_none() {
             return Err(malformed("Missing required field Principal"));
         }
+        // NotPrincipal only makes sense in a Deny statement.
+        if st.effect == Effect::Allow && matches!(st.principal, Some(PrincipalRule::NotPrincipal(_))) {
+            return Err(malformed("Allow with NotPrincipal is not allowed"));
+        }
         if let Some(PrincipalRule::Principal(Principal::Map(map)) | PrincipalRule::NotPrincipal(Principal::Map(map))) = &st.principal
             && map
                 .keys()
@@ -692,5 +696,13 @@ mod tests {
             Some("MalformedPolicy")
         );
         assert_eq!(code(r#"{"Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject","s3:ListBucket"],"Resource":"arn:aws:s3:::b/*"}]}"#).as_deref(), Some("MalformedPolicy"));
+        // NotPrincipal is for Deny only.
+        let not_principal = |effect: &str| {
+            code(&format!(
+                r#"{{"Statement":[{{"Effect":"{effect}","NotPrincipal":{{"AWS":"arn:aws:iam::000000000000:root"}},"Action":"s3:GetObject","Resource":"arn:aws:s3:::b/*"}}]}}"#
+            ))
+        };
+        assert_eq!(not_principal("Allow").as_deref(), Some("MalformedPolicy"));
+        assert_eq!(not_principal("Deny"), None);
     }
 }

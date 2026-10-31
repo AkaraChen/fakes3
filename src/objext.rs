@@ -149,7 +149,9 @@ pub fn missing_lock_config() -> S3Error {
 /// Whether replacing `old` retention with `new` (`None` clears it) is allowed.
 pub fn check_retention_change(old: Option<&Retention>, new: Option<&Retention>, now: &Timestamp, bypass: bool) -> S3Result<()> {
     let Some(old) = old.filter(|r| r.active(now)) else { return Ok(()) };
-    let not_weaker = new.is_some_and(|n| (n.mode == LockMode::Compliance || old.mode == LockMode::Governance) && n.until >= old.until);
+    // Without a bypass the mode stays and the date does not move back; a Governance object cannot
+    // become Compliance either, since that alters its lock settings.
+    let not_weaker = new.is_some_and(|n| n.mode == old.mode && n.until >= old.until);
     if not_weaker || (old.mode == LockMode::Governance && bypass) {
         Ok(())
     } else {
@@ -383,6 +385,27 @@ pub fn parse_sse_c(alg: Option<&str>, key: Option<&str>, md5: Option<&str>) -> S
 /// Checks the SSE-C headers of a read (or of a CopyObject source) against what the object was
 /// stored with.
 pub fn check_read_key(ext: Option<&ObjectExt>, alg: Option<&str>, key: Option<&str>, md5: Option<&str>) -> S3Result<()> {
+    check_key(ext, alg, key, md5, || s3_error!(AccessDenied, "Forbidden"))
+}
+
+/// Like [`check_read_key`] for the parts of an SSE-C multipart upload, where a key that differs
+/// from the one given to CreateMultipartUpload is a malformed request (400), not a denied read.
+pub fn check_part_key(ext: Option<&ObjectExt>, alg: Option<&str>, key: Option<&str>, md5: Option<&str>) -> S3Result<()> {
+    check_key(ext, alg, key, md5, || {
+        s3_error!(
+            InvalidRequest,
+            "The provided encryption parameters did not match the ones used originally."
+        )
+    })
+}
+
+fn check_key(
+    ext: Option<&ObjectExt>,
+    alg: Option<&str>,
+    key: Option<&str>,
+    md5: Option<&str>,
+    mismatch: impl FnOnce() -> S3Error,
+) -> S3Result<()> {
     let stored = ext.and_then(ObjectExt::customer_key_md5);
     if stored.is_none() && alg.is_none() && key.is_none() && md5.is_none() {
         return Ok(());
@@ -390,7 +413,7 @@ pub fn check_read_key(ext: Option<&ObjectExt>, alg: Option<&str>, key: Option<&s
     let given = parse_sse_c(alg, key, md5)?;
     match (stored, given) {
         (Some(s), Some(g)) if s == g => Ok(()),
-        (Some(_), Some(_)) => Err(s3_error!(AccessDenied, "Forbidden")),
+        (Some(_), Some(_)) => Err(mismatch()),
         (Some(_), None) => Err(s3_error!(
             InvalidRequest,
             "The object was stored using a form of Server Side Encryption. The correct parameters must be provided to retrieve the object."
@@ -401,6 +424,25 @@ pub fn check_read_key(ext: Option<&ObjectExt>, alg: Option<&str>, key: Option<&s
         )),
         (None, None) => Ok(()),
     }
+}
+
+/// `x-amz-server-side-encryption*` describes how to store an object, so a read that carries it is a
+/// 400 (the GetObject reference: "you'll get an HTTP 400 Bad Request error"). SSE-C reads use
+/// their own headers and are checked by [`check_read_key`].
+pub fn reject_write_headers(headers: &http::HeaderMap, ext: Option<&ObjectExt>) -> S3Result<()> {
+    const HEADERS: [&str; 4] = [
+        "x-amz-server-side-encryption",
+        "x-amz-server-side-encryption-aws-kms-key-id",
+        "x-amz-server-side-encryption-bucket-key-enabled",
+        "x-amz-server-side-encryption-context",
+    ];
+    if ext.and_then(ObjectExt::customer_key_md5).is_none() && HEADERS.iter().any(|h| headers.contains_key(*h)) {
+        return Err(s3_error!(
+            InvalidRequest,
+            "Encryption request headers should not be sent for GET or HEAD requests; the object's encryption is applied when it is written."
+        ));
+    }
+    Ok(())
 }
 
 fn validate_sse_algorithm(a: &ServerSideEncryption) -> S3Result<()> {
@@ -782,7 +824,8 @@ mod tests {
         assert!(check_retention_change(Some(&gov), Some(&r(LockMode::Governance, 3_000)), &now, false).is_ok());
         assert!(check_retention_change(Some(&gov), Some(&r(LockMode::Governance, 1_500)), &now, false).is_err());
         assert!(check_retention_change(Some(&gov), None, &now, true).is_ok());
-        assert!(check_retention_change(Some(&gov), Some(&r(LockMode::Compliance, 2_000)), &now, false).is_ok());
+        assert!(check_retention_change(Some(&gov), Some(&r(LockMode::Compliance, 2_000)), &now, false).is_err());
+        assert!(check_retention_change(Some(&gov), Some(&r(LockMode::Compliance, 2_000)), &now, true).is_ok());
         assert!(check_retention_change(Some(&comp), Some(&r(LockMode::Governance, 3_000)), &now, true).is_err());
         assert!(check_retention_change(Some(&comp), None, &now, true).is_err());
         // Expired retention no longer constrains anything.

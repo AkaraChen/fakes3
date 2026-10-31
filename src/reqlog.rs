@@ -9,6 +9,8 @@ use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
 
+use crate::reqid::RequestId;
+
 /// One recorded request.
 #[derive(Clone, Debug)]
 pub struct RequestRecord {
@@ -31,9 +33,15 @@ pub struct RequestRecord {
     /// The access key the request was signed with. Only recorded when signatures are not verified
     /// (`--no-auth`), where it can be anything; otherwise it is always the configured key.
     pub access_key: Option<String>,
+    id: RequestId,
 }
 
 impl RequestRecord {
+    /// The `x-amz-request-id` the response carried.
+    pub fn request_id(&self) -> String {
+        self.id.to_string_id()
+    }
+
     /// Path-style bucket and key, percent-decoded.
     pub fn bucket_key(&self) -> (Option<String>, Option<String>) {
         let path = self.uri.split('?').next().unwrap_or("");
@@ -243,6 +251,7 @@ pub struct Pending {
     bytes_in: u64,
     copy: bool,
     access_key: Option<String>,
+    id: RequestId,
 }
 
 impl Pending {
@@ -287,7 +296,7 @@ impl RequestLog {
     }
 
     /// Notes an arriving request, or returns `None` when logging is off.
-    pub fn start<B>(&self, req: &http::Request<B>, now: impl FnOnce() -> SystemTime) -> Option<Pending> {
+    pub fn start<B>(&self, req: &http::Request<B>, id: RequestId, now: impl FnOnce() -> SystemTime) -> Option<Pending> {
         if !self.is_enabled() {
             return None;
         }
@@ -304,6 +313,7 @@ impl RequestLog {
             bytes_in: len("x-amz-decoded-content-length").or_else(|| len("content-length")).unwrap_or(0),
             copy: h.contains_key("x-amz-copy-source"),
             access_key: None,
+            id,
         })
     }
 
@@ -328,6 +338,7 @@ impl RequestLog {
             bytes_out,
             copy: p.copy,
             access_key: p.access_key,
+            id: p.id,
         };
         let mut inner = self.inner.lock();
         if inner.records.len() >= inner.capacity {
@@ -384,6 +395,7 @@ mod tests {
             bytes_out: 0,
             copy,
             access_key: None,
+            id: RequestId::next(),
         }
     }
 
@@ -430,7 +442,7 @@ mod tests {
 
     fn push(log: &RequestLog, method: &str, uri: &str, status: u16) {
         let req = http::Request::builder().method(method).uri(uri).body(()).unwrap();
-        let p = log.start(&req, || SystemTime::UNIX_EPOCH).unwrap();
+        let p = log.start(&req, RequestId::next(), || SystemTime::UNIX_EPOCH).unwrap();
         log.finish(p, &http::Response::builder().status(status).body(()).unwrap());
     }
 
@@ -480,6 +492,9 @@ mod tests {
         push(&log, "GET", "/b/k", 200);
         assert_eq!(log.list(&RequestFilter::default()).0[0].seq, 6);
         log.set_enabled(false);
-        assert!(log.start(&http::Request::new(()), || SystemTime::UNIX_EPOCH).is_none());
+        assert!(
+            log.start(&http::Request::new(()), RequestId::next(), || SystemTime::UNIX_EPOCH)
+                .is_none()
+        );
     }
 }
