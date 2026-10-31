@@ -15,6 +15,7 @@ use s3s::dto::{CORSConfiguration, NotificationConfiguration, WebsiteConfiguratio
 use s3s::{S3Error, S3ErrorCode};
 
 use crate::acl::Acl;
+use crate::archive::ItConfigs;
 use crate::lifecycle::Lifecycle;
 use crate::policy::Policy;
 
@@ -67,6 +68,8 @@ pub struct BucketConfig {
     pub lifecycle_day: AtomicI64,
     pub website: RwLock<Option<WebsiteConfiguration>>,
     pub notification: RwLock<Option<NotificationConfiguration>>,
+    /// Intelligent-Tiering configurations by id; they decide when objects reach an archive tier.
+    pub intelligent_tiering: RwLock<ItConfigs>,
 }
 
 impl Default for BucketConfig {
@@ -82,6 +85,7 @@ impl Default for BucketConfig {
             lifecycle_day: AtomicI64::new(i64::MIN),
             website: RwLock::new(None),
             notification: RwLock::new(None),
+            intelligent_tiering: RwLock::default(),
         }
     }
 }
@@ -98,6 +102,7 @@ pub struct ConfigSnapshot {
     lifecycle: Option<Arc<Lifecycle>>,
     website: Option<WebsiteConfiguration>,
     notification: Option<NotificationConfiguration>,
+    intelligent_tiering: ItConfigs,
 }
 
 impl BucketConfig {
@@ -114,6 +119,7 @@ impl BucketConfig {
             lifecycle_day: _,
             website,
             notification,
+            intelligent_tiering,
         } = self;
         ConfigSnapshot {
             acl: acl.read().clone(),
@@ -124,6 +130,7 @@ impl BucketConfig {
             lifecycle: lifecycle.read().clone(),
             website: website.read().clone(),
             notification: notification.read().clone(),
+            intelligent_tiering: intelligent_tiering.read().clone(),
         }
     }
 
@@ -139,6 +146,7 @@ impl BucketConfig {
         *c.lifecycle.write() = s.lifecycle.clone();
         *c.website.write() = s.website.clone();
         *c.notification.write() = s.notification.clone();
+        *c.intelligent_tiering.write() = s.intelligent_tiering.clone();
         c
     }
 

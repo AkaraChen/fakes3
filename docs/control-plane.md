@@ -89,7 +89,7 @@ $ curl -X POST 'http://127.0.0.1:9000/_fakes3/reset?clock=false'
 
 ## 快照
 
-快照保存所有 bucket 的：创建时间、版本控制状态、标签、ACL / OwnershipControls / PublicAccessBlock / Policy / CORS / Lifecycle / Website / Notification 配置、对象索引（含所有版本和删除标记）、进行中的分段上传（含已上传的 part）。
+快照保存所有 bucket 的：创建时间、版本控制状态、标签、ACL / OwnershipControls / PublicAccessBlock / Policy / CORS / Lifecycle / Website / Notification 配置、对象索引（含所有版本和删除标记，以及每个对象的存储类、Restore 请求等状态）、Intelligent-Tiering 配置、进行中的分段上传（含已上传的 part）。
 **对象数据本身不复制**：数据是不可变、带引用计数的分段，快照只增加引用计数，所以快照的代价取决于对象*个数*，而不是字节数。
 快照也会让被后来覆盖或删除的数据继续留在内存里，直到快照被删除。
 
@@ -181,7 +181,20 @@ SigV2 的 `Expires`、POST policy 的 `expiration` 时，直接读取主机时�
   （例如客户端自己的时钟被冻结在 2030 年再去签名，会被 s3s 以时钟偏差拒绝）；让 POST policy 的过期时间跟随服务器时钟。
   客户端用主机时间签名、服务器时钟只向前拨，是可用的组合。
 
-对象的 `Last-Modified`、条件请求（`If-Modified-Since` 等）、Object Lock 之类以后要加的到期逻辑，都读服务器时钟，不受这个限制。
+对象的 `Last-Modified`、条件请求（`If-Modified-Since` 等）、Object Lock 的保留期、Lifecycle 的过期和存储类转换、归档对象的恢复（RestoreObject 完成、恢复副本到期、Intelligent-Tiering 进入归档层），都读服务器时钟，不受这个限制。
+
+### 用时钟推进归档对象
+
+没有后台任务：每次读取时拿记录下来的时间和服务器时钟比较，所以拨时钟就够了，不需要任何额外调用。恢复的完成时间是固定的（见 [README](../README.md#归档存储类)），例如：
+
+```bash
+fakes3 ctl clock freeze 2030-01-01T10:30:00Z
+# RestoreObject(Days=3, Tier=Standard) -> 202，HEAD 显示 ongoing-request="true"
+fakes3 ctl clock advance 3h     # 恢复完成，GET 可读，expiry-date = 2030-01-05T00:00:00Z
+fakes3 ctl clock advance 4d     # 恢复副本已过期，GET 重新返回 InvalidObjectState
+```
+
+Lifecycle 的转换在时钟跨过 UTC 日期后的第一次访问 bucket 时执行（和过期一样）。快照会保存对象的 Restore 请求和存储类转换结果，回滚后它们和时钟一起重新生效。
 
 ## 请求日志
 

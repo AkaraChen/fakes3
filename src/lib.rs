@@ -24,6 +24,7 @@
 
 mod access;
 mod acl;
+mod archive;
 mod blocking;
 mod bucket_config;
 mod bucket_defaults;
@@ -318,6 +319,9 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 // s3s always answers HEAD with 200; a ?partNumber= HEAD is a partial response.
                 if head && resp.status() == http::StatusCode::OK && resp.headers().contains_key(http::header::CONTENT_RANGE) {
                     *resp.status_mut() = http::StatusCode::PARTIAL_CONTENT;
+                }
+                if let Some(archive::StatusOverride(status)) = resp.extensions().get().copied() {
+                    *resp.status_mut() = status;
                 }
                 if let Some(info) = cors_ctx {
                     info.decorate(&control.store, &mut resp);
