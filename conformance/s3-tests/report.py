@@ -302,6 +302,17 @@ def main():
         w(f"## {tgt}: skipped tests\n")
         skip_reasons(data[tgt], w)
 
+    if tgt in data and f"{tgt}-aws" in data:
+        lost = [(tid, t) for tid, t in data[f"{tgt}-aws"].items()
+                if t["status"] in ("fail", "error") and data[tgt].get(tid, {}).get("status") == "pass"]
+        gained = [tid for tid, t in data[f"{tgt}-aws"].items()
+                  if t["status"] == "pass" and data[tgt].get(tid, {}).get("status") in ("fail", "error")]
+        w(f"## {tgt}-aws (`--bucket-defaults aws`) against {tgt}\n")
+        w(f"{len(lost)} tests pass with the legacy defaults and fail with the AWS defaults; {len(gained)} go the other way. "
+          "s3-tests predates the 2023 changes (ACLs, public policies and SSE-C all assumed available), so these are "
+          "the tests that no longer apply to a bucket created the way AWS creates it today.\n")
+        w("\n".join(rollup(lost, limit=15)) + "\n")
+
     print("\n".join(out))
     if a.json:
         json.dump(summary, open(a.json, "w"), indent=1)
