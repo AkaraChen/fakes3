@@ -75,6 +75,11 @@ struct Opt {
     /// Access on, SSE-S3, SSE-C blocked). Only affects buckets created afterwards.
     #[arg(long, default_value = "legacy", env = "FAKES3_BUCKET_DEFAULTS", value_name = "legacy|aws")]
     bucket_defaults: fakes3::BucketDefaults,
+
+    /// Build list responses through s3s' generic serializer instead of writing them directly.
+    /// Same bytes, slower; an escape hatch.
+    #[arg(long, hide = true, env = "FAKES3_NO_FAST_LIST", value_parser = clap::builder::BoolishValueParser::new())]
+    no_fast_list: bool,
 }
 
 #[derive(clap::Subcommand)]
@@ -110,6 +115,7 @@ fn main() -> std::io::Result<std::process::ExitCode> {
         request_log_capacity: opt.request_log_capacity,
         memory_limit: opt.memory_limit,
         bucket_defaults: opt.bucket_defaults,
+        fast_list: !opt.no_fast_list,
     };
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
         let server = fakes3::Server::start(config).await?;

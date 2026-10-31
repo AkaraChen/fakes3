@@ -33,6 +33,8 @@ pub struct FakeS3 {
     pub clock: Arc<Clock>,
     pub defaults: BucketDefaults,
     pub users: Arc<Users>,
+    /// Render list responses directly instead of through s3s' DTO serializer; see [`crate::listxml`].
+    pub fast_list: bool,
 }
 
 impl FakeS3 {
@@ -687,28 +689,48 @@ struct Listing {
     next: Option<String>,
 }
 
-/// Walks keys in order from `after` (exclusive) under `prefix`, folding keys that contain
-/// `delimiter` after the prefix into common prefixes. Keys for which `visible` is false are
-/// skipped without being copied or counted (a prefix only appears once a visible key under it
-/// is reached). Each visible key is passed to `emit`, which returns how many result slots it
-/// consumed.
-fn walk<'a, V, F>(
-    objects: &'a Index,
-    prefix: &str,
-    delimiter: Option<&str>,
-    after: Option<&str>,
+/// How a walk ended.
+pub(crate) struct ListEnd {
+    pub truncated: bool,
+    /// The last key or common prefix returned, when the listing was cut short.
+    pub next: Option<String>,
+    /// Result slots used: keys and common prefixes.
+    pub used: usize,
+}
+
+/// Where a [`walk`] starts and stops.
+struct Scan<'a> {
+    prefix: &'a str,
+    delimiter: Option<&'a str>,
+    /// Exclusive.
+    after: Option<&'a str>,
     max_keys: usize,
-    visible: V,
-    mut emit: F,
-) -> (Vec<CommonPrefix>, bool, Option<String>)
+}
+
+/// Walks keys in order from `after` (exclusive) under `prefix`, folding keys that contain
+/// `delimiter` after the prefix into common prefixes, which go to `on_prefix`. Keys for which
+/// `visible` is false are skipped without being copied or counted (a prefix only appears once a
+/// visible key under it is reached). Each visible key is passed to `emit`, which returns how many
+/// result slots it consumed.
+fn walk<'a, V, F, P>(objects: &'a Index, scan: Scan<'_>, visible: V, mut emit: F, mut on_prefix: P) -> ListEnd
 where
     V: Fn(&Entry) -> bool,
     F: FnMut(&'a str, &'a Entry) -> usize,
+    P: FnMut(&str),
 {
+    let Scan {
+        prefix,
+        delimiter,
+        after,
+        max_keys,
+    } = scan;
     if max_keys == 0 {
-        return (Vec::new(), false, None);
+        return ListEnd {
+            truncated: false,
+            next: None,
+            used: 0,
+        };
     }
-    let mut prefixes = Vec::new();
     let mut used = 0usize;
     // Borrowed from the index: copied only when the listing is cut short.
     let mut next: Option<&str> = None;
@@ -730,13 +752,15 @@ where
                 continue;
             }
             if used >= max_keys {
-                return (prefixes, true, next.map(str::to_owned));
+                return ListEnd {
+                    truncated: true,
+                    next: next.map(str::to_owned),
+                    used,
+                };
             }
             if let Some(pos) = delimiter.and_then(|d| key[prefix.len()..].find(d).map(|p| p + d.len())) {
                 let cp = &key[..prefix.len() + pos];
-                prefixes.push(CommonPrefix {
-                    prefix: Some(cp.to_owned()),
-                });
+                on_prefix(cp);
                 used += 1;
                 next = Some(cp);
                 skip.clear();
@@ -753,51 +777,187 @@ where
         }
         break;
     }
-    (prefixes, false, None)
+    ListEnd {
+        truncated: false,
+        next: None,
+        used,
+    }
+}
+
+/// [`walk`] over the keys a plain listing shows: those whose latest version is not a delete
+/// marker.
+pub(crate) fn walk_list<'a>(
+    objects: &'a Index,
+    prefix: &str,
+    delimiter: Option<&str>,
+    after: Option<&str>,
+    max_keys: usize,
+    mut emit: impl FnMut(&'a str, &'a Version, &'a StoreObject),
+    on_prefix: impl FnMut(&str),
+) -> ListEnd {
+    // Keys whose latest version is a delete marker are invisible to plain listings.
+    let visible = |e: &Entry| e.current().is_some();
+    walk(
+        objects,
+        Scan {
+            prefix,
+            delimiter,
+            after,
+            max_keys,
+        },
+        visible,
+        |key, entry| {
+            let v = entry.latest().expect("walk only emits visible entries");
+            emit(key, v, v.obj.as_ref().expect("walk only emits visible entries"));
+            1
+        },
+        on_prefix,
+    )
 }
 
 /// `owners` is given when the listing reports an `Owner` per key.
 fn list(objects: &Index, prefix: &str, delimiter: Option<&str>, after: Option<&str>, max_keys: usize, owners: Option<&Users>) -> Listing {
     // Growing a 1000-entry page by doubling copies it about once more.
     let mut contents = Vec::with_capacity(max_keys.min(objects.len()));
-    // Keys whose latest version is a delete marker are invisible to plain listings.
-    let visible = |e: &Entry| e.current().is_some();
-    let (prefixes, truncated, next) = walk(objects, prefix, delimiter, after, max_keys, visible, |key, entry| {
-        let o = entry.current().expect("walk only emits visible entries");
-        contents.push(Object {
-            key: Some(key.to_owned()),
-            e_tag: Some(ETag::Strong(o.e_tag.clone())),
-            last_modified: Some(ts(o.last_modified)),
-            size: Some(o.data.size as i64),
-            storage_class: Some(match objext::storage_class(o.ext.as_deref()) {
-                Some(c) => ObjectStorageClass::from(c.as_str().to_owned()),
-                None => ObjectStorageClass::from_static(ObjectStorageClass::STANDARD),
-            }),
-            owner: owners.zip(entry.latest()).map(|(users, v)| users.owner(v.owner)),
-            ..Default::default()
-        });
-        1
-    });
+    let mut prefixes = Vec::new();
+    let end = walk_list(
+        objects,
+        prefix,
+        delimiter,
+        after,
+        max_keys,
+        |key, v, o| {
+            contents.push(Object {
+                key: Some(key.to_owned()),
+                e_tag: Some(ETag::Strong(o.e_tag.clone())),
+                last_modified: Some(ts(o.last_modified)),
+                size: Some(o.data.size as i64),
+                storage_class: Some(match objext::storage_class(o.ext.as_deref()) {
+                    Some(c) => ObjectStorageClass::from(c.as_str().to_owned()),
+                    None => ObjectStorageClass::from_static(ObjectStorageClass::STANDARD),
+                }),
+                owner: owners.map(|users| users.owner(v.owner)),
+                ..Default::default()
+            });
+        },
+        |p| {
+            prefixes.push(CommonPrefix {
+                prefix: Some(p.to_owned()),
+            });
+        },
+    );
     Listing {
         contents,
         prefixes,
-        truncated,
-        next,
+        truncated: end.truncated,
+        next: end.next,
     }
+}
+
+/// How a ListObjectVersions walk ended.
+pub(crate) struct VersionsEnd {
+    pub truncated: bool,
+    pub next_key: Option<String>,
+    pub next_version_id: Option<String>,
+}
+
+/// The walk behind ListObjectVersions. Every version of a visited key goes to `on_version` with
+/// whether it is the latest, newest version first; keys fold into common prefixes like in a plain
+/// listing. A listing can end in the middle of a key's versions.
+pub(crate) fn walk_versions<'a>(
+    objects: &'a Index,
+    input: &ListObjectVersionsInput,
+    prefix: &str,
+    max_keys: usize,
+    mut on_version: impl FnMut(&'a str, &'a Version, bool),
+    on_prefix: impl FnMut(&str),
+) -> VersionsEnd {
+    let mut emitted = 0usize;
+    let mut next_version: Option<(&str, &str)> = None;
+    let mut truncated_mid_key = false;
+
+    // A version-id marker resumes inside its key; otherwise the key marker is exclusive.
+    let (after, resume) = match (&input.key_marker, &input.version_id_marker) {
+        (Some(k), Some(v)) if !v.is_empty() => {
+            let before = objects.range::<String, _>(..k.clone()).next_back().map(|(pk, _)| pk.clone());
+            (before, Some((k.clone(), v.clone())))
+        }
+        (k, _) => (k.clone(), None),
+    };
+    let end = walk(
+        objects,
+        Scan {
+            prefix,
+            delimiter: input.delimiter.as_deref(),
+            after: after.as_deref(),
+            max_keys,
+        },
+        |_| true,
+        |key, entry| {
+            if truncated_mid_key {
+                return 0;
+            }
+            let mut n = 0;
+            let mut skipping = resume.as_ref().is_some_and(|(k, _)| k == key);
+            for (i, v) in entry.versions.iter().rev().enumerate() {
+                if skipping {
+                    if resume.as_ref().is_some_and(|(_, vid)| *vid == v.id) {
+                        skipping = false;
+                    }
+                    continue;
+                }
+                if emitted >= max_keys {
+                    truncated_mid_key = true;
+                    break;
+                }
+                on_version(key, v, i == 0);
+                emitted += 1;
+                n += 1;
+                next_version = Some((key, v.id.as_str()));
+            }
+            n
+        },
+        on_prefix,
+    );
+    let (mut truncated, mut next_key) = (end.truncated, end.next);
+    if truncated_mid_key {
+        truncated = true;
+        next_key = next_version.map(|(k, _)| k.to_owned());
+    }
+    let next_version_id = if truncated {
+        next_version
+            .filter(|(k, _)| Some(*k) == next_key.as_deref())
+            .map(|(_, v)| v.to_owned())
+    } else {
+        None
+    };
+    VersionsEnd {
+        truncated,
+        next_key: if truncated { next_key } else { None },
+        next_version_id,
+    }
+}
+
+/// An empty `output` that carries `body`, the response [`crate::listxml`] rendered, for `lib.rs` to
+/// put in place of the one s3s writes for it.
+fn pre_rendered<T>(output: T, body: Bytes) -> S3Response<T> {
+    let mut resp = S3Response::new(output);
+    resp.extensions.insert(crate::listxml::PreRendered(body));
+    resp
 }
 
 /// `encoding-type=url` escaping: percent-encoding, a space is `%20` (percent-only decoders such as
 /// botocore's and form decoders such as `URLDecoder` both read it; `+` would only survive the
 /// latter) and a literal `+` is `%2B`. `/` stays literal like S3 and MinIO leave it; some clients
 /// (minio-dotnet) don't decode common prefixes.
-fn url_encode(s: &str) -> String {
+pub(crate) fn url_encode(s: &str) -> String {
     form_urlencoded::byte_serialize(s.as_bytes())
         .collect::<String>()
         .replace('+', "%20")
         .replace("%2F", "/")
 }
 
-fn wants_url(e: &Option<EncodingType>) -> bool {
+pub(crate) fn wants_url(e: &Option<EncodingType>) -> bool {
     e.as_ref().is_some_and(|e| e.as_str().eq_ignore_ascii_case("url"))
 }
 
@@ -1616,6 +1776,11 @@ impl S3 for FakeS3 {
             None => None,
         };
         let after = token.as_deref().or(input.start_after.as_deref());
+        if self.fast_list
+            && let Some(body) = self.render_v2(&b, &input, &prefix, max_keys, after)
+        {
+            return Ok(pre_rendered(ListObjectsV2Output::default(), body));
+        }
         let owners = (input.fetch_owner == Some(true)).then_some(&*self.users);
         let l = list(&b.objects.read(), &prefix, input.delimiter.as_deref(), after, max_keys, owners);
         let key_count = (l.contents.len() + l.prefixes.len()) as i32;
@@ -1658,6 +1823,11 @@ impl S3 for FakeS3 {
         let b = self.bucket(&input.bucket)?;
         let prefix = input.prefix.clone().unwrap_or_default();
         let max_keys = input.max_keys.unwrap_or(1000).clamp(0, 1000) as usize;
+        if self.fast_list
+            && let Some(body) = self.render_v1(&b, &input, &prefix, max_keys, input.marker.as_deref())
+        {
+            return Ok(pre_rendered(ListObjectsOutput::default(), body));
+        }
         let l = list(
             &b.objects.read(),
             &prefix,
@@ -1714,87 +1884,51 @@ impl S3 for FakeS3 {
             ));
         }
         let max_keys = input.max_keys.unwrap_or(1000).clamp(0, 1000) as usize;
-        let objects = b.objects.read();
+        if self.fast_list
+            && let Some(body) = self.render_versions(&b, &input, &prefix, max_keys)
+        {
+            return Ok(pre_rendered(ListObjectVersionsOutput::default(), body));
+        }
         let mut versions = Vec::new();
         let mut markers = Vec::new();
-        let mut emitted = 0usize;
-        let mut next_version: Option<(&str, &str)> = None;
-        let mut truncated_mid_key = false;
-
-        // A version-id marker resumes inside its key; otherwise the key marker is exclusive.
-        let (after, resume) = match (&input.key_marker, &input.version_id_marker) {
-            (Some(k), Some(v)) if !v.is_empty() => {
-                let before = objects.range::<String, _>(..k.clone()).next_back().map(|(pk, _)| pk.clone());
-                (before, Some((k.clone(), v.clone())))
-            }
-            (k, _) => (k.clone(), None),
-        };
-        let (prefixes, mut truncated, mut next_key) = walk(
-            &objects,
+        let mut prefixes = Vec::new();
+        let end = walk_versions(
+            &b.objects.read(),
+            &input,
             &prefix,
-            input.delimiter.as_deref(),
-            after.as_deref(),
             max_keys,
-            |_| true,
-            |key, entry| {
-                if truncated_mid_key {
-                    return 0;
-                }
-                let mut n = 0;
-                let mut skipping = resume.as_ref().is_some_and(|(k, _)| k == key);
-                for (i, v) in entry.versions.iter().rev().enumerate() {
-                    if skipping {
-                        if resume.as_ref().is_some_and(|(_, vid)| *vid == v.id) {
-                            skipping = false;
-                        }
-                        continue;
-                    }
-                    if emitted >= max_keys {
-                        truncated_mid_key = true;
-                        break;
-                    }
-                    let is_latest = Some(i == 0);
-                    match &v.obj {
-                        Some(o) => versions.push(ObjectVersion {
-                            key: Some(key.to_owned()),
-                            version_id: Some(v.id.clone()),
-                            is_latest,
-                            e_tag: Some(ETag::Strong(o.e_tag.clone())),
-                            last_modified: Some(ts(o.last_modified)),
-                            size: Some(o.data.size as i64),
-                            storage_class: Some(match objext::storage_class(o.ext.as_deref()) {
-                                Some(c) => ObjectVersionStorageClass::from(c.as_str().to_owned()),
-                                None => ObjectVersionStorageClass::from_static(ObjectVersionStorageClass::STANDARD),
-                            }),
-                            owner: Some(self.users.owner(v.owner)),
-                            ..Default::default()
+            |key, v, is_latest| {
+                let is_latest = Some(is_latest);
+                match &v.obj {
+                    Some(o) => versions.push(ObjectVersion {
+                        key: Some(key.to_owned()),
+                        version_id: Some(v.id.clone()),
+                        is_latest,
+                        e_tag: Some(ETag::Strong(o.e_tag.clone())),
+                        last_modified: Some(ts(o.last_modified)),
+                        size: Some(o.data.size as i64),
+                        storage_class: Some(match objext::storage_class(o.ext.as_deref()) {
+                            Some(c) => ObjectVersionStorageClass::from(c.as_str().to_owned()),
+                            None => ObjectVersionStorageClass::from_static(ObjectVersionStorageClass::STANDARD),
                         }),
-                        None => markers.push(DeleteMarkerEntry {
-                            key: Some(key.to_owned()),
-                            version_id: Some(v.id.clone()),
-                            is_latest,
-                            last_modified: Some(ts(v.last_modified)),
-                            owner: Some(self.users.owner(v.owner)),
-                        }),
-                    }
-                    emitted += 1;
-                    n += 1;
-                    next_version = Some((key, v.id.as_str()));
+                        owner: Some(self.users.owner(v.owner)),
+                        ..Default::default()
+                    }),
+                    None => markers.push(DeleteMarkerEntry {
+                        key: Some(key.to_owned()),
+                        version_id: Some(v.id.clone()),
+                        is_latest,
+                        last_modified: Some(ts(v.last_modified)),
+                        owner: Some(self.users.owner(v.owner)),
+                    }),
                 }
-                n
+            },
+            |p| {
+                prefixes.push(CommonPrefix {
+                    prefix: Some(p.to_owned()),
+                });
             },
         );
-        if truncated_mid_key {
-            truncated = true;
-            next_key = next_version.map(|(k, _)| k.to_owned());
-        }
-        let next_version_id = if truncated {
-            next_version
-                .filter(|(k, _)| Some(*k) == next_key.as_deref())
-                .map(|(_, v)| v.to_owned())
-        } else {
-            None
-        };
         let mut out = ListObjectVersionsOutput {
             name: Some(input.bucket),
             prefix: Some(prefix),
@@ -1803,9 +1937,9 @@ impl S3 for FakeS3 {
             key_marker: Some(input.key_marker.unwrap_or_default()),
             version_id_marker: Some(input.version_id_marker.unwrap_or_default()),
             max_keys: Some(max_keys as i32),
-            is_truncated: Some(truncated),
-            next_key_marker: if truncated { next_key } else { None },
-            next_version_id_marker: next_version_id,
+            is_truncated: Some(end.truncated),
+            next_key_marker: end.next_key,
+            next_version_id_marker: end.next_version_id,
             versions: Some(versions),
             delete_markers: Some(markers),
             common_prefixes: Some(prefixes),
@@ -2300,6 +2434,10 @@ impl S3 for FakeS3 {
         req: S3Request<DeleteBucketEncryptionInput>,
     ) -> S3Result<S3Response<DeleteBucketEncryptionOutput>> {
         self.do_delete_bucket_encryption(req).await
+    }
+
+    async fn select_object_content(&self, req: S3Request<SelectObjectContentInput>) -> S3Result<S3Response<SelectObjectContentOutput>> {
+        self.do_select_object_content(req).await
     }
 
     async fn get_object_attributes(&self, req: S3Request<GetObjectAttributesInput>) -> S3Result<S3Response<GetObjectAttributesOutput>> {

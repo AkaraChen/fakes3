@@ -167,7 +167,7 @@ AUTO_WHY = {
     "multi-user": "The test's call graph reaches `get_alt_*`, `get_tenant_*` or `get_iam_*` (found by static analysis of the s3-tests source) and nobody has triaged why it fails. On fakes3 `alt` and `tenant` are separate accounts (run.sh); on the other servers every user is the one credential they know, so the expected `AccessDenied` / owner mismatch cannot happen.",
     "iam": "IAM API calls (`PutUserPolicy`, `CreateUser`, …) go to a server that has no IAM service.",
     "sts": "STS (`AssumeRole`, `GetSessionToken`, `GetCallerIdentity`, web identity) needs an STS service and, for web identity, an external Keycloak configured in `[webidentity]`.",
-    "s3select": "S3 Select: `SelectObjectContent` is implemented only in part (NotImplemented for several query shapes); the remaining shapes below fail on the engine's output.",
+    "s3select": "S3 Select: `SelectObjectContent` runs a subset of the SQL dialect over CSV and JSON (see docs/select.md); whatever is listed here fails on a shape it does not run or on output that differs from what the test expects.",
     "s3control": "S3 Control API (account-level public access block) is served from a different endpoint than S3.",
     "sns": "SNS topics / bucket notifications delivery.",
 }

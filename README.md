@@ -387,6 +387,8 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认**保留旧的�
   没有规则的 bucket 零开销
 - 归档存储类：`GLACIER`、`DEEP_ARCHIVE` 和 Intelligent-Tiering 的 Archive Access / Deep Archive Access 层，GET / CopyObject 来源返回 403 `InvalidObjectState`，
   `RestoreObject` 和 `x-amz-restore` 按服务端虚拟时钟推进；Lifecycle 的 Transition / NoncurrentVersionTransition 会真的改存储类（见[归档存储类](#归档存储类)）
+- S3 Select（`SelectObjectContent`）：CSV / JSON（`LINES`、`DOCUMENT`）输入，`SELECT ... FROM S3Object[路径] [WHERE] [LIMIT]`，算术、比较、`LIKE` / `IN` / `BETWEEN` / `CASE` / `CAST`、
+  常用字符串函数和聚合，CSV / JSON 输出，Records / Progress / Stats / End 事件，`ScanRange`；不支持压缩输入、Parquet、`GROUP BY`、日期函数（见 [docs/select.md](docs/select.md)）
 - Website、Notification 配置的存取（不提供网站端点，不投递事件）；POST policy 表单上传
 
 还没做的功能见 [TODO.md](TODO.md)，主要是 Website 端点，以及测试控制面里的故障注入。
