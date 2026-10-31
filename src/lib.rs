@@ -46,6 +46,7 @@ mod presign;
 mod reqid;
 mod reqlog;
 mod s3impl;
+mod select;
 mod snapshot;
 mod store;
 
