@@ -280,6 +280,7 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
             None => defaults.bucket_defaults,
             Some(s) => s.parse().map_err(|e| Error::new(Status::InvalidArg, format!("invalid bucketDefaults: {e}")))?,
         },
+        fast_list: defaults.fast_list,
     };
     let server = fakes3::Server::start(config.clone()).await.map_err(|e| {
         Error::new(

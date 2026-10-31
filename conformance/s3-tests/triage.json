@@ -330,6 +330,34 @@
     "test_post_object_upload_checksum"
    ],
    "cost": "large"
+  },
+  {
+   "id": "select-json-output-shape",
+   "category": "test-defect",
+   "title": "S3 Select with JSON output: the tests int() the whole result, AWS answers `{\"_1\":N}`",
+   "why": "`ValueError: invalid literal for int() with base 10: '{\"_1\":1}'`. `run_s3select_json` asks for JSON output and the tests parse the result as a bare number, which is what Ceph's engine writes for an aggregate; AWS writes one JSON object per record keyed `_1`, `_2`, …, which is what fakes3 returns. The queries themselves run (`count(0) from s3object[*].root`, `min(_1.c1)`).",
+   "tests": [
+    "test_count_json_operation",
+    "test_json_column_sum_min_max"
+   ]
+  },
+  {
+   "id": "select-null-rendering",
+   "category": "test-defect",
+   "title": "S3 Select: the CSV test expects an empty field to be written as `null`",
+   "why": "`assert '' != ''` for `select _1 from s3object` on a row that starts with an empty field. Ceph's engine writes NULL as `null`; AWS reads an empty CSV field as an empty string and writes it back as an empty field (a NULL in CSV output is empty too), which is what fakes3 does. The test passed before only because SelectObjectContent answered NotImplemented, a non-empty string.",
+   "tests": [
+    "test_csv_parser"
+   ]
+  },
+  {
+   "id": "select-ceph-messages",
+   "category": "test-defect",
+   "title": "S3 Select: the test looks for Ceph's own error text (`ProcessingTimeError`, `multiple definition of column`)",
+   "why": "`assert -1 >= 0` on `find('alias {c11} or column not exist in schema')`: the test searches the error for Ceph's wording and code. fakes3 answers a column that the header lacks with 400 `MissingHeaders`, the S3 code for it.",
+   "tests": [
+    "test_schema_definition"
+   ]
   }
  ],
  "out_of_scope": {
