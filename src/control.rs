@@ -16,6 +16,7 @@ use s3s::dto::{Timestamp, TimestampFormat};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::bucket_defaults::BucketDefaults;
 use crate::clock::{self, Clock};
 use crate::memory::MemoryTracker;
 use crate::reqlog::{RequestFilter, RequestLog, RequestRecord, StatusFilter};
@@ -33,6 +34,7 @@ pub struct Control {
     pub(crate) clock: Arc<Clock>,
     pub(crate) memory: Arc<MemoryTracker>,
     pub(crate) log: RequestLog,
+    pub(crate) bucket_defaults: BucketDefaults,
     snapshots: Mutex<BTreeMap<String, SnapshotEntry>>,
     next_snapshot: AtomicU64,
 }
@@ -96,12 +98,19 @@ impl From<clock::OutOfRange> for ControlError {
 }
 
 impl Control {
-    pub(crate) fn new(store: Arc<Store>, clock: Arc<Clock>, memory: Arc<MemoryTracker>, log: RequestLog) -> Self {
+    pub(crate) fn new(
+        store: Arc<Store>,
+        clock: Arc<Clock>,
+        memory: Arc<MemoryTracker>,
+        log: RequestLog,
+        bucket_defaults: BucketDefaults,
+    ) -> Self {
         Self {
             store,
             clock,
             memory,
             log,
+            bucket_defaults,
             snapshots: Mutex::default(),
             next_snapshot: AtomicU64::new(1),
         }
@@ -274,6 +283,7 @@ fn record_json(r: &RequestRecord) -> Value {
         "latency_us": r.latency.as_micros() as u64,
         "bytes_in": r.bytes_in,
         "bytes_out": r.bytes_out,
+        "access_key": r.access_key,
     })
 }
 
@@ -388,6 +398,7 @@ impl Control {
                         "clock": clock_json(&self.clock),
                         "store": counts_json(self.counts()),
                         "memory": memory_json(self.memory.stats()),
+                        "bucket_defaults": self.bucket_defaults.as_str(),
                         "snapshots": self.snapshots.lock().len(),
                         "request_log": log_config_json(&self.log),
                     }),

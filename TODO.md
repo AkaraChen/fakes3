@@ -6,7 +6,7 @@
 - [x] 快照：`POST /_fakes3/snapshots`、`POST /_fakes3/snapshots/{name}/restore`（索引复制方案，选型和实测数据见文档）
 - [x] `/_fakes3/clock`：冻结、推进或设置虚拟时间；预签名 URL 过期跟随虚拟时钟
   - s3s 不允许注入时间，SigV4 日期偏差检查仍然用主机时间（见文档）
-  - 以后的 lifecycle 过期、Object Lock retention 到期、Glacier restore 完成应当读 `Clock::now`
+  - lifecycle 过期和转换、Object Lock retention 到期、Glacier restore 的完成与到期都读 `Clock::now`
 - [ ] `POST /_fakes3/faults`：按操作、bucket/key 前缀或概率注入故障
   - 503 SlowDown、500 InternalError、固定或随机延迟、body 截断、连接重置
 - [x] `GET /_fakes3/requests`：请求日志，用于断言调用次数和顺序
@@ -14,7 +14,9 @@
 - [x] Rust 进程内库模式（`Server::start` / `Server::start_blocking`）、Node.js 绑定（napi-rs）、GHCR 镜像
 - [x] testcontainers：不需要专门的模块，通用容器 + 日志等待即可（见 README）
 - [ ] 其余语言的框架集成（pytest fixture 等，基于 `fakes3 ctl` 或 HTTP API）
-- [ ] `--no-auth` 模式下已签名的请求会得到 501 `This service has no authentication provider`（s3s 在没有 auth provider 时拒绝带签名的请求），只有匿名请求能通过
+- [x] `--no-auth`：任意 access key / secret 签名的请求都接受（SigV4 / SigV2 的头和 presigned URL、三种流式上传，trailer 校验和仍会校验），不做授权；
+      s3s 没有跳过验签的开关，所以在服务包装层去掉签名再交给 s3s，aws-chunked 自己解码（见 `src/noauth.rs`）
+  - 带签名的 POST 表单上传（`x-amz-signature` / `signature` 字段）在该模式下仍返回 501
 
 ## S3 语义完整度
 
@@ -32,15 +34,21 @@
 - [x] 对象和 bucket 的 Tagging
 - [x] ACL（canned / grant / 请求体）、OwnershipControls、PublicAccessBlock、Bucket Policy 求值（匿名访问 + 显式 Deny）、
       CORS 预检与响应头、Lifecycle（按服务端时钟惰性执行）、Website 与 Notification 的配置读写
-- [ ] Website 端点（按 index/error document 和 routing rules 提供静态网站）、Notification 实际投递、
-      Lifecycle 的 Transition、新建 bucket 默认启用 BucketOwnerEnforced 和 Block Public Access（AWS 2023 年之后的默认值）
+- [ ] Website 端点（按 index/error document 和 routing rules 提供静态网站）、Notification 实际投递
+- [x] 新建 bucket 的默认值可切换：默认 `legacy`（ACL 可用、无 Block Public Access、无默认加密、允许 SSE-C），`--bucket-defaults aws` 采用现在的 AWS 默认值
+      （BucketOwnerEnforced、Block Public Access 全开、默认 SSE-S3、默认禁用 SSE-C，见 [README](README.md#新建-bucket-的默认值) 里的 AWS 文档来源，
+      含 [SSE-C FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-s3-c-encryption-setting-faq.html)）
 - [x] SSE-C（校验 key MD5）、SSE-S3/KMS header 回显、Put/Get/DeleteBucketEncryption 及默认加密
 - [x] POST policy 表单上传（条件校验由 s3s 完成；过期时间按宿主机时钟判断，不受虚拟时钟影响）
 - [x] virtual-host 寻址：`--domain`（可重复），默认 `localhost`，即 `http://<bucket>.localhost:<port>`
 - [x] ListMultipartUploads
 - [x] GetObjectAttributes
 - [x] 回显 `storage_class`、`x-amz-website-redirect-location` 等剩余元数据
-- [ ] Glacier / Deep Archive 对象的 `InvalidObjectState` 和 RestoreObject（目前这两类对象仍可直接读取）
+- [x] Glacier / Deep Archive / Intelligent-Tiering 归档层：读返回 `InvalidObjectState`，RestoreObject（202 / 200 / 409、`x-amz-restore`、ListObjectsV2 的 `RestoreStatus`），
+      完成和到期按服务端时钟，见 [README](README.md#归档存储类)
+- [x] Lifecycle 的 Transition / NoncurrentVersionTransition（瀑布模型、128 KB 默认下限、Object Lock 不阻止转换）
+- [ ] 归档相关的剩余差异：ListObjectVersions 不返回 `RestoreStatus`；SELECT 类型的 RestoreObject 返回 501；不模拟 `GlacierExpeditedRetrievalNotAvailable`；
+      Intelligent-Tiering 不记录读取，访问不会重置闲置天数；不校验 Lifecycle 里 Days 的先后和最小值要求
 
 ## 性能
 
@@ -56,6 +64,6 @@
 
 ## 一致性验证
 
-- [ ] 接入 ceph/s3-tests，作为进度基线
+- [x] 接入 ceph/s3-tests，作为进度基线（`conformance/s3-tests/run.sh`、`.github/workflows/s3-tests.yml`，分类后的基线和待办见 [conformance/S3-TESTS.md](conformance/S3-TESTS.md)）
 - [ ] 接入 MinIO mint
 - [ ] 对真实 AWS S3 做差分测试（录制和回放）

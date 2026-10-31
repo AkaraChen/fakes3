@@ -181,10 +181,11 @@ await server.stop();
 | `host` | `127.0.0.1` | 监听地址 |
 | `port` | `0` | 监听端口，`0` 表示随机端口 |
 | `accessKey` / `secretKey` | `fakes3` / `fakes3secret` | 访问凭证 |
-| `noAuth` | `false` | 接受未签名的请求（SDK 发出的已签名请求在这个模式下目前会被拒绝，见 [TODO.md](TODO.md)） |
+| `noAuth` | `false` | 不校验签名：用任意 access key 和 secret 签名的请求都接受，未签名的也接受（见下面“`--no-auth`”） |
 | `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
 | `requestLog` / `requestLogCapacity` | `true` / `10000` | 是否记录 S3 请求（见下面的控制面），以及最多保留多少条 |
 | `domains` | 无 | 虚拟主机寻址的基础域名（`<bucket>.<domain>`），path-style 始终可用 |
+| `bucketDefaults` | `"legacy"` | 新建 bucket 的初始设置：`"legacy"` 或 `"aws"`，见[新建 bucket 的默认值](#新建-bucket-的默认值) |
 | `memoryLimit` | `"auto"` | 对象数据占用内存的上限：字节数，或 `"512MiB"`、`"2GiB"`、`"unlimited"`、`"auto"`；超出时写入返回 HTTP 507 |
 
 `FakeS3Server` 有只读属性 `endpoint`、`host`、`port`、`accessKey`、`secretKey`，以及方法 `memory(): { used, limit }`（当前用量和上限，字节；无上限时没有 `limit` 字段），`stop(): Promise<void>`（可重复调用，调用后端口立即释放）。
@@ -232,10 +233,25 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 | `--port` | `FAKES3_PORT` | `9000` | 监听端口，`0` 表示随机端口 |
 | `--access-key` | `FAKES3_ACCESS_KEY` | `fakes3` | 访问凭证 |
 | `--secret-key` | `FAKES3_SECRET_KEY` | `fakes3secret` | 访问凭证 |
-| `--no-auth` | | 关 | 不校验签名 |
+| `--no-auth` | | 关 | 不校验签名：任意 access key / secret 签的名都接受，未签名的也接受，且不做授权（见下文） |
 | `--domain` | `FAKES3_DOMAIN` | `localhost` | virtual-host 寻址的基础域名，可重复（或逗号分隔）；`<bucket>.<domain>` 选择 bucket，其它主机名仍按 path-style 处理；传空字符串关闭 |
 | `--inline-threshold` | | `1048576` | 达到这个大小的对象或 part 存进 memfd，小于它的放在堆上 |
 | `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | 对象数据占用内存的上限，见下文。可以写 `2GiB`、`512MiB`、`unlimited`、`auto` |
+| `--bucket-defaults` | `FAKES3_BUCKET_DEFAULTS` | `legacy` | 新建 bucket 的初始设置：`legacy` 或 `aws`，见[新建 bucket 的默认值](#新建-bucket-的默认值)。库里对应 `Config::bucket_defaults`（`BucketDefaults::Legacy` / `Aws`） |
+
+**`--no-auth`**（库里是 `Config { auth: false, .. }`，Node 里是 `noAuth`）：LocalStack / moto 式的“任意凭证都可以”。
+SDK 用什么 access key 和 secret 签名都行，签名本身不校验。覆盖 SigV4 的 `Authorization` 头和 presigned URL、SigV2 的头和 presigned URL，
+以及流式上传（`STREAMING-AWS4-HMAC-SHA256-PAYLOAD`、`STREAMING-UNSIGNED-PAYLOAD-TRAILER`、`STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`）；
+未签名的请求照常可用。几点说明：
+
+- **完整性校验仍然生效**：aws-chunked 的分块照常解码，trailer 里的校验和（`x-amz-checksum-*`）仍会和数据比对，不一致返回 400 `BadDigest`；
+  `Content-MD5`、header 里的校验和、`x-amz-decoded-content-length` 也一样。不再检查的是签名本身以及由它派生的东西：
+  时钟偏差、`x-amz-content-sha256` 里的负载哈希、signed headers 列表。
+- **不做授权**：ACL、Bucket Policy、Block Public Access 都不求值，已签名和匿名的请求一视同仁，都有 owner 的权限。
+  需要测访问控制时用默认的认证模式。
+- **presigned URL 的过期**：只在使用虚拟时钟（`/_fakes3/clock`）时判断，真实时钟下不检查。
+- 请求日志的 `access_key` 字段记录请求用的 access key（认证模式下它永远是配置的那一个，所以不记录）。
+- 带签名的 POST 表单上传（表单里有 `x-amz-signature` / `signature` 字段）暂不支持，仍返回 501；不带签名的表单可用。
 
 **内存上限**：fakes3 统计所有对象数据实际占用的内存（堆上的小对象、memfd 里的大对象、尚未 Complete 的分段上传的 part），
 超出上限的写入会被拒绝，而不是让进程被 OOM killer 杀掉。
@@ -256,6 +272,55 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
   不用 503 SlowDown 是因为 SDK 会对它退避重试，只会把失败拖慢；不用 400 EntityTooLarge 是因为它表示单个对象太大。
   各主流 SDK 的默认重试策略都不会重试 507（MinIO 的磁盘满也是 507）。
 
+## 新建 bucket 的默认值
+
+AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认**保留旧的行为**（`--bucket-defaults legacy`），这样“先给 bucket 挂一个公开 policy，再匿名读取”之类的测试准备步骤开箱即用；
+需要和今天的 AWS 一致时用 `--bucket-defaults aws`（或 `FAKES3_BUCKET_DEFAULTS=aws`、`Config { bucket_defaults: BucketDefaults::Aws, .. }`、Node 的 `start({ bucketDefaults: "aws" })`）。
+
+| | `legacy`（默认） | `aws` |
+|---|---|---|
+| Object Ownership | 未配置，ACL 可用；`GetBucketOwnershipControls` 返回 `OwnershipControlsNotFoundError` | `BucketOwnerEnforced`，ACL 被禁用；`GetBucketOwnershipControls` 返回 `BucketOwnerEnforced` |
+| Block Public Access | 未配置；`GetPublicAccessBlock` 返回 `NoSuchPublicAccessBlockConfiguration` | 四项全开（`BlockPublicAcls`、`IgnorePublicAcls`、`BlockPublicPolicy`、`RestrictPublicBuckets` 均为 `true`） |
+| 默认加密（SSE-S3） | 无：`GetBucketEncryption` 返回 `ServerSideEncryptionConfigurationNotFoundError`，PUT / GET / HEAD 不带 `x-amz-server-side-encryption`（显式要求 SSE 时照常） | `GetBucketEncryption` 返回 `AES256`，新对象的 PUT / GET / HEAD 带 `x-amz-server-side-encryption: AES256`；`DeleteBucketEncryption` 之后回到 SSE-S3 |
+| 默认禁用 SSE-C | 允许 | 禁用（2026 年 4 月起）：`GetBucketEncryption` 带 `BlockedEncryptionTypes` = `SSE-C`；要求 SSE-C 的 `PutObject`、`CopyObject`、分段上传返回 403 `AccessDenied`，已有的 SSE-C 对象仍可带 key 读取 |
+
+`aws` 模式下具体的行为都有 AWS 文档依据（文档只写明了显式设置 `BucketOwnerEnforced` 时 `CreateBucket` 的错误码；没带 `x-amz-object-ownership` 的默认情况沿用同一个错误码）：
+
+- `CreateBucket` 带 `x-amz-acl`（`public-read` 等）或 `x-amz-grant-*` 头，又没有显式设置 `x-amz-object-ownership` 时失败，
+  返回 400 `InvalidBucketAclWithObjectOwnership`，bucket 不会被创建。只给 owner 完全控制的 ACL（`x-amz-acl: private`）可以通过。
+  要在创建时设置 ACL，必须同时带 `x-amz-object-ownership: ObjectWriter` 或 `BucketOwnerPreferred`；
+  如果 ACL 是公开的，仍然会失败（403 `AccessDenied`，因为 Block Public Access 是开着的）。
+- 显式的 `x-amz-object-ownership` 按请求为准（`BucketOwnerEnforced`、`BucketOwnerPreferred`、`ObjectWriter`），Block Public Access 仍然全开。
+- ACL 被禁用时：`PutBucketAcl` / `PutObjectAcl` / 带 ACL 头的 `PutObject` 返回 400 `AccessControlListNotSupported`（只接受 `bucket-owner-full-control` 或不带 ACL），读 ACL 永远只显示 owner 的完全控制。
+- Block Public Access 全开时：公开的 bucket policy 在 `PutBucketPolicy` 时被拒绝（403 `AccessDenied`），公开的 ACL 被拒绝，匿名请求得不到访问。
+- 想要匿名访问，需要明确放开：`DeletePublicAccessBlock`（或 `PutPublicAccessBlock` 关掉相应的项），再用 policy 授权；
+  走 ACL 的话还要 `DeleteBucketOwnershipControls` 或 `PutBucketOwnershipControls` 改成 `ObjectWriter` / `BucketOwnerPreferred`。
+  这和 AWS 文档里的做法一致。
+
+默认值只在创建 bucket 的那一刻生效。已有的 bucket、快照和 `restore` 都保持各自当前的设置，`reset` 之后新建的 bucket 按当前模式重新开始。
+当前模式可以在 `fakes3 ctl status` / `GET /_fakes3` 里看到（`bucket_defaults`）。
+
+- 要在 `aws` 模式的 bucket 里用 SSE-C，先 `PutBucketEncryption`，在规则里写 `BlockedEncryptionTypes` = `NONE`（只有这一项的规则也可以，默认加密保持 SSE-S3）；
+  写 `SSE-C` 则再次禁用。没有写 `BlockedEncryptionTypes` 的 `PutBucketEncryption` 按字面处理，即不禁用任何类型（文档没有说明省略时的行为）。
+  `DeleteBucketEncryption` 回到默认配置，也就是重新禁用 SSE-C。表单上传（POST policy）目前不处理 SSE 字段，所以没有对应的检查。
+
+`aws` 模式只包含上面有文档依据的默认值，没有按日期划分的“兼容版本”，因为 AWS 没有发布精确的行为变更记录。
+
+来源：
+
+- [S3 Document history](https://docs.aws.amazon.com/AmazonS3/latest/userguide/WhatsNew.html)：2023-04-27 “Amazon S3 now automatically enables S3 Block Public Access and disables S3 access control lists (ACLs) for all new S3 buckets in all AWS Regions”，
+  [公告](https://aws.amazon.com/about-aws/whats-new/2023/04/amazon-s3-security-best-practices-buckets-default)
+- [Controlling ownership of objects and disabling ACLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html)、
+  [Troubleshooting](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-ownership-error-responses.html)（`AccessControlListNotSupported`、`InvalidBucketAclWithObjectOwnership`）
+- [Blocking public access to your Amazon S3 storage](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html)
+- [CreateBucket API](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html)：`x-amz-object-ownership` 默认 `BucketOwnerEnforced`；
+  “To set an ACL on a bucket as part of a CreateBucket request, you must explicitly set S3 Object Ownership for the bucket to a different value than the default”
+- [Default encryption FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-encryption-faq.html)、[GetBucketEncryption](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html)：
+  2023-01-05 起所有新对象默认 SSE-S3，响应头 `x-amz-server-side-encryption`
+- [Default SSE-C setting for new buckets FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-s3-c-encryption-setting-faq.html)、
+  [Blocking or unblocking SSE-C](https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html)、
+  [BlockedEncryptionTypes](https://docs.aws.amazon.com/AmazonS3/latest/API/API_BlockedEncryptionTypes.html)：2026 年 4 月起新的通用 bucket 默认禁用 SSE-C
+
 ## 支持的功能
 
 - Bucket：创建、删除、HeadBucket、ListBuckets、GetBucketLocation、Bucket 标签
@@ -264,7 +329,7 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 - 分段上传：Create、UploadPart、UploadPartCopy、ListParts、Complete、Abort；GET/HEAD 支持 `?partNumber=`
 - 版本控制：Enabled / Suspended、删除标记、null version、按 VersionId 读取和删除、MFA Delete 头校验
 - Object Lock：保留期（GOVERNANCE / COMPLIANCE）、Legal Hold、bucket 默认保留期、`x-amz-bypass-governance-retention`，到期时间按服务端时钟判断
-- 加密：SSE-C（校验算法和 key MD5，GET/HEAD/Copy 必须带同一个 key）、SSE-S3 / SSE-KMS 头回显、bucket 默认加密；数据本身不加密
+- 加密：SSE-C（校验算法和 key MD5，GET/HEAD/Copy 必须带同一个 key）、SSE-S3 / SSE-KMS 头回显、bucket 默认加密（`--bucket-defaults aws` 时每个新 bucket 默认 SSE-S3）；数据本身不加密
 - 对象属性：GetObjectAttributes、storage class 和 `x-amz-website-redirect-location` 的写入与回显
 - 条件请求：If-Match、If-None-Match（包括条件写入）、If-Modified-Since、If-Unmodified-Since、CopySource 的条件头
 - 校验和：CRC32、CRC32C、CRC64NVME、SHA1、SHA256 等，支持 header 和 aws-chunked trailer 两种方式；
@@ -273,13 +338,60 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 - 对象标签、Range 读取、Content-MD5 校验
 - 访问控制：Bucket/Object ACL（canned、grant 头、请求体）、OwnershipControls（BucketOwnerEnforced 时 ACL 被禁用）、
   PublicAccessBlock、Bucket Policy（含 Condition，显式 Deny 对已签名请求也生效）；未签名的匿名请求在 policy 或公开 ACL 允许时放行，
-  `--no-auth` 时不做授权
+  `--no-auth` 时不做授权（见“`--no-auth`”）
 - CORS：预检 `OPTIONS` 和实际响应上的 CORS 头
 - Lifecycle：过期（含版本控制下的删除标记、非当前版本、`NewerNoncurrentVersions`）和清理未完成的分段上传，按服务端虚拟时钟在 UTC 日期变化后的第一次访问时执行；
   没有规则的 bucket 零开销
+- 归档存储类：`GLACIER`、`DEEP_ARCHIVE` 和 Intelligent-Tiering 的 Archive Access / Deep Archive Access 层，GET / CopyObject 来源返回 403 `InvalidObjectState`，
+  `RestoreObject` 和 `x-amz-restore` 按服务端虚拟时钟推进；Lifecycle 的 Transition / NoncurrentVersionTransition 会真的改存储类（见[归档存储类](#归档存储类)）
 - Website、Notification 配置的存取（不提供网站端点，不投递事件）；POST policy 表单上传
 
 还没做的功能见 [TODO.md](TODO.md)，主要是 Website 端点，以及测试控制面里的故障注入。
+
+## 归档存储类
+
+用来测试“应用遇到已归档对象时怎么办”。对象带上 `GLACIER`（S3 Glacier Flexible Retrieval）或 `DEEP_ARCHIVE` 存储类写入（或被 Lifecycle 转过去）之后：
+
+- **读被拒绝**：GET（包括 Range、`?partNumber=`）、CopyObject 和 UploadPartCopy 的来源返回 `403 InvalidObjectState`，
+  直到有一份已恢复的副本；HEAD、标签、GetObjectAttributes 照常工作，HEAD 返回真实存储类。
+  `GLACIER_IR`（Instant Retrieval）和 `STANDARD_IA` 等不是归档，可以直接读。
+- **RestoreObject**：`Days`（必填）加 `Tier`（`Expedited` / `Standard` / `Bulk`，可放在 `GlacierJobParameters` 里也可放在顶层，默认 Standard）。
+  新请求返回 `202`，已恢复的对象返回 `200` 并从*现在*起重新计算保留天数，进行中返回 `409 RestoreAlreadyInProgress`
+  （发更快的 tier 算加速，返回 `202`）；对不是归档的对象返回 `403 ObjectAlreadyInActiveTierError`；
+  `Type=SELECT`、`SelectParameters`、`OutputLocation` 返回 `501 NotImplemented`（S3 Select 已不对新客户开放）；
+  Deep Archive 上的 `Expedited` 返回 `400 InvalidArgument`；不模拟 503 `GlacierExpeditedRetrievalNotAvailable`。支持 `?versionId=`。
+- **`x-amz-restore`**（GET / HEAD）：进行中是 `ongoing-request="true"`，完成后是 `ongoing-request="false", expiry-date="Sat, 05 Jan 2030 00:00:00 GMT"`；
+  没有恢复过则没有这个头。恢复出来的副本到期后对象重新变回不可读。ListObjectsV2 带 `x-amz-optional-object-attributes: RestoreStatus` 时返回 `RestoreStatus`
+  （`IsRestoreInProgress` 和 `RestoreExpiryDate`，没恢复过的对象没有）；ListObjectVersions 暂未返回。
+- **完成时间按服务端时钟，取 AWS 文档给出的范围的下界，所以是确定的**（`fakes3 ctl clock advance 3h` 就能让 Standard 恢复完成）：
+
+  | | Expedited | Standard | Bulk |
+  |---|---|---|---|
+  | `GLACIER`、IT Archive Access | 1 分钟 | 3 小时 | 5 小时 |
+  | `DEEP_ARCHIVE`、IT Deep Archive Access | 不支持 | 12 小时 | 48 小时 |
+
+  恢复副本的到期时间 = 完成时间 + `Days`，向上取整到 UTC 午夜（文档例子：10 月 15 日 10:30 恢复 3 天，10 月 19 日 00:00 到期）。
+- **Intelligent-Tiering 的归档层**：`PutBucketIntelligentTieringConfiguration`（及 Get / List / Delete）配置 `ARCHIVE_ACCESS`（≥ 90 天）和
+  `DEEP_ARCHIVE_ACCESS`（≥ 180 天，最长 730 天），可带 Prefix / Tag / And 过滤。`INTELLIGENT_TIERING` 对象从创建（或 Lifecycle 转入、上次恢复完成）起闲置达到天数，
+  就进入对应归档层：读返回 `InvalidObjectState`，HEAD 带 `x-amz-archive-status`。恢复不接受 `Days`（传了也忽略），完成后回到 Frequent Access（没有到期时间），闲置天数重新计数。
+  偏差：fakes3 不记录读取，所以“访问”不会重置闲置天数；错误体里没有 `StorageClass` / `AccessTier` 元素。
+- **Lifecycle 转换**：`Transition`（`Days` / `Date`）和 `NoncurrentVersionTransition`（`NoncurrentDays`、`NewerNoncurrentVersions`）在每天第一次访问 bucket 时的惰性清扫里执行，
+  到期时间同样向上取整到 UTC 午夜。只改存储类，数据、ETag、`Last-Modified` 不变，内存统计不变。遵循 S3 的瀑布模型（只能向下转：
+  STANDARD → STANDARD_IA → INTELLIGENT_TIERING → ONEZONE_IA → GLACIER_IR → GLACIER → DEEP_ARCHIVE），时钟一次拨得很远时直接落到最深的那个到期类；
+  小于 128 KB 的对象默认不转换，除非规则带 `ObjectSizeGreaterThan` / `ObjectSizeLessThan`，或者 `x-amz-transition-default-minimum-object-size: varies_by_storage_class`
+  （此时小对象只能转到 `GLACIER` / `DEEP_ARCHIVE`）。Object Lock 不阻止转换，转换后保留期照旧。
+  转换目标只能是 `STANDARD_IA`、`INTELLIGENT_TIERING`、`ONEZONE_IA`、`GLACIER_IR`、`GLACIER`、`DEEP_ARCHIVE`。
+  没有校验 AWS 对 Days 的大小关系要求（例如转到 IA 至少 30 天、过期天数要大于转换天数）。
+
+AWS 文档：[RestoreObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html)、
+[GetObject 的 InvalidObjectState](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)、
+[CopyObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html)、
+[Working with archived objects](https://docs.aws.amazon.com/AmazonS3/latest/userguide/archived-objects.html)、
+[Archive retrieval options](https://docs.aws.amazon.com/AmazonS3/latest/userguide/restoring-objects-retrieval-options.html)、
+[Lifecycle transitions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-transition-general-considerations.html)、
+[RestoreStatus](https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreStatus.html)。
+已知偏差：AWS 的 CopyObject 文档把来源归档的错误写成 `ObjectNotInActiveTierError`，但实际返回的是 `InvalidObjectState`（SDK 里常见的
+“Operation is not valid for the source object's storage class”），这里按后者实现。
 
 ## 测试控制面
 

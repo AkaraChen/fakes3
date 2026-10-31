@@ -89,7 +89,7 @@ $ curl -X POST 'http://127.0.0.1:9000/_fakes3/reset?clock=false'
 
 ## 快照
 
-快照保存所有 bucket 的：创建时间、版本控制状态、标签、ACL / OwnershipControls / PublicAccessBlock / Policy / CORS / Lifecycle / Website / Notification 配置、对象索引（含所有版本和删除标记）、进行中的分段上传（含已上传的 part）。
+快照保存所有 bucket 的：创建时间、版本控制状态、标签、ACL / OwnershipControls / PublicAccessBlock / Policy / CORS / Lifecycle / Website / Notification 配置、对象索引（含所有版本和删除标记，以及每个对象的存储类、Restore 请求等状态）、Intelligent-Tiering 配置、进行中的分段上传（含已上传的 part）。
 **对象数据本身不复制**：数据是不可变、带引用计数的分段，快照只增加引用计数，所以快照的代价取决于对象*个数*，而不是字节数。
 快照也会让被后来覆盖或删除的数据继续留在内存里，直到快照被删除。
 
@@ -181,7 +181,20 @@ SigV2 的 `Expires`、POST policy 的 `expiration` 时，直接读取主机时�
   （例如客户端自己的时钟被冻结在 2030 年再去签名，会被 s3s 以时钟偏差拒绝）；让 POST policy 的过期时间跟随服务器时钟。
   客户端用主机时间签名、服务器时钟只向前拨，是可用的组合。
 
-对象的 `Last-Modified`、条件请求（`If-Modified-Since` 等）、Object Lock 之类以后要加的到期逻辑，都读服务器时钟，不受这个限制。
+对象的 `Last-Modified`、条件请求（`If-Modified-Since` 等）、Object Lock 的保留期、Lifecycle 的过期和存储类转换、归档对象的恢复（RestoreObject 完成、恢复副本到期、Intelligent-Tiering 进入归档层），都读服务器时钟，不受这个限制。
+
+### 用时钟推进归档对象
+
+没有后台任务：每次读取时拿记录下来的时间和服务器时钟比较，所以拨时钟就够了，不需要任何额外调用。恢复的完成时间是固定的（见 [README](../README.md#归档存储类)），例如：
+
+```bash
+fakes3 ctl clock freeze 2030-01-01T10:30:00Z
+# RestoreObject(Days=3, Tier=Standard) -> 202，HEAD 显示 ongoing-request="true"
+fakes3 ctl clock advance 3h     # 恢复完成，GET 可读，expiry-date = 2030-01-05T00:00:00Z
+fakes3 ctl clock advance 4d     # 恢复副本已过期，GET 重新返回 InvalidObjectState
+```
+
+Lifecycle 的转换在时钟跨过 UTC 日期后的第一次访问 bucket 时执行（和过期一样）。快照会保存对象的 Restore 请求和存储类转换结果，回滚后它们和时钟一起重新生效。
 
 ## 请求日志
 
@@ -206,6 +219,7 @@ SigV2 的 `Expires`、POST policy 的 `expiration` 时，直接读取主机时�
 | `latency_us` | 从收到请求到响应头就绪的微秒数（不含响应体的流式发送） |
 | `bytes_in` | 请求负载大小：优先 `x-amz-decoded-content-length`，否则 `Content-Length` |
 | `bytes_out` | 响应的 `Content-Length`，未知时为 0 |
+| `access_key` | 请求签名用的 access key；只在 `--no-auth` 时记录（认证模式下总是配置的那个），没有则为 `null` |
 
 `operation` 是根据请求的形状（方法、路径、查询参数、是否有 `x-amz-copy-source`）推断的，不是 s3s 报告的：s3s 只在开启签名校验时
 才把操作名交给我们，而且签名失败的请求根本到不了那一步。覆盖 fakes3 实现的全部操作和常见的 bucket 子资源；
@@ -229,7 +243,7 @@ SigV2 的 `Expires`、POST policy 的 `expiration` 时，直接读取主机时�
 ```
 $ curl 'localhost:9000/_fakes3/requests?op=PutObject&bucket=logs&limit=1'
 {"requests":[{"seq":3,"time":"2026-10-31T07:21:30.998Z","method":"PUT","path":"/logs/b/two.txt","bucket":"logs","key":"b/two.txt",
-"operation":"PutObject","status":200,"latency_us":84,"bytes_in":2,"bytes_out":0}],"total":3,"dropped":0}
+"operation":"PutObject","status":200,"latency_us":84,"bytes_in":2,"bytes_out":0,"access_key":null}],"total":3,"dropped":0}
 ```
 
 `total` 是过滤后、应用 `limit` 前的匹配数（断言调用次数用它或 `ctl requests list --count`）；`dropped` 是因缓冲区满而被丢弃的记录数。
@@ -252,7 +266,7 @@ $ curl localhost:9000/_fakes3/stats
 ```
 
 `memory.used` 是服务器持有的对象数据字节数（含分段上传的 part，以及仍被快照或进行中的读取引用的数据），`limit` 是
-`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本和时钟，`fakes3 ctl status` 显示的就是它。
+`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本、时钟和 `bucket_defaults`（`"legacy"` 或 `"aws"`，见 [README](../README.md#新建-bucket-的默认值)），`fakes3 ctl status` 显示的就是它。
 
 **内存与重置、快照的关系。** 数据缓冲区按引用计数在最后一个引用消失时释放并归还额度，所以：
 

@@ -28,6 +28,9 @@ pub struct RequestRecord {
     pub bytes_out: u64,
     /// `x-amz-copy-source` was present.
     copy: bool,
+    /// The access key the request was signed with. Only recorded when signatures are not verified
+    /// (`--no-auth`), where it can be anything; otherwise it is always the configured key.
+    pub access_key: Option<String>,
 }
 
 impl RequestRecord {
@@ -239,6 +242,13 @@ pub struct Pending {
     uri: String,
     bytes_in: u64,
     copy: bool,
+    access_key: Option<String>,
+}
+
+impl Pending {
+    pub fn set_access_key(&mut self, key: String) {
+        self.access_key = Some(key);
+    }
 }
 
 impl RequestLog {
@@ -293,6 +303,7 @@ impl RequestLog {
                 .map_or_else(|| req.uri().path().to_owned(), |p| p.as_str().to_owned()),
             bytes_in: len("x-amz-decoded-content-length").or_else(|| len("content-length")).unwrap_or(0),
             copy: h.contains_key("x-amz-copy-source"),
+            access_key: None,
         })
     }
 
@@ -316,6 +327,7 @@ impl RequestLog {
             bytes_in: p.bytes_in,
             bytes_out,
             copy: p.copy,
+            access_key: p.access_key,
         };
         let mut inner = self.inner.lock();
         if inner.records.len() >= inner.capacity {
@@ -371,6 +383,7 @@ mod tests {
             bytes_in: 0,
             bytes_out: 0,
             copy,
+            access_key: None,
         }
     }
 

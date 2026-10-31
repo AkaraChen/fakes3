@@ -19,13 +19,15 @@
 //! runtime and stops it when the returned handle is dropped.
 //!
 //! Clients need path-style addressing, and the credentials from [`Config`] (`fakes3` /
-//! `fakes3secret` unless changed) unless `auth` is off. Any region works. See
-//! `examples/aws_sdk.rs` for a complete setup with `aws-sdk-s3`.
+//! `fakes3secret` unless changed) unless `auth` is off, in which case any credentials work. Any
+//! region works. See `examples/aws_sdk.rs` for a complete setup with `aws-sdk-s3`.
 
 mod access;
 mod acl;
+mod archive;
 mod blocking;
 mod bucket_config;
+mod bucket_defaults;
 mod bucket_ops;
 mod clock;
 mod control;
@@ -34,6 +36,7 @@ mod digest;
 mod host;
 mod lifecycle;
 mod memory;
+mod noauth;
 mod objext;
 mod objops;
 mod policy;
@@ -56,6 +59,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 pub use blocking::BlockingServer;
+pub use bucket_defaults::BucketDefaults;
 pub use clock::{Clock, OutOfRange, parse_duration};
 pub use control::{Control, ControlError, ResetOptions, SnapshotInfo};
 pub use memory::{MemoryLimit, MemoryStats};
@@ -72,7 +76,9 @@ pub struct Config {
     /// Credentials clients must sign with when `auth` is on.
     pub access_key: String,
     pub secret_key: String,
-    /// Verify request signatures.
+    /// Verify request signatures. When off, requests signed with any access key and secret are
+    /// accepted (and unsigned ones too), and authorization (ACLs, bucket policies, Block Public
+    /// Access) is not applied.
     pub auth: bool,
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     pub inline_threshold: usize,
@@ -87,6 +93,10 @@ pub struct Config {
     /// is refused with HTTP 507 `XFakeS3MemoryLimitExceeded`. The default, [`MemoryLimit::Auto`],
     /// is 75% of the container's or machine's memory.
     pub memory_limit: MemoryLimit,
+    /// The settings new buckets start with. [`BucketDefaults::Legacy`] (the default) leaves ACLs
+    /// enabled and Block Public Access off; [`BucketDefaults::Aws`] applies the defaults AWS has
+    /// for new buckets today. Buckets that already exist are not affected.
+    pub bucket_defaults: BucketDefaults,
 }
 
 impl Default for Config {
@@ -102,6 +112,7 @@ impl Default for Config {
             request_log: true,
             request_log_capacity: DEFAULT_REQUEST_LOG_CAPACITY,
             memory_limit: MemoryLimit::Auto,
+            bucket_defaults: BucketDefaults::Legacy,
         }
     }
 }
@@ -131,6 +142,7 @@ impl Server {
             Arc::default(),
             MemoryTracker::new(limit),
             reqlog::RequestLog::new(config.request_log, config.request_log_capacity),
+            config.bucket_defaults,
         ));
         let (stop, mut stopped) = oneshot::channel();
         let service = service(&config, control.clone());
@@ -234,6 +246,8 @@ struct Shared {
     s3: s3s::service::S3Service,
     control: Arc<Control>,
     domains: host::Domains,
+    /// Whether signatures are verified; see [`noauth`] for what happens without.
+    auth: bool,
 }
 
 fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
@@ -242,6 +256,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
         inline_threshold: config.inline_threshold,
         memory: control.memory.clone(),
         clock: control.clock.clone(),
+        defaults: config.bucket_defaults,
     };
     let mut b = S3ServiceBuilder::new(fake);
     // Legacy clients (s3fs/aiobotocore presigning, old SDKs) still sign with SigV2.
@@ -264,6 +279,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
         s3: b.build(),
         control,
         domains,
+        auth: config.auth,
     });
     let f: Service = Arc::new(move |mut req: http::Request<hyper::body::Incoming>, peer: IpAddr| {
         let sh = shared.clone();
@@ -272,7 +288,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
             if req.uri().path().starts_with(control::PREFIX) {
                 return Ok(control.handle(req).await);
             }
-            let logged = control.log.start(&req, || control.clock.now());
+            let mut logged = control.log.start(&req, || control.clock.now());
             merge_duplicate_headers(req.headers_mut());
             let resp = if req.method() == http::Method::OPTIONS {
                 // s3s does not route OPTIONS; preflights are answered from the bucket's CORS rules.
@@ -291,12 +307,21 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 let expired = control.clock.is_virtual() && req.uri().query().is_some_and(|q| presign::is_expired(q, control.clock.now()));
                 let mut resp = if expired {
                     presign::expired_response()
-                } else {
+                } else if sh.auth {
                     hyper::service::Service::call(&sh.s3, req).await?
+                } else {
+                    let mut req = req.map(s3s::Body::from);
+                    if let (Some(key), Some(p)) = (noauth::accept_any(&mut req), logged.as_mut()) {
+                        p.set_access_key(key);
+                    }
+                    sh.s3.call(req).await?
                 };
                 // s3s always answers HEAD with 200; a ?partNumber= HEAD is a partial response.
                 if head && resp.status() == http::StatusCode::OK && resp.headers().contains_key(http::header::CONTENT_RANGE) {
                     *resp.status_mut() = http::StatusCode::PARTIAL_CONTENT;
+                }
+                if let Some(archive::StatusOverride(status)) = resp.extensions().get().copied() {
+                    *resp.status_mut() = status;
                 }
                 if let Some(info) = cors_ctx {
                     info.decorate(&control.store, &mut resp);
