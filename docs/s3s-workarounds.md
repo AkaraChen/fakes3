@@ -81,7 +81,8 @@ S3-TESTS.md 之前把这两个测试归因于“RFC 1123 的 `X-Amz-Date`”；�
 
 ## 没有绕开
 
-目前没有因为“太贵”而放弃的 s3s 差异：S3-TESTS.md 里“s3s limitation”一节的 25 个测试，上面的绕开覆盖了对应的原因。
+目前没有因为“太贵”而放弃的 s3s 差异：S3-TESTS.md 里原来“s3s limitation”一节的 25 个测试，23 个现在通过；另外 2 个（`test_bucket_create_bad_authorization_invalid_aws2`、`test_bucket_create_bad_date_none_aws2`）
+绕开之后请求本身有效、被正常接受，是测试自身的问题（botocore 签名时改写了测试塞进去的头），已归入 test-defect。
 没有解决的只有上面“SigV2：Date / x-amz-date”一节说的格式正确的 RFC 1123 `x-amz-date`，没有测试覆盖它；
 真要支持就得在 fakes3 里重新实现 SigV2 验签，这违反了“不 fork s3s、不重写它的逻辑”的约束。
 
