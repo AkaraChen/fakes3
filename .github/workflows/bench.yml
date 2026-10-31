@@ -39,7 +39,7 @@ jobs:
           go-version-file: bench/suite/go.mod
           cache-dependency-path: bench/suite/go.sum
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
 
       - uses: docker/setup-buildx-action@v4
       - name: Build fakes3 image
