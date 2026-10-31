@@ -90,7 +90,7 @@ pub struct Version {
 }
 
 /// All versions of a key, oldest first. Unversioned buckets keep a single `null` version.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Entry {
     pub versions: Vec<Arc<Version>>,
 }
@@ -117,6 +117,7 @@ pub enum Versioning {
     Suspended,
 }
 
+#[derive(Clone)]
 pub struct Part {
     pub data: ObjectData,
     pub md5: [u8; 16],
@@ -124,6 +125,7 @@ pub struct Part {
     pub checksum: s3s::dto::Checksum,
 }
 
+#[derive(Clone)]
 pub struct Upload {
     pub meta: ObjectMeta,
     pub tags: Vec<(String, String)>,
@@ -135,11 +137,14 @@ pub struct Upload {
     pub parts: BTreeMap<i32, Part>,
 }
 
+/// A bucket's key index: key to version chain, ordered for listing.
+pub type Index = BTreeMap<String, Entry>;
+
 pub struct Bucket {
     pub created: SystemTime,
     pub versioning: RwLock<Versioning>,
     pub tags: RwLock<Option<Vec<(String, String)>>>,
-    pub objects: RwLock<BTreeMap<String, Entry>>,
+    pub objects: RwLock<Index>,
     pub uploads: RwLock<BTreeMap<(String, String), Upload>>,
     pub cfg: BucketCfg,
 }
@@ -174,7 +179,7 @@ pub fn new_version_id() -> String {
 
 impl Bucket {
     /// Stores `obj` as the newest version of `key` and returns the version id to report, if any.
-    pub fn put(&self, objects: &mut BTreeMap<String, Entry>, key: String, obj: Object) -> Option<String> {
+    pub fn put(&self, objects: &mut Index, key: String, obj: Object) -> Option<String> {
         let mode = *self.versioning.read();
         let entry = objects.entry(key).or_default();
         let id = match mode {
@@ -194,7 +199,7 @@ impl Bucket {
     }
 
     /// A DELETE without a version id. Returns the id of the delete marker created, if any.
-    pub fn delete_current(&self, objects: &mut BTreeMap<String, Entry>, key: &str, now: SystemTime) -> Option<String> {
+    pub fn delete_current(&self, objects: &mut Index, key: &str, now: SystemTime) -> Option<String> {
         let mode = *self.versioning.read();
         if mode == Versioning::Unversioned {
             objects.remove(key);
@@ -216,7 +221,7 @@ impl Bucket {
     }
 
     /// Permanently removes one version. Returns whether it was a delete marker, or `None` if absent.
-    pub fn delete_version(objects: &mut BTreeMap<String, Entry>, key: &str, id: &str) -> Option<bool> {
+    pub fn delete_version(objects: &mut Index, key: &str, id: &str) -> Option<bool> {
         let entry = objects.get_mut(key)?;
         let pos = entry.versions.iter().position(|v| v.id == id)?;
         let removed = entry.versions.remove(pos);

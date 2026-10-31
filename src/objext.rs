@@ -139,6 +139,7 @@ enum Period {
     Years(i32),
 }
 
+#[derive(Clone)]
 struct DefaultRetention {
     mode: LockMode,
     period: Period,
@@ -152,8 +153,9 @@ pub struct EncryptionRule {
     pub blocked: Option<BlockedEncryptionTypes>,
 }
 
-#[derive(Default)]
-struct CfgInner {
+/// The settings of a [`BucketCfg`], copied by snapshots.
+#[derive(Clone, Default)]
+pub struct CfgState {
     lock_enabled: bool,
     retention: Option<DefaultRetention>,
     encryption: Option<EncryptionRule>,
@@ -166,11 +168,11 @@ pub struct BucketCfg {
     /// Set while a default retention or KMS/blocking default encryption exists, so the PUT path
     /// skips the lock when there is nothing to apply.
     defaults: AtomicBool,
-    inner: RwLock<CfgInner>,
+    inner: RwLock<CfgState>,
 }
 
 impl BucketCfg {
-    fn refresh(&self, i: &CfgInner) {
+    fn refresh(&self, i: &CfgState) {
         let kms = i
             .encryption
             .as_ref()
@@ -219,6 +221,17 @@ impl BucketCfg {
             Period::Days(n) => (d.mode, n, false),
             Period::Years(n) => (d.mode, n, true),
         })
+    }
+
+    pub fn state(&self) -> CfgState {
+        self.inner.read().clone()
+    }
+
+    pub fn from_state(state: CfgState) -> Self {
+        let cfg = Self::default();
+        cfg.refresh(&state);
+        *cfg.inner.write() = state;
+        cfg
     }
 
     fn has_defaults(&self) -> bool {

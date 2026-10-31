@@ -185,7 +185,10 @@ async fn object_lock_governance_and_bypass() {
 async fn object_lock_compliance_cannot_shorten_and_expires_with_the_clock() {
     let (server, c) = start().await;
     c.lock_bucket("bkt").await;
-    server.clock().freeze(Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000))); // 2023-11-14
+    server
+        .clock()
+        .freeze(Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000)))
+        .unwrap(); // 2023-11-14
     let r = c
         .put(
             "/bkt/k",
@@ -229,9 +232,9 @@ async fn object_lock_compliance_cannot_shorten_and_expires_with_the_clock() {
     );
 
     // Still protected on 2023-12-15, free on 2024-01-02.
-    server.clock().set(UNIX_EPOCH + Duration::from_secs(1_702_598_400));
+    server.clock().set(UNIX_EPOCH + Duration::from_secs(1_702_598_400)).unwrap();
     assert_eq!(c.delete(&path, &[]).await.status, 403);
-    server.clock().set(UNIX_EPOCH + Duration::from_secs(1_704_153_600));
+    server.clock().set(UNIX_EPOCH + Duration::from_secs(1_704_153_600)).unwrap();
     assert_eq!(c.delete(&path, &[]).await.status, 204);
 }
 
@@ -363,7 +366,10 @@ async fn default_retention_and_delete_objects() {
         g.body
     );
 
-    server.clock().freeze(Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000)));
+    server
+        .clock()
+        .freeze(Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000)))
+        .unwrap();
     let a = c.put("/bkt/a", &[], "1").await;
     let a = a.header("x-amz-version-id").unwrap().to_owned();
     let h = c.head("/bkt/a", &[]).await;
@@ -820,4 +826,75 @@ async fn list_object_versions_details() {
     let r = c.get("/bkt/a?versionId=0123456789abcdef0123456789abcdef", &[]).await;
     assert_eq!((r.status, r.code()), (404, "NoSuchVersion"));
     assert_eq!(c.delete("/bkt/a?versionId=nonsense", &[]).await.status, 400);
+}
+
+#[tokio::test]
+async fn snapshot_restore_keeps_object_lock_and_encryption_state() {
+    let (server, c) = start().await;
+    c.lock_bucket("bkt").await;
+    let cfg = "<ObjectLockConfiguration><ObjectLockEnabled>Enabled</ObjectLockEnabled><Rule><DefaultRetention><Mode>GOVERNANCE</Mode><Years>1</Years></DefaultRetention></Rule></ObjectLockConfiguration>";
+    assert_eq!(c.put("/bkt?object-lock", &[], cfg).await.status, 200);
+    let kms = "<ServerSideEncryptionConfiguration><Rule><ApplyServerSideEncryptionByDefault><SSEAlgorithm>aws:kms</SSEAlgorithm><KMSMasterKeyID>snap-key</KMSMasterKeyID></ApplyServerSideEncryptionByDefault></Rule></ServerSideEncryptionConfiguration>";
+    assert_eq!(c.put("/bkt?encryption", &[], kms).await.status, 200);
+    let mfa = [("x-amz-mfa", "serial 123456")];
+    let conf = "<VersioningConfiguration><Status>Enabled</Status><MfaDelete>Enabled</MfaDelete></VersioningConfiguration>";
+    assert_eq!(c.put("/bkt?versioning", &mfa, conf).await.status, 200);
+
+    let r = c
+        .put(
+            "/bkt/obj",
+            &[("x-amz-object-lock-legal-hold", "ON"), ("x-amz-storage-class", "STANDARD_IA")],
+            "x",
+        )
+        .await;
+    let vid = r.header("x-amz-version-id").unwrap().to_owned();
+    let r = c
+        .call(
+            "POST",
+            "/bkt/mp?uploads",
+            &[("x-amz-server-side-encryption", "AES256"), ("x-amz-storage-class", "ONEZONE_IA")],
+            b"",
+        )
+        .await;
+    let upload = tag(&r.body, "UploadId").unwrap().to_owned();
+    server.snapshot(Some("seeded")).unwrap();
+
+    server.reset();
+    assert_eq!(c.get("/bkt?object-lock", &[]).await.status, 404);
+    server.restore("seeded").unwrap();
+
+    // Bucket-level state.
+    let g = c.get("/bkt?object-lock", &[]).await;
+    assert!(
+        g.body.contains("<Mode>GOVERNANCE</Mode>") && g.body.contains("<Years>1</Years>"),
+        "{}",
+        g.body
+    );
+    let g = c.get("/bkt?encryption", &[]).await;
+    assert!(g.body.contains("aws:kms") && g.body.contains("snap-key"), "{}", g.body);
+    assert!(c.get("/bkt?versioning", &[]).await.body.contains("<MfaDelete>Enabled</MfaDelete>"));
+    // The restored defaults still apply to new objects, and the restored lock still enforces.
+    let n = c.put("/bkt/new", &[], "y").await;
+    assert_eq!(n.header("x-amz-server-side-encryption"), Some("aws:kms"));
+    assert_eq!(c.head("/bkt/new", &[]).await.header("x-amz-object-lock-mode"), Some("GOVERNANCE"));
+    // Object-level state.
+    let path = format!("/bkt/obj?versionId={vid}");
+    let h = c.head(&path, &[]).await;
+    assert_eq!(h.header("x-amz-object-lock-legal-hold"), Some("ON"));
+    assert_eq!(h.header("x-amz-storage-class"), Some("STANDARD_IA"));
+    assert_eq!(
+        c.delete(&path, &mfa).await.code(),
+        "AccessDenied",
+        "legal hold survives the restore"
+    );
+    assert_eq!(c.delete(&path, &[]).await.code(), "AccessDenied", "MFA Delete survives the restore");
+    // Upload-level state.
+    let part = c.put(&format!("/bkt/mp?partNumber=1&uploadId={upload}"), &[], "tail").await;
+    let body = format!(
+        "<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>{}</ETag></Part></CompleteMultipartUpload>",
+        part.header("etag").unwrap()
+    );
+    let done = c.call("POST", &format!("/bkt/mp?uploadId={upload}"), &[], body.as_bytes()).await;
+    assert_eq!(done.status, 200, "{}", done.body);
+    assert_eq!(c.head("/bkt/mp", &[]).await.header("x-amz-storage-class"), Some("ONEZONE_IA"));
 }
