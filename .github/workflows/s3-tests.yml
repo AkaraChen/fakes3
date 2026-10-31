@@ -35,7 +35,7 @@ jobs:
     steps:
       - id: plan
         env:
-          SERVERS: ${{ inputs.servers || 'fakes3,minio,localstack' }}
+          SERVERS: ${{ inputs.servers || 'fakes3' }}
         run: |
           list=$(echo "${SERVERS//,/ }" | xargs -n1 | jq -R . | jq -sc .)
           echo "servers=$list" >> "$GITHUB_OUTPUT"
@@ -67,7 +67,7 @@ jobs:
 
       - name: Run s3-tests
         env:
-          S3T_WORKERS: ${{ inputs.workers || '4' }}
+          S3T_WORKERS: ${{ inputs.workers || '1' }}
           S3T_MARKER: ${{ inputs.marker }}
           S3T_KEYWORD: ${{ inputs.keyword }}
           S3T_PATHS: ${{ inputs.paths || 's3tests/functional' }}

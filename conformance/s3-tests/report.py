@@ -75,31 +75,33 @@ def meta(server_dir):
 
 
 def identity_tests(src):
-    """Names of test functions that reach a user/tenant/IAM helper, following calls in the s3-tests tree."""
-    graph, mods = {}, {}
-    for path in glob.glob(os.path.join(src, "s3tests", "**", "*.py"), recursive=True):
-        tree = ast.parse(open(path).read())
-        for fn in ast.walk(tree):
+    """Names of test functions that reach a user/tenant/IAM helper, following direct calls.
+
+    Calls resolve within the test module first, then in s3tests/functional/__init__.py (where the
+    shared helpers live); helpers imported from iam.py all count as identity helpers.
+    """
+    func_dir = os.path.join(src, "s3tests", "functional")
+    graph = {}  # (module, name) -> called names
+    for path in glob.glob(os.path.join(func_dir, "*.py")):
+        mod = os.path.basename(path)
+        for fn in ast.walk(ast.parse(open(path).read())):
             if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                names = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name)}
-                names |= {n.attr for n in ast.walk(fn) if isinstance(n, ast.Attribute)}
-                graph.setdefault(fn.name, set()).update(names)
-                mods.setdefault(fn.name, os.path.basename(path))
+                calls = {n.func.id for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+                graph.setdefault((mod, fn.name), set()).update(calls)
+    iam_helpers = {name for (mod, name) in graph if mod == "iam.py"}
     memo = {}
 
-    def reaches(name, seen=()):
-        if name in memo:
-            return memo[name]
-        if IDENTITY.match(name):
+    def reaches(mod, name, seen=()):
+        if IDENTITY.match(name) or name in iam_helpers:
             return True
-        if name in seen or name not in graph:
+        key = next((k for k in ((mod, name), ("__init__.py", name)) if k in graph), None)
+        if key is None or key in seen:
             return False
-        hit = any(reaches(n, seen + (name,)) for n in graph[name])
-        if not seen:
-            memo[name] = hit
-        return hit
+        if key not in memo:
+            memo[key] = any(reaches(key[0], n, seen + (key,)) for n in graph[key])
+        return memo[key]
 
-    return {n for n in graph if n.startswith("test_") and reaches(n)}
+    return {name for (mod, name) in graph if name.startswith("test_") and reaches(mod, name)}
 
 
 def base_name(tid):
