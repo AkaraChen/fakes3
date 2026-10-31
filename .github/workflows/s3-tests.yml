@@ -1,0 +1,117 @@
+name: s3-tests
+
+# Runs the independent ceph/s3-tests conformance suite (pinned commit, see conformance/s3-tests/run.sh)
+# against fakes3 and, as references, other S3 servers. One job per server; a final job renders the
+# comparison into the job summary. Results are uploaded raw so conformance/S3-TESTS.md can be rebuilt.
+on:
+  workflow_dispatch:
+    inputs:
+      servers:
+        description: "Comma- or space-separated servers (fakes3,minio,localstack,moto,s3mock,juicefs)"
+        default: "fakes3,minio,localstack"
+      marker:
+        description: "pytest -m expression, e.g. 'not fails_on_aws and not lifecycle' (default: everything)"
+        default: ""
+      keyword:
+        description: "pytest -k expression (default: everything)"
+        default: ""
+      paths:
+        description: "Test files inside the s3-tests checkout"
+        default: "s3tests/functional"
+      workers:
+        description: "pytest-xdist workers per server (1 = serial)"
+        default: "4"
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      servers: ${{ steps.plan.outputs.servers }}
+    steps:
+      - id: plan
+        env:
+          SERVERS: ${{ inputs.servers }}
+        run: |
+          list=$(echo "${SERVERS//,/ }" | xargs -n1 | jq -R . | jq -sc .)
+          echo "servers=$list" >> "$GITHUB_OUTPUT"
+
+  s3-tests:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        server: ${{ fromJson(needs.plan.outputs.servers) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+        if: matrix.server == 'fakes3'
+      - name: Build fakes3 image
+        if: matrix.server == 'fakes3'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          tags: fakes3:local
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Run s3-tests
+        env:
+          S3T_WORKERS: ${{ inputs.workers }}
+          S3T_MARKER: ${{ inputs.marker }}
+          S3T_KEYWORD: ${{ inputs.keyword }}
+          S3T_PATHS: ${{ inputs.paths }}
+          S3T_OUT: ${{ github.workspace }}/conformance/s3-tests/results/${{ matrix.server }}
+        run: conformance/s3-tests/run.sh "${{ matrix.server }}"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: s3-tests-${{ matrix.server }}
+          path: conformance/s3-tests/results/${{ matrix.server }}/
+          include-hidden-files: true
+          if-no-files-found: warn
+
+  summary:
+    needs: s3-tests
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: s3-tests-*
+          path: conformance/s3-tests/results
+
+      - name: Fetch s3-tests sources
+        run: |
+          ref=$(grep -oP 'S3TESTS_REF:-\K[0-9a-f]{40}' conformance/s3-tests/run.sh)
+          git init -q /tmp/s3-tests
+          git -C /tmp/s3-tests fetch -q --depth 1 https://github.com/ceph/s3-tests.git "$ref"
+          git -C /tmp/s3-tests checkout -q FETCH_HEAD
+
+      - name: Render report
+        run: |
+          # download-artifact names directories s3-tests-<server>/; the report wants <server>/
+          cd conformance/s3-tests/results
+          for d in s3-tests-*; do mv "$d" "${d#s3-tests-}"; done
+          cd -
+          python3 conformance/s3-tests/report.py conformance/s3-tests/results \
+            --src /tmp/s3-tests --json conformance/s3-tests/results/summary.json \
+            | tee conformance/s3-tests/results/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: s3-tests-report-${{ github.run_id }}
+          path: |
+            conformance/s3-tests/results/REPORT.md
+            conformance/s3-tests/results/summary.json
