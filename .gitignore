@@ -5,3 +5,4 @@
 /matrix/results/*/.*.log
 /conformance/s3-tests/.work/
 /conformance/s3-tests/results/
+__pycache__/
