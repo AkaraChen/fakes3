@@ -2,12 +2,18 @@ use std::io::Write;
 
 use clap::Parser;
 
+mod ctl;
+
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Parser)]
 #[command(version, about = "An in-memory S3 server for tests")]
 struct Opt {
+    /// Talk to a running server's control plane instead of serving.
+    #[command(subcommand)]
+    command: Option<Cmd>,
+
     #[arg(long, default_value = "127.0.0.1", env = "FAKES3_HOST")]
     host: String,
 
@@ -28,10 +34,30 @@ struct Opt {
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     #[arg(long, default_value_t = 1 << 20)]
     inline_threshold: usize,
+
+    /// Do not record S3 requests for the control plane's request log.
+    #[arg(long)]
+    no_request_log: bool,
+
+    /// Requests kept by the request log; the oldest are dropped first.
+    #[arg(long, default_value_t = fakes3::DEFAULT_REQUEST_LOG_CAPACITY)]
+    request_log_capacity: usize,
 }
 
-fn main() -> std::io::Result<()> {
+#[derive(clap::Subcommand)]
+enum Cmd {
+    /// Control a running server: reset, snapshots, clock, request log.
+    Ctl(ctl::Ctl),
+}
+
+fn main() -> std::io::Result<std::process::ExitCode> {
     let opt = Opt::parse();
+    if let Some(Cmd::Ctl(c)) = opt.command {
+        return Ok(tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(ctl::run(c)));
+    }
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -42,12 +68,14 @@ fn main() -> std::io::Result<()> {
         secret_key: opt.secret_key,
         auth: !opt.no_auth,
         inline_threshold: opt.inline_threshold,
+        request_log: !opt.no_request_log,
+        request_log_capacity: opt.request_log_capacity,
     };
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
         let server = fakes3::Server::start(config).await?;
         println!("{}", server.endpoint());
         std::io::stdout().flush()?;
         server.wait().await;
-        Ok(())
+        Ok(std::process::ExitCode::SUCCESS)
     })
 }

@@ -13,11 +13,12 @@ use s3s::{S3, S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 use crate::clock::Clock;
 use crate::digest;
 use crate::store::{
-    BlobWriter, Bucket as StoreBucket, Entry, Object as StoreObject, ObjectData, ObjectMeta, Part, Store, Upload, Version, Versioning,
+    BlobWriter, Bucket as StoreBucket, Entry, Index, Object as StoreObject, ObjectData, ObjectMeta, Part, Store, Upload, Version,
+    Versioning,
 };
 
 pub struct FakeS3 {
-    pub store: Store,
+    pub store: Arc<Store>,
     pub inline_threshold: usize,
     pub clock: Arc<Clock>,
 }
@@ -524,7 +525,7 @@ struct Listing {
 /// is reached). Each visible key is passed to `emit`, which returns how many result slots it
 /// consumed.
 fn walk<V, F>(
-    objects: &BTreeMap<String, Entry>,
+    objects: &Index,
     prefix: &str,
     delimiter: Option<&str>,
     after: Option<&str>,
@@ -579,7 +580,7 @@ where
     (prefixes, false, None)
 }
 
-fn list(objects: &BTreeMap<String, Entry>, prefix: &str, delimiter: Option<&str>, after: Option<&str>, max_keys: usize) -> Listing {
+fn list(objects: &Index, prefix: &str, delimiter: Option<&str>, after: Option<&str>, max_keys: usize) -> Listing {
     let mut contents = Vec::new();
     // Keys whose latest version is a delete marker are invisible to plain listings.
     let visible = |e: &Entry| e.current().is_some();
