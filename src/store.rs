@@ -75,6 +75,8 @@ pub struct Object {
     /// Sizes of the parts a multipart object was assembled from, for `?partNumber=` reads.
     pub part_sizes: Option<Arc<[u64]>>,
     pub tags: Vec<(String, String)>,
+    /// `None` is the default `private` ACL.
+    pub acl: Option<Arc<crate::acl::Acl>>,
 }
 
 /// One entry in a key's version chain. `obj == None` is a delete marker.
@@ -122,6 +124,7 @@ pub struct Part {
 pub struct Upload {
     pub meta: ObjectMeta,
     pub tags: Vec<(String, String)>,
+    pub acl: Option<Arc<crate::acl::Acl>>,
     pub initiated: SystemTime,
     pub checksum_algorithm: Option<s3s::dto::ChecksumAlgorithm>,
     /// Effective checksum type (explicit, or the default for the algorithm).
@@ -135,11 +138,13 @@ pub struct Bucket {
     pub tags: RwLock<Option<Vec<(String, String)>>>,
     pub objects: RwLock<BTreeMap<String, Entry>>,
     pub uploads: RwLock<BTreeMap<(String, String), Upload>>,
+    pub config: crate::bucket_config::BucketConfig,
 }
 
 #[derive(Default)]
 pub struct Store {
     pub buckets: RwLock<BTreeMap<String, Arc<Bucket>>>,
+    pub access: crate::bucket_config::AccessState,
 }
 
 impl Store {
@@ -156,6 +161,7 @@ impl Bucket {
             tags: RwLock::default(),
             objects: RwLock::default(),
             uploads: RwLock::default(),
+            config: Default::default(),
         }
     }
 }

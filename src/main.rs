@@ -28,6 +28,11 @@ struct Opt {
     /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
     #[arg(long, default_value_t = 1 << 20)]
     inline_threshold: usize,
+
+    /// Base domain for virtual-host-style addressing (`<bucket>.<domain>`); repeatable.
+    /// `--domain ""` turns virtual-host addressing off.
+    #[arg(long = "domain", default_value = "localhost", env = "FAKES3_DOMAIN", value_delimiter = ',')]
+    domains: Vec<String>,
 }
 
 fn main() -> std::io::Result<()> {
@@ -42,6 +47,7 @@ fn main() -> std::io::Result<()> {
         secret_key: opt.secret_key,
         auth: !opt.no_auth,
         inline_threshold: opt.inline_threshold,
+        domains: opt.domains.into_iter().filter(|d| !d.is_empty()).collect(),
     };
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
         let server = fakes3::Server::start(config).await?;
