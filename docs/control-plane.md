@@ -89,7 +89,7 @@ $ curl -X POST 'http://127.0.0.1:9000/_fakes3/reset?clock=false'
 
 ## 快照
 
-快照保存所有 bucket 的：创建时间、版本控制状态、标签、对象索引（含所有版本和删除标记）、进行中的分段上传（含已上传的 part）。
+快照保存所有 bucket 的：创建时间、版本控制状态、标签、ACL / OwnershipControls / PublicAccessBlock / Policy / CORS / Lifecycle / Website / Notification 配置、对象索引（含所有版本和删除标记）、进行中的分段上传（含已上传的 part）。
 **对象数据本身不复制**：数据是不可变、带引用计数的分段，快照只增加引用计数，所以快照的代价取决于对象*个数*，而不是字节数。
 快照也会让被后来覆盖或删除的数据继续留在内存里，直到快照被删除。
 
