@@ -37,6 +37,7 @@ mod cors;
 mod digest;
 mod host;
 mod lifecycle;
+mod listxml;
 mod memory;
 mod noauth;
 mod objext;
@@ -66,6 +67,8 @@ pub use blocking::BlockingServer;
 pub use bucket_defaults::BucketDefaults;
 pub use clock::{Clock, OutOfRange, parse_duration};
 pub use control::{Control, ControlError, ResetOptions, SnapshotInfo};
+#[doc(hidden)]
+pub use listxml::counters as list_fast_path_counters;
 pub use memory::{MemoryLimit, MemoryStats};
 pub use reqlog::{DEFAULT_CAPACITY as DEFAULT_REQUEST_LOG_CAPACITY, RequestFilter, RequestRecord, StatusFilter};
 pub use snapshot::Counts;
@@ -102,6 +105,10 @@ pub struct Config {
     /// enabled and Block Public Access off; [`BucketDefaults::Aws`] applies the defaults AWS has
     /// for new buckets today. Buckets that already exist are not affected.
     pub bucket_defaults: BucketDefaults,
+    /// Write ListObjects, ListObjectsV2 and ListObjectVersions bodies straight from the index
+    /// instead of through s3s' serializer. The bytes are identical; this only exists to switch the
+    /// shortcut off, for differential testing or as a fallback.
+    pub fast_list: bool,
 }
 
 impl Default for Config {
@@ -118,6 +125,7 @@ impl Default for Config {
             request_log_capacity: DEFAULT_REQUEST_LOG_CAPACITY,
             memory_limit: MemoryLimit::Auto,
             bucket_defaults: BucketDefaults::Legacy,
+            fast_list: true,
         }
     }
 }
@@ -263,6 +271,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
         memory: control.memory.clone(),
         clock: control.clock.clone(),
         defaults: config.bucket_defaults,
+        fast_list: config.fast_list,
     };
     let mut b = S3ServiceBuilder::new(fake);
     // Legacy clients (s3fs/aiobotocore presigning, old SDKs) still sign with SigV2.
@@ -332,6 +341,14 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 }
                 if let Some(archive::StatusOverride(status)) = resp.extensions().get().copied() {
                     *resp.status_mut() = status;
+                }
+                // A list handler rendered its own body; s3s' is an empty document. Do this before
+                // anything reads the response (CORS, the request log), so they see the real one.
+                if let Some(listxml::PreRendered(body)) = resp.extensions_mut().remove() {
+                    if resp.headers().contains_key(http::header::CONTENT_LENGTH) {
+                        resp.headers_mut().insert(http::header::CONTENT_LENGTH, body.len().into());
+                    }
+                    *resp.body_mut() = s3s::Body::from(body);
                 }
                 if let Some(info) = cors_ctx {
                     info.decorate(&control.store, &mut resp);
