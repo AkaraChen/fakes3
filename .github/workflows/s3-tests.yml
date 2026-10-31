@@ -4,6 +4,8 @@ name: s3-tests
 # against fakes3 and, as references, other S3 servers. One job per server; a final job renders the
 # comparison into the job summary. Results are uploaded raw so conformance/S3-TESTS.md can be rebuilt.
 on:
+  push:
+    branches: [feat/s3-tests] # TEMPORARY: dispatch is unavailable until this file is on main
   workflow_dispatch:
     inputs:
       servers:
@@ -33,7 +35,7 @@ jobs:
     steps:
       - id: plan
         env:
-          SERVERS: ${{ inputs.servers }}
+          SERVERS: ${{ inputs.servers || 'fakes3,minio,localstack' }}
         run: |
           list=$(echo "${SERVERS//,/ }" | xargs -n1 | jq -R . | jq -sc .)
           echo "servers=$list" >> "$GITHUB_OUTPUT"
@@ -65,10 +67,10 @@ jobs:
 
       - name: Run s3-tests
         env:
-          S3T_WORKERS: ${{ inputs.workers }}
+          S3T_WORKERS: ${{ inputs.workers || '4' }}
           S3T_MARKER: ${{ inputs.marker }}
           S3T_KEYWORD: ${{ inputs.keyword }}
-          S3T_PATHS: ${{ inputs.paths }}
+          S3T_PATHS: ${{ inputs.paths || 's3tests/functional' }}
           S3T_OUT: ${{ github.workspace }}/conformance/s3-tests/results/${{ matrix.server }}
         run: conformance/s3-tests/run.sh "${{ matrix.server }}"
 
