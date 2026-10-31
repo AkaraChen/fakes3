@@ -1,0 +1,54 @@
+name: ab
+
+# Interleaved A/B performance comparison of two refs on one runner (bench/ab.py).
+# Use this instead of comparing two separate bench runs: runners differ by up to 2x.
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Ref for A (baseline)"
+        default: "main"
+      head:
+        description: "Ref for B (candidate)"
+        required: true
+      rounds:
+        description: "Interleaved rounds"
+        default: "6"
+      workloads:
+        description: "Comma-separated: small_get,small_get_c1,small_put,stat,list,versioned,large_get"
+        default: "small_get,small_get_c1,small_put,stat,list,versioned"
+
+permissions:
+  contents: read
+
+jobs:
+  ab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build A and B
+        env:
+          BASE: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+        run: |
+          for side in a b; do
+            ref=$([ "$side" = a ] && echo "$BASE" || echo "$HEAD_REF")
+            git worktree add "/tmp/src-$side" "origin/$ref" 2>/dev/null || git worktree add "/tmp/src-$side" "$ref"
+            (cd "/tmp/src-$side" && cargo build --release --locked)
+            cp "/tmp/src-$side/target/release/fakes3" "/tmp/fakes3-$side"
+            echo "$side = $ref @ $(git -C /tmp/src-$side rev-parse --short HEAD)"
+          done
+          docker pull -q minio/warp:latest
+      - name: Compare
+        env:
+          ROUNDS: ${{ inputs.rounds }}
+          WORKLOADS: ${{ inputs.workloads }}
+          BASE: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+        run: |
+          echo "A = $BASE, B = $HEAD_REF, CPU: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)" >> "$GITHUB_STEP_SUMMARY"
+          python3 bench/ab.py /tmp/fakes3-a /tmp/fakes3-b
