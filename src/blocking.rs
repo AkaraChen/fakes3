@@ -11,7 +11,9 @@ use crate::{Config, Server};
 /// A [`Server`] together with the Tokio runtime it runs on, started by [`Server::start_blocking`].
 ///
 /// Everything [`Server`] offers through `&self` is available here by deref. Dropping the handle
-/// stops the server; it does not block, so it is safe to drop anywhere, including inside async code.
+/// stops the server. Outside async code the listener is closed by the time `drop` returns; inside
+/// async code (where blocking is not allowed) the drop does not wait, and the port closes shortly
+/// after.
 pub struct BlockingServer {
     // Declared first so the listener closes before the runtime goes away.
     server: Option<Server>,
@@ -78,11 +80,18 @@ impl Deref for BlockingServer {
 
 impl Drop for BlockingServer {
     fn drop(&mut self) {
-        // Dropping the server closes the listener; `shutdown_background` abandons the remaining
-        // connection tasks without blocking, which `Runtime::drop` would refuse to do in async code.
-        drop(self.server.take());
-        if let Some(runtime) = self.runtime.take() {
-            runtime.shutdown_background();
+        let (Some(server), Some(runtime)) = (self.server.take(), self.runtime.take()) else {
+            return;
+        };
+        if tokio::runtime::Handle::try_current().is_err() {
+            // Wait for the accept loop to exit, which drops the listener.
+            runtime.block_on(server.shutdown());
+        } else {
+            // Blocking is not allowed here; signal the accept loop and let it close on its own.
+            drop(server);
         }
+        // Abandons remaining connection tasks without blocking, which `Runtime::drop` would refuse
+        // to do in async code.
+        runtime.shutdown_background();
     }
 }

@@ -132,5 +132,14 @@ async fn blocking_server_can_be_dropped_inside_async_code() {
         .unwrap();
     let addr = server.addr();
     drop(server);
-    assert!(tokio::net::TcpStream::connect(addr).await.is_err());
+    // Inside async code the drop does not wait, so the port closes shortly after.
+    let mut closed = false;
+    for _ in 0..100 {
+        if tokio::net::TcpStream::connect(addr).await.is_err() {
+            closed = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(closed);
 }
