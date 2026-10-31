@@ -7,217 +7,217 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 1.068
+      "ms": 0.77
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 0.479
+      "ms": 0.279
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 0.552
+      "ms": 0.233
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 0.356
+      "ms": 0.342
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 0.725
+      "ms": 0.428
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 0.827
+      "ms": 0.359
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 69.342
+      "ms": 52.022
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 3.594
+      "ms": 1.551
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 0.739
+      "ms": 0.399
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 1.239
+      "ms": 0.538
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 0.713
+      "ms": 0.341
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.445
+      "ms": 0.189
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 0.717
+      "ms": 0.319
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 0.754
+      "ms": 0.342
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 0.891
+      "ms": 0.352
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 1.409
+      "ms": 0.421
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.355
+      "ms": 0.148
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 1.879
+      "ms": 0.753
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 1.311
+      "ms": 0.619
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 1.576
+      "ms": 0.779
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 8.8
+      "ms": 3.447
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 1.497
+      "ms": 0.797
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 1.845
+      "ms": 0.868
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 0.994
+      "ms": 0.461
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 0.807
+      "ms": 0.471
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 96.055
+      "ms": 65.091
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 2.693
+      "ms": 0.896
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 47.27
+      "ms": 32.153
     },
     {
       "scenario": "multipart_too_small",
       "status": "pass",
-      "ms": 1.837
+      "ms": 0.817
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 101.524
+      "ms": 74.338
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 1.745
+      "ms": 0.659
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 1.303
+      "ms": 0.359
     },
     {
       "scenario": "checksum_crc32",
       "status": "pass",
-      "ms": 1.146
+      "ms": 0.358
     },
     {
       "scenario": "checksum_crc32c",
       "status": "pass",
-      "ms": 0.813
+      "ms": 0.355
     },
     {
       "scenario": "checksum_sha1",
       "status": "pass",
-      "ms": 0.429
+      "ms": 0.343
     },
     {
       "scenario": "checksum_sha256",
       "status": "pass",
-      "ms": 0.451
+      "ms": 0.345
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "pass",
-      "ms": 0.533
+      "ms": 1.063
     },
     {
       "scenario": "content_md5_bad",
       "status": "pass",
-      "ms": 0.259
+      "ms": 0.322
     },
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 0.618
+      "ms": 0.507
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 0.548
+      "ms": 0.431
     },
     {
       "scenario": "versioning",
       "status": "pass",
-      "ms": 1.286
+      "ms": 1.056
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 0.698
+      "ms": 0.438
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 16.992
+      "ms": 15.53
     }
   ]
 }

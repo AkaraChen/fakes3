@@ -7,64 +7,64 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 18.5
+      "ms": 39.6
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 2
+      "ms": 1.8
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 1.8
+      "ms": 1.9
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 5.4
+      "ms": 8.8
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 24.7
+      "ms": 20.5
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 14
+      "ms": 9
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 105.5
+      "ms": 151.8
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 31.7,
+      "ms": 49.4,
       "error": "AssertionError: key \"a//b\" missing from list"
     },
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 8.9,
+      "ms": 15.7,
       "error": "AssertionError: content-encoding: expected \"gzip\", got undefined"
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 9.2
+      "ms": 11.8
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 12
+      "ms": 8.6
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 1.4
+      "ms": 3.1
     },
     {
       "scenario": "get_if_none_match",
@@ -79,94 +79,94 @@
     {
       "scenario": "put_if_none_match",
       "status": "fail",
-      "ms": 12.5,
+      "ms": 11.1,
       "error": "AssertionError: operation: expected error PreconditionFailed/412, but it succeeded"
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 9.4
+      "ms": 10.2
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.9
+      "ms": 1.2
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 30.3
+      "ms": 26.6
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 27.9
+      "ms": 64.2
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 44.3
+      "ms": 62.1
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 73.2
+      "ms": 72.1
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 30.8
+      "ms": 40.7
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 47.2
+      "ms": 38.8
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 36.9
+      "ms": 35.5
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 27.9
+      "ms": 54.1
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 121.9
+      "ms": 172.1
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 19
+      "ms": 34.4
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 65.5
+      "ms": 83.2
     },
     {
       "scenario": "multipart_too_small",
       "status": "fail",
-      "ms": 36.2,
+      "ms": 68.3,
       "error": "AssertionError: operation: expected error EntityTooSmall, but it succeeded"
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 272.8
+      "ms": 549.2
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 30.5
+      "ms": 46.6
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 17
+      "ms": 37.4
     },
     {
       "scenario": "checksum_crc32",
@@ -201,28 +201,28 @@
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 2
+      "ms": 7.5
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 11.8
+      "ms": 14
     },
     {
       "scenario": "versioning",
       "status": "fail",
-      "ms": 12.2,
+      "ms": 25.9,
       "error": "S3Error(NotImplemented): A header you provided implies functionality that is not implemented"
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 25.7
+      "ms": 52
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 47.8
+      "ms": 45.4
     }
   ]
 }

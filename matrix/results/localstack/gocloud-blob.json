@@ -12,12 +12,12 @@
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 2.278
+      "ms": 2.855
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 2.222
+      "ms": 2.357
     },
     {
       "scenario": "list_buckets",
@@ -27,57 +27,57 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 6.194
+      "ms": 6.416
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 4.104
+      "ms": 4.073
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 103.889
+      "ms": 89.265
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 14.433
+      "ms": 14.412
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 4.188
+      "ms": 3.618
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 7.311
+      "ms": 6.571
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 4.661
+      "ms": 4.459
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 1.727
+      "ms": 1.594
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 5.315
+      "ms": 4.325
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 3.491
+      "ms": 5.903
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 3.71
+      "ms": 3.508
     },
     {
       "scenario": "delete_object",
@@ -97,37 +97,37 @@
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 8.63
+      "ms": 6.538
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 16.334
+      "ms": 11.769
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 52.538
+      "ms": 46.44
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 12.691
+      "ms": 8.984
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 18.04
+      "ms": 12.851
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 7.341
+      "ms": 7.089
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 5.477
+      "ms": 4.92
     },
     {
       "scenario": "multipart_upload",
@@ -152,17 +152,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 152.659
+      "ms": 156.717
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 7.1
+      "ms": 5.624
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 5.269
+      "ms": 4.481
     },
     {
       "scenario": "checksum_crc32",
@@ -197,7 +197,7 @@
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 2.306,
+      "ms": 1.964,
       "error": "AssertionError: List: expected error ([403] [SignatureDoesNotMatch InvalidAccessKeyId]), got success"
     },
     {

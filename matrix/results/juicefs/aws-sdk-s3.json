@@ -7,228 +7,228 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 7.64
+      "ms": 5.79
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 1.01
+      "ms": 0.83
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 0.9
+      "ms": 0.53
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 1.25
+      "ms": 0.95
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 8.7
+      "ms": 6.01
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 4.9
+      "ms": 3.41
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 59.81
+      "ms": 47.92
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 23.8,
+      "ms": 19.18,
       "error": "AssertionError: key \"a//b\" not in listing"
     },
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 4.93,
+      "ms": 4.41,
       "error": "AssertionError: Content-Encoding None"
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 7.89
+      "ms": 9.24
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 3.98
+      "ms": 5.54
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.89
+      "ms": 2.5
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 4.52
+      "ms": 4.28
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 5.87
+      "ms": 3.82
     },
     {
       "scenario": "put_if_none_match",
       "status": "fail",
-      "ms": 7.77,
+      "ms": 5.55,
       "error": "AssertionError: expected error []/[412], got success"
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 5.53
+      "ms": 3.8
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.65
+      "ms": 0.49
     },
     {
       "scenario": "delete_objects",
       "status": "fail",
-      "ms": 10.61,
+      "ms": 9.3,
       "error": "MissingContentMD5: Missing required header for this request: Content-Md5. (HTTP 400)"
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 13.85
+      "ms": 11.89
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 33.4
+      "ms": 34.1
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 46.14
+      "ms": 44.15
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 17.53
+      "ms": 16.93
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 19.22
+      "ms": 17.16
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 10.08
+      "ms": 8.73
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 10.16
+      "ms": 8.24
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 91.01
+      "ms": 72.57
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 9.8
+      "ms": 7.46
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 45.45
+      "ms": 37.42
     },
     {
       "scenario": "multipart_too_small",
       "status": "fail",
-      "ms": 17.25,
+      "ms": 12.36,
       "error": "AssertionError: expected error [\"EntityTooSmall\"]/[], got success"
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 86.75
+      "ms": 80.24
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 9.98
+      "ms": 8.52
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 8.61
+      "ms": 6.49
     },
     {
       "scenario": "checksum_crc32",
       "status": "fail",
-      "ms": 6.05,
-      "error": "AssertionError: checksum None != 7QA4hw=="
+      "ms": 3.94,
+      "error": "AssertionError: checksum None != O6jgNw=="
     },
     {
       "scenario": "checksum_crc32c",
       "status": "fail",
-      "ms": 6.46,
-      "error": "AssertionError: checksum None != 3dQPwA=="
+      "ms": 5.32,
+      "error": "AssertionError: checksum None != LDknQQ=="
     },
     {
       "scenario": "checksum_sha1",
       "status": "fail",
-      "ms": 6.85,
-      "error": "AssertionError: checksum None != ukNteJ7G+Xk3NrhkLZGJqghEIwk="
+      "ms": 5.05,
+      "error": "AssertionError: checksum None != /+O0RaWg9vfKD7YD9XQdgvTWaHw="
     },
     {
       "scenario": "checksum_sha256",
       "status": "fail",
-      "ms": 6.06,
-      "error": "AssertionError: checksum None != ZAsQos2FbefCp3GNI6IHO/RdA5j2glDqTQbw41IuoIY="
+      "ms": 4.66,
+      "error": "AssertionError: checksum None != EyCJVelTWazxgtXBzr0yNJpC2enCcs6ELICruhDuVzw="
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "fail",
-      "ms": 8.86,
-      "error": "AssertionError: checksum None != 3bcRay42faM="
+      "ms": 4.41,
+      "error": "AssertionError: checksum None != Wce7qsVLEIc="
     },
     {
       "scenario": "content_md5_bad",
       "status": "pass",
-      "ms": 3.43
+      "ms": 2.86
     },
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 1.18
+      "ms": 1.12
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 4.43
+      "ms": 4.29
     },
     {
       "scenario": "versioning",
       "status": "fail",
-      "ms": 10.09,
+      "ms": 9.7,
       "error": "NotImplemented: A header you provided implies functionality that is not implemented (HTTP 501)"
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 6.13
+      "ms": 5.71
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 93.73
+      "ms": 98.42
     }
   ]
 }

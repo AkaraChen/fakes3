@@ -7,7 +7,7 @@
         {
             "scenario": "create_bucket",
             "status": "pass",
-            "ms": 10
+            "ms": 8.3
         },
         {
             "scenario": "head_bucket",
@@ -17,32 +17,32 @@
         {
             "scenario": "head_bucket_missing",
             "status": "pass",
-            "ms": 2.8
+            "ms": 3
         },
         {
             "scenario": "list_buckets",
             "status": "pass",
-            "ms": 2.9
+            "ms": 2.8
         },
         {
             "scenario": "put_get_small",
             "status": "pass",
-            "ms": 5.3
+            "ms": 4
         },
         {
             "scenario": "put_get_empty",
             "status": "pass",
-            "ms": 3.7
+            "ms": 4.8
         },
         {
             "scenario": "put_get_large",
             "status": "pass",
-            "ms": 120.8
+            "ms": 108.5
         },
         {
             "scenario": "special_keys",
             "status": "pass",
-            "ms": 18.6
+            "ms": 15.7
         },
         {
             "scenario": "head_object_metadata",
@@ -53,57 +53,57 @@
         {
             "scenario": "get_range",
             "status": "pass",
-            "ms": 6.4
+            "ms": 9.2
         },
         {
             "scenario": "get_range_invalid",
             "status": "pass",
-            "ms": 3.9
+            "ms": 4.5
         },
         {
             "scenario": "get_missing_key",
             "status": "pass",
-            "ms": 1.6
+            "ms": 2.1
         },
         {
             "scenario": "get_if_none_match",
             "status": "pass",
-            "ms": 3.4
+            "ms": 8.1
         },
         {
             "scenario": "get_if_match_fail",
             "status": "pass",
-            "ms": 4.5
+            "ms": 4.6
         },
         {
             "scenario": "put_if_none_match",
             "status": "pass",
-            "ms": 5.6
+            "ms": 6.4
         },
         {
             "scenario": "delete_object",
             "status": "pass",
-            "ms": 4.4
+            "ms": 5.1
         },
         {
             "scenario": "delete_missing_object",
             "status": "pass",
-            "ms": 1.2
+            "ms": 1.4
         },
         {
             "scenario": "delete_objects",
             "status": "pass",
-            "ms": 11
+            "ms": 13
         },
         {
             "scenario": "list_v2_basic",
             "status": "pass",
-            "ms": 6.6
+            "ms": 7.9
         },
         {
             "scenario": "list_v2_prefix_delimiter",
             "status": "pass",
-            "ms": 11.1
+            "ms": 7.5
         },
         {
             "scenario": "list_v2_pagination",
@@ -113,119 +113,119 @@
         {
             "scenario": "list_v2_start_after",
             "status": "pass",
-            "ms": 10.5
+            "ms": 8.9
         },
         {
             "scenario": "list_v1",
             "status": "pass",
-            "ms": 11.4
+            "ms": 11.3
         },
         {
             "scenario": "copy_object",
             "status": "pass",
-            "ms": 7.2
+            "ms": 6.3
         },
         {
             "scenario": "copy_object_replace_metadata",
             "status": "fail",
             "error": "AssertionFailed: Content-Type: expected 'text/x-new', got 'text/x-old'",
-            "ms": 8.3
+            "ms": 6.8
         },
         {
             "scenario": "multipart_upload",
             "status": "pass",
-            "ms": 193
+            "ms": 174.6
         },
         {
             "scenario": "multipart_abort",
             "status": "pass",
-            "ms": 21.3
+            "ms": 9.8
         },
         {
             "scenario": "multipart_list_parts",
             "status": "pass",
-            "ms": 108.2
+            "ms": 72.2
         },
         {
             "scenario": "multipart_too_small",
             "status": "pass",
-            "ms": 23.6
+            "ms": 10.1
         },
         {
             "scenario": "high_level_upload",
             "status": "pass",
-            "ms": 379.6
+            "ms": 394.5
         },
         {
             "scenario": "presigned_get",
             "status": "pass",
-            "ms": 7
+            "ms": 6
         },
         {
             "scenario": "presigned_put",
             "status": "pass",
-            "ms": 5.2
+            "ms": 5.3
         },
         {
             "scenario": "checksum_crc32",
             "status": "fail",
             "error": "AssertionFailed: PUT response ChecksumCRC32: expected '47rIBw==', got NULL",
-            "ms": 3
+            "ms": 1.7
         },
         {
             "scenario": "checksum_crc32c",
             "status": "fail",
             "error": "AssertionFailed: PUT response ChecksumCRC32C: expected 'g/kujA==', got NULL",
-            "ms": 2.7
+            "ms": 1.3
         },
         {
             "scenario": "checksum_sha1",
             "status": "fail",
             "error": "AssertionFailed: PUT response ChecksumSHA1: expected 'VEFvg6Az8vtSpXBzV2pxVmCqTSw=', got NULL",
-            "ms": 2.5
+            "ms": 1.3
         },
         {
             "scenario": "checksum_sha256",
             "status": "fail",
             "error": "AssertionFailed: PUT response ChecksumSHA256: expected 'QtqiG8v6SozQ6LK/LxVwvHshEr383u5UNqjFHrzlMvQ=', got NULL",
-            "ms": 2.4
+            "ms": 1.3
         },
         {
             "scenario": "checksum_crc64nvme",
             "status": "fail",
             "error": "AssertionFailed: PUT response ChecksumCRC64NVME: expected 'gQ8GHjFwvI8=', got NULL",
-            "ms": 2.6
+            "ms": 1.4
         },
         {
             "scenario": "content_md5_bad",
             "status": "pass",
-            "ms": 2.6
+            "ms": 1.5
         },
         {
             "scenario": "bad_credentials",
             "status": "fail",
             "error": "AssertionFailed: expected SignatureDoesNotMatch/InvalidAccessKeyId/403, but the call succeeded",
-            "ms": 7.9
+            "ms": 5.2
         },
         {
             "scenario": "delete_bucket_not_empty",
             "status": "pass",
-            "ms": 5.8
+            "ms": 3.5
         },
         {
             "scenario": "versioning",
             "status": "pass",
-            "ms": 18
+            "ms": 13.3
         },
         {
             "scenario": "object_tagging",
             "status": "pass",
-            "ms": 6.5
+            "ms": 4.9
         },
         {
             "scenario": "delete_bucket",
             "status": "pass",
-            "ms": 26.8
+            "ms": 23.3
         }
     ]
 }

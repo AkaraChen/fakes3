@@ -27,17 +27,17 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 7.13
+      "ms": 7.71
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 3.45
+      "ms": 3.07
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 48.58
+      "ms": 34.14
     },
     {
       "scenario": "special_keys",
@@ -47,44 +47,44 @@
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 4.1,
+      "ms": 3.78,
       "error": "AssertionError: ContentEncoding: got None, want AttributeValue(\"gzip\")"
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 6.24
+      "ms": 6.0
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 3.55
+      "ms": 3.14
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.61
+      "ms": 0.44
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 3.74
+      "ms": 3.97
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 3.65
+      "ms": 3.58
     },
     {
       "scenario": "put_if_none_match",
       "status": "fail",
-      "ms": 6.08,
+      "ms": 5.16,
       "error": "AssertionError: expected 412, got success"
     },
     {
       "scenario": "delete_object",
       "status": "fail",
-      "ms": 3.77,
+      "ms": 3.44,
       "error": "object_store::Error::Generic: Generic S3 error: Got invalid DeleteObjects response: missing field `Key`"
     },
     {
@@ -96,28 +96,28 @@
     {
       "scenario": "delete_objects",
       "status": "fail",
-      "ms": 13.46,
+      "ms": 16.1,
       "error": "AssertionError: 1 results"
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 11.06
+      "ms": 9.19
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 34.43
+      "ms": 30.22
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 45.91
+      "ms": 40.36
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 16.61
+      "ms": 13.62
     },
     {
       "scenario": "list_v1",
@@ -127,7 +127,7 @@
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 7.7
+      "ms": 7.01
     },
     {
       "scenario": "copy_object_replace_metadata",
@@ -137,7 +137,7 @@
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 63.79
+      "ms": 63.22
     },
     {
       "scenario": "multipart_abort",
@@ -152,23 +152,23 @@
     {
       "scenario": "multipart_too_small",
       "status": "fail",
-      "ms": 15.63,
+      "ms": 12.08,
       "error": "AssertionError: expected EntityTooSmall, got success"
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 72.47
+      "ms": 60.92
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 8.76
+      "ms": 7.65
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 7.44
+      "ms": 9.83
     },
     {
       "scenario": "checksum_crc32",
@@ -203,7 +203,7 @@
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 2.77
+      "ms": 2.85
     },
     {
       "scenario": "delete_bucket_not_empty",

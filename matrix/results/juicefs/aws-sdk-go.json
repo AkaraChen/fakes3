@@ -7,189 +7,189 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 5.512
+      "ms": 4.658
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 0.563
+      "ms": 0.518
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 0.742
+      "ms": 0.668
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 1.108
+      "ms": 0.946
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 6.34
+      "ms": 5.64
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 3.403
+      "ms": 4.308
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 81.855
+      "ms": 77.425
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 19.363,
+      "ms": 21.599,
       "error": "AssertionError: key \"a//b\" missing from list"
     },
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 4.902,
+      "ms": 4.09,
       "error": "AssertionError: Content-Encoding: got \"\", want \"gzip\""
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 9.07
+      "ms": 8.2
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 5.863
+      "ms": 3.465
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.88
+      "ms": 0.64
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 4.913
+      "ms": 3.615
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 5.42
+      "ms": 3.48
     },
     {
       "scenario": "put_if_none_match",
       "status": "fail",
-      "ms": 7.92,
+      "ms": 6.223,
       "error": "AssertionError: second PUT: expected error ([412] [PreconditionFailed]), got success"
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 5.011
+      "ms": 5.382
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.833
+      "ms": 0.666
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 14.876
+      "ms": 12.408
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 12.028
+      "ms": 9.651
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 26.905
+      "ms": 18.273
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 80.544
+      "ms": 74.718
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 17.484
+      "ms": 14.566
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 18.896
+      "ms": 16.64
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 9.298
+      "ms": 7.684
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 8.762
+      "ms": 7.229
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 120.264
+      "ms": 96.32
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 8.562
+      "ms": 7.892
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 58.228
+      "ms": 46.944
     },
     {
       "scenario": "multipart_too_small",
       "status": "fail",
-      "ms": 14.72,
+      "ms": 12.549,
       "error": "AssertionError: Complete: expected error ([] [EntityTooSmall]), got success"
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 129.077
+      "ms": 115.756
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 6.88
+      "ms": 5.419
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 4.934
+      "ms": 4.005
     },
     {
       "scenario": "checksum_crc32",
       "status": "fail",
-      "ms": 4.81,
+      "ms": 4.809,
       "error": "AssertionError: GET checksum CRC32: got \"\", want \"fq5Ozg==\""
     },
     {
       "scenario": "checksum_crc32c",
       "status": "fail",
-      "ms": 4.026,
+      "ms": 4.322,
       "error": "AssertionError: GET checksum CRC32C: got \"\", want \"vVoBqw==\""
     },
     {
       "scenario": "checksum_sha1",
       "status": "fail",
-      "ms": 4.428,
+      "ms": 3.602,
       "error": "AssertionError: GET checksum SHA1: got \"\", want \"vFswkxBv7OkdQQIM3fyP3KUBrXk=\""
     },
     {
       "scenario": "checksum_sha256",
       "status": "fail",
-      "ms": 4.938,
+      "ms": 5.35,
       "error": "AssertionError: GET checksum SHA256: got \"\", want \"pEP6p9Ngvflw0+c9ajLGEGeW0lP34Yd56ZrWvtH5n2E=\""
     },
     {
@@ -200,33 +200,33 @@
     {
       "scenario": "content_md5_bad",
       "status": "pass",
-      "ms": 2.584
+      "ms": 2.097
     },
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 0.58
+      "ms": 0.416
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 5.485
+      "ms": 4.768
     },
     {
       "scenario": "versioning",
       "status": "fail",
-      "ms": 4.746,
+      "ms": 4.316,
       "error": "NotImplemented: A header you provided implies functionality that is not implemented (HTTP 501)"
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 6.662
+      "ms": 5.143
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 42.5
+      "ms": 31.254
     }
   ]
 }

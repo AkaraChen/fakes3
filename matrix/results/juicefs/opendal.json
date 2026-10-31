@@ -27,17 +27,17 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 10.97
+      "ms": 10.13
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 5.29
+      "ms": 3.7
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 28.86
+      "ms": 27.83
     },
     {
       "scenario": "special_keys",
@@ -47,84 +47,84 @@
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 4.34,
+      "ms": 4.04,
       "error": "AssertionError: Content-Encoding None"
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 7.94
+      "ms": 5.98
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 4.14
+      "ms": 3.52
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.59
+      "ms": 0.52
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 5.08
+      "ms": 6.36
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 7.1
+      "ms": 3.37
     },
     {
       "scenario": "put_if_none_match",
       "status": "fail",
-      "ms": 8.5,
+      "ms": 6.01,
       "error": "AssertionError: expected 412, got success"
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 5.38
+      "ms": 4.49
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.53
+      "ms": 0.61
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 11.85
+      "ms": 13.42
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 13.01
+      "ms": 9.07
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 38.77
+      "ms": 29.27
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 55.19
+      "ms": 41.93
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 16.44
+      "ms": 16.28
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 17.79
+      "ms": 16.4
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 10.06
+      "ms": 8.98
     },
     {
       "scenario": "copy_object_replace_metadata",
@@ -134,7 +134,7 @@
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 54.83
+      "ms": 46.3
     },
     {
       "scenario": "multipart_abort",
@@ -154,17 +154,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 52.08
+      "ms": 60.53
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 7.69
+      "ms": 12.46
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 6.74
+      "ms": 8.29
     },
     {
       "scenario": "checksum_crc32",

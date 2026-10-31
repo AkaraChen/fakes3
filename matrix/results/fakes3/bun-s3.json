@@ -1,7 +1,7 @@
 {
   "sdk": "bun-s3",
   "lang": "js",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "server": "fakes3",
   "results": [
     {
@@ -27,22 +27,22 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 2
+      "ms": 2.8
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 0.9
+      "ms": 0.4
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 60.4
+      "ms": 67.6
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 2.1
+      "ms": 4.7
     },
     {
       "scenario": "head_object_metadata",
@@ -52,17 +52,17 @@
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 0.6
+      "ms": 1.1
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 0.7
+      "ms": 1
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.5
+      "ms": 0.2
     },
     {
       "scenario": "get_if_none_match",
@@ -82,12 +82,12 @@
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 1.1
+      "ms": 0.4
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.2
+      "ms": 0.1
     },
     {
       "scenario": "delete_objects",
@@ -97,22 +97,22 @@
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 1.2
+      "ms": 3
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 0.8
+      "ms": 2.5
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 4.8
+      "ms": 3.5
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 1.9
+      "ms": 1.2
     },
     {
       "scenario": "list_v1",
@@ -132,7 +132,7 @@
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 68.9
+      "ms": 75.5
     },
     {
       "scenario": "multipart_abort",
@@ -152,17 +152,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 148.8
+      "ms": 165.5
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 1.1
+      "ms": 3.5
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 0.4
+      "ms": 1.9
     },
     {
       "scenario": "checksum_crc32",
@@ -197,7 +197,7 @@
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 0.5
+      "ms": 0.9
     },
     {
       "scenario": "delete_bucket_not_empty",

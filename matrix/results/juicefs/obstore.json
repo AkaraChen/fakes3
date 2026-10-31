@@ -27,49 +27,49 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 11.6
+      "ms": 14.6
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 7.9
+      "ms": 12.4
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 84.7
+      "ms": 97.9
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 10.7,
+      "ms": 16.7,
       "error": "ValueError: Could not parse path: Path \"a//b\" contained empty path segment"
     },
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 8.9,
+      "ms": 12.5,
       "error": "AssertionFailed: Content-Encoding: expected 'gzip', got None"
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 35.6
+      "ms": 8.3
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 8.6
+      "ms": 3.9
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 3.4
+      "ms": 0.6
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 7.7
+      "ms": 5.0
     },
     {
       "scenario": "get_if_match_fail",
@@ -79,36 +79,36 @@
     {
       "scenario": "put_if_none_match",
       "status": "fail",
-      "ms": 13.8,
+      "ms": 8.4,
       "error": "AssertionFailed: operation: expected error AlreadyExistsError/PreconditionError, but it succeeded"
     },
     {
       "scenario": "delete_object",
       "status": "fail",
-      "ms": 6.2,
+      "ms": 7.5,
       "error": "GenericError: Generic S3 error: Got invalid DeleteObjects response: missing field `Key`"
     },
     {
       "scenario": "delete_missing_object",
       "status": "fail",
-      "ms": 2.3,
+      "ms": 1.7,
       "error": "GenericError: Generic S3 error: Got invalid DeleteObjects response: missing field `Key`"
     },
     {
       "scenario": "delete_objects",
       "status": "fail",
-      "ms": 24.3,
+      "ms": 30.7,
       "error": "GenericError: Generic S3 error: Got invalid DeleteObjects response: missing field `Key`"
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 15.3
+      "ms": 18.4
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 127.7
+      "ms": 26.1
     },
     {
       "scenario": "list_v2_pagination",
@@ -118,7 +118,7 @@
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 69.8
+      "ms": 58.5
     },
     {
       "scenario": "list_v1",
@@ -128,7 +128,7 @@
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 23.6
+      "ms": 15.7
     },
     {
       "scenario": "copy_object_replace_metadata",
@@ -138,7 +138,7 @@
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 105.3
+      "ms": 109.4
     },
     {
       "scenario": "multipart_abort",
@@ -158,17 +158,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 132.7
+      "ms": 167.6
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 14.0
+      "ms": 11.8
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 13.0
+      "ms": 9.5
     },
     {
       "scenario": "checksum_crc32",
@@ -188,14 +188,14 @@
     {
       "scenario": "checksum_sha256",
       "status": "fail",
-      "ms": 120.1,
-      "error": "AssertionFailed: ChecksumSHA256 (verified via HeadObject): expected 'bpM4ADxf2spByWNsBRZWlZr0Cz4Zih/ecVe9WNVgRo8=', got None"
+      "ms": 106.6,
+      "error": "AssertionFailed: ChecksumSHA256 (verified via HeadObject): expected 'SdVbZ1BMa9dxaKSKe+3rM71FGz9gcUhdvFoBhl6tMW8=', got None"
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "fail",
-      "ms": 78.1,
-      "error": "AssertionFailed: ChecksumCRC64NVME (verified via HeadObject): expected 'zeS8xOq1lRA=', got None"
+      "ms": 82.8,
+      "error": "AssertionFailed: ChecksumCRC64NVME (verified via HeadObject): expected 'o/EelpYN23Y=', got None"
     },
     {
       "scenario": "content_md5_bad",
@@ -205,7 +205,7 @@
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 4.5
+      "ms": 19.2
     },
     {
       "scenario": "delete_bucket_not_empty",

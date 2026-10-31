@@ -7,78 +7,78 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 18.3
+      "ms": 13.9
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 4
+      "ms": 3.5
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 5.2
+      "ms": 3.9
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 35.6
+      "ms": 28.3
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 25.6
+      "ms": 18
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 8.7
+      "ms": 7.4
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 87.6
+      "ms": 89.8
     },
     {
       "scenario": "special_keys",
       "status": "fail",
       "error": "AssertionFailed: \"a//b\" missing from listing",
-      "ms": 38.9
+      "ms": 35.6
     },
     {
       "scenario": "head_object_metadata",
       "status": "fail",
       "error": "UnexpectedMinioException: MinIO API responded with message=Unsupported signed header: (content-disposition: attachment; filename=\"meta.txt\"",
-      "ms": 1.8
+      "ms": 1.1
     },
     {
       "scenario": "get_range",
       "status": "fail",
       "error": "PartialContentException: Exception of type 'Minio.Exceptions.PartialContentException' was thrown.",
-      "ms": 8.1
+      "ms": 7.3
     },
     {
       "scenario": "get_range_invalid",
       "status": "fail",
       "error": "NullReferenceException: Object reference not set to an instance of an object.",
-      "ms": 8
+      "ms": 6.6
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 3.3
+      "ms": 2.8
     },
     {
       "scenario": "get_if_none_match",
       "status": "fail",
       "error": "AssertionFailed: expected 304, but the call succeeded",
-      "ms": 9.9
+      "ms": 6.1
     },
     {
       "scenario": "get_if_match_fail",
       "status": "fail",
       "error": "AssertionFailed: expected PreconditionFailed/412, but the call succeeded",
-      "ms": 9.4
+      "ms": 7.6
     },
     {
       "scenario": "put_if_none_match",
@@ -88,27 +88,27 @@
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 10.1
+      "ms": 9.1
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 2.7
+      "ms": 2.8
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 41.5
+      "ms": 24.6
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 14.1
+      "ms": 11.3
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 15.3
+      "ms": 13.9
     },
     {
       "scenario": "list_v2_pagination",
@@ -128,12 +128,12 @@
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 34.1
+      "ms": 26.3
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 18.5
+      "ms": 16.2
     },
     {
       "scenario": "multipart_upload",
@@ -158,17 +158,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 194.7
+      "ms": 257.6
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 11.9
+      "ms": 8.6
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 11.6
+      "ms": 10.3
     },
     {
       "scenario": "checksum_crc32",
@@ -204,27 +204,27 @@
       "scenario": "bad_credentials",
       "status": "fail",
       "error": "AssertionFailed: expected SignatureDoesNotMatch/InvalidAccessKeyId/403, but the call succeeded",
-      "ms": 3.2
+      "ms": 2.9
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 12.4
+      "ms": 13.7
     },
     {
       "scenario": "versioning",
       "status": "pass",
-      "ms": 33.1
+      "ms": 38.7
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 35.9
+      "ms": 27.4
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 59.6
+      "ms": 56.8
     }
   ]
 }

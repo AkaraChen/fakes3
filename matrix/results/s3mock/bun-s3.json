@@ -1,7 +1,7 @@
 {
   "sdk": "bun-s3",
   "lang": "js",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "server": "s3mock",
   "results": [
     {
@@ -27,22 +27,22 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 15.4
+      "ms": 11.9
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 12.7
+      "ms": 26.4
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 95.5
+      "ms": 100.9
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 42.3
+      "ms": 39.7
     },
     {
       "scenario": "head_object_metadata",
@@ -52,17 +52,17 @@
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 12.4
+      "ms": 16.7
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 8.5
+      "ms": 16.1
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 4.2
+      "ms": 5
     },
     {
       "scenario": "get_if_none_match",
@@ -82,12 +82,12 @@
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 13.1
+      "ms": 11.5
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 3
+      "ms": 3.4
     },
     {
       "scenario": "delete_objects",
@@ -97,22 +97,22 @@
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 23.5
+      "ms": 17.3
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 26.6
+      "ms": 14.9
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 43.6
+      "ms": 80.1
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 17.5
+      "ms": 18.4
     },
     {
       "scenario": "list_v1",
@@ -132,7 +132,7 @@
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 295.2
+      "ms": 259.8
     },
     {
       "scenario": "multipart_abort",
@@ -152,17 +152,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 192.8
+      "ms": 329.2
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 8.4
+      "ms": 6.5
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 9.5
+      "ms": 7.3
     },
     {
       "scenario": "checksum_crc32",
@@ -197,7 +197,7 @@
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 4.6,
+      "ms": 3.2,
       "error": "AssertionError: operation: expected error SignatureDoesNotMatch/InvalidAccessKeyId/403, but it succeeded"
     },
     {

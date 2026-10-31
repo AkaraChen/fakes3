@@ -7,7 +7,7 @@
     {
       "scenario": "create_bucket",
       "status": "fail",
-      "ms": 12.08,
+      "ms": 26.48,
       "error": "InvalidLocationConstraint: The specified location-constraint is not valid (HTTP 400)"
     },
     {
@@ -23,117 +23,117 @@
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 10.32
+      "ms": 26.83
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 3.7
+      "ms": 4.3
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 2.92
+      "ms": 3.44
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 65.82
+      "ms": 53.56
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 15.27
+      "ms": 15.94
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 3.19
+      "ms": 2.82
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 5.62
+      "ms": 4.69
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 3.09
+      "ms": 2.1
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 1.14
+      "ms": 0.95
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 2.59
+      "ms": 2.05
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 2.48
+      "ms": 2.01
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 5.98
+      "ms": 5.52
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 3.63
+      "ms": 2.58
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 1.05
+      "ms": 0.88
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 7.25
+      "ms": 5.28
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 5.06
+      "ms": 5.94
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 26.7
+      "ms": 40.71
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 33.73
+      "ms": 29.91
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 7.54
+      "ms": 5.48
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 9.57
+      "ms": 6.5
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 6.04
+      "ms": 4.05
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 4.94
+      "ms": 4.01
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 97.38
+      "ms": 87.21
     },
     {
       "scenario": "multipart_abort",
@@ -148,22 +148,22 @@
     {
       "scenario": "multipart_too_small",
       "status": "pass",
-      "ms": 12.14
+      "ms": 8.41
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 146.52
+      "ms": 129.66
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 8.1
+      "ms": 12.46
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 6.49
+      "ms": 6.0
     },
     {
       "scenario": "checksum_crc32",
@@ -198,13 +198,13 @@
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 12.71,
+      "ms": 27.51,
       "error": "AssertionError: expected [\"SignatureDoesNotMatch\", \"InvalidAccessKeyId\"]/[403], got success"
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 4.45
+      "ms": 3.4
     },
     {
       "scenario": "versioning",
@@ -214,12 +214,12 @@
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 4.76
+      "ms": 3.47
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 24.53
+      "ms": 37.17
     }
   ]
 }

@@ -7,7 +7,7 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 12.05
+      "ms": 24.37
     },
     {
       "scenario": "head_bucket",
@@ -22,43 +22,43 @@
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 10.85
+      "ms": 24.82
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 2.28
+      "ms": 2.89
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 1.55
+      "ms": 2.31
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 56.45
+      "ms": 52.66
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 3.57,
+      "ms": 2.06,
       "error": "XMinioInvalidObjectName: Object name contains unsupported characters. (HTTP 400)"
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 1.59
+      "ms": 1.04
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 2.59
+      "ms": 3.26
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 1.26
+      "ms": 1.51
     },
     {
       "scenario": "get_missing_key",
@@ -68,72 +68,72 @@
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 1.14
+      "ms": 2.0
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 1.24
+      "ms": 1.04
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 2.95
+      "ms": 2.79
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 1.91
+      "ms": 2.58
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.43
+      "ms": 0.65
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 3.72
+      "ms": 3.04
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 3.15
+      "ms": 3.22
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 22.49
+      "ms": 37.3
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 7.82
+      "ms": 13.14
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 4.96
+      "ms": 4.03
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 5.21
+      "ms": 5.96
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 3.15
+      "ms": 2.55
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 2.74
+      "ms": 2.91
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 74.97
+      "ms": 72.84
     },
     {
       "scenario": "multipart_abort",
@@ -148,22 +148,22 @@
     {
       "scenario": "multipart_too_small",
       "status": "pass",
-      "ms": 4.58
+      "ms": 9.05
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 125.57
+      "ms": 136.44
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 5.38
+      "ms": 4.19
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 4.32
+      "ms": 4.79
     },
     {
       "scenario": "checksum_crc32",
@@ -198,12 +198,12 @@
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 13.32
+      "ms": 27.19
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 2.76
+      "ms": 1.52
     },
     {
       "scenario": "versioning",
@@ -213,12 +213,12 @@
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 2.38
+      "ms": 2.71
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 24.31
+      "ms": 37.02
     }
   ]
 }

@@ -27,83 +27,83 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 9.4
+      "ms": 15.9
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 7.5
+      "ms": 11.8
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 87.9
+      "ms": 122.6
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 40.6,
+      "ms": 31.0,
       "error": "ValueError: Could not parse path: Path \"a//b\" contained empty path segment"
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 9.6
+      "ms": 27.0
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 42.7
+      "ms": 70.0
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 191.1
+      "ms": 14.4
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 12.5
+      "ms": 11.3
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 17.2
+      "ms": 17.9
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 17.3
+      "ms": 21.8
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 22.0
+      "ms": 28.5
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 26.3
+      "ms": 37.5
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 12.7
+      "ms": 10.6
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 42.1
+      "ms": 59.0
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 39.8
+      "ms": 46.8
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 47.2
+      "ms": 79.5
     },
     {
       "scenario": "list_v2_pagination",
@@ -113,7 +113,7 @@
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 102.0
+      "ms": 126.4
     },
     {
       "scenario": "list_v1",
@@ -123,7 +123,7 @@
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 23.6
+      "ms": 29.5
     },
     {
       "scenario": "copy_object_replace_metadata",
@@ -133,7 +133,7 @@
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 188.3
+      "ms": 218.8
     },
     {
       "scenario": "multipart_abort",
@@ -153,17 +153,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 330.5
+      "ms": 347.5
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 21.6
+      "ms": 24.7
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 18.5
+      "ms": 22.1
     },
     {
       "scenario": "checksum_crc32",
@@ -183,14 +183,14 @@
     {
       "scenario": "checksum_sha256",
       "status": "fail",
-      "ms": 197.7,
-      "error": "AssertionFailed: ChecksumSHA256 (verified via HeadObject): expected 'di376mqJhiMMGpTt3WXBiSEbmudXgRJqdaAJm1AhArk=', got None"
+      "ms": 117.2,
+      "error": "AssertionFailed: ChecksumSHA256 (verified via HeadObject): expected 'Vo+1ur7Ndu4AnzjXkqENwjnEoSDWly3N+T94b4plP8E=', got None"
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "fail",
-      "ms": 89.4,
-      "error": "AssertionFailed: ChecksumCRC64NVME (verified via HeadObject): expected 'npmZj+Ul4iw=', got None"
+      "ms": 100.9,
+      "error": "AssertionFailed: ChecksumCRC64NVME (verified via HeadObject): expected 'ENmEXMo5+F8=', got None"
     },
     {
       "scenario": "content_md5_bad",
@@ -200,7 +200,7 @@
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 15.2,
+      "ms": 17.4,
       "error": "AssertionFailed: operation: expected error PermissionDeniedError/UnauthenticatedError/BaseError, but it succeeded"
     },
     {

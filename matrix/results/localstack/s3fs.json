@@ -7,7 +7,7 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 119.3
+      "ms": 97.1
     },
     {
       "scenario": "head_bucket",
@@ -17,52 +17,52 @@
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 4.4
+      "ms": 2.9
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 8.5
+      "ms": 4.5
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 31.8
+      "ms": 16.5
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 22.9
+      "ms": 11.1
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 329.2
+      "ms": 181.8
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 99.3
+      "ms": 35.6
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 29.9
+      "ms": 13.8
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 26.1
+      "ms": 14.6
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 15.2
+      "ms": 6.8
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 10.8
+      "ms": 6.2
     },
     {
       "scenario": "get_if_none_match",
@@ -77,32 +77,32 @@
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 20.1
+      "ms": 14.8
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 21.4
+      "ms": 10.6
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 3.9
+      "ms": 2.2
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 38.5
+      "ms": 26.6
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 21.1
+      "ms": 14.5
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 26.4
+      "ms": 27.5
     },
     {
       "scenario": "list_v2_pagination",
@@ -122,22 +122,22 @@
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 46.1
+      "ms": 28.9
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 45.3
+      "ms": 44.9
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 208.4
+      "ms": 262.3
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 77.7
+      "ms": 53.9
     },
     {
       "scenario": "multipart_list_parts",
@@ -152,73 +152,73 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 344.1
+      "ms": 350.5
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 12.2
+      "ms": 14.3
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 16.2
+      "ms": 10.2
     },
     {
       "scenario": "checksum_crc32",
       "status": "pass",
-      "ms": 14.3
+      "ms": 11.1
     },
     {
       "scenario": "checksum_crc32c",
       "status": "pass",
-      "ms": 24.8
+      "ms": 16.4
     },
     {
       "scenario": "checksum_sha1",
       "status": "pass",
-      "ms": 18.0
+      "ms": 7.9
     },
     {
       "scenario": "checksum_sha256",
       "status": "pass",
-      "ms": 19.4
+      "ms": 10.0
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "pass",
-      "ms": 15.4
+      "ms": 8.6
     },
     {
       "scenario": "content_md5_bad",
       "status": "pass",
-      "ms": 573.7
+      "ms": 670.8
     },
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 107.9,
+      "ms": 72.2,
       "error": "AssertionFailed: operation: expected error SignatureDoesNotMatch/InvalidAccessKeyId/403/PermissionError, but it succeeded"
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 8.5
+      "ms": 6.0
     },
     {
       "scenario": "versioning",
       "status": "pass",
-      "ms": 105.9
+      "ms": 75.7
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 12.1
+      "ms": 6.1
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 42.2
+      "ms": 22.1
     }
   ]
 }

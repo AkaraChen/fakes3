@@ -7,219 +7,219 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 10.9
+      "ms": 9.7
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 8.6
+      "ms": 11.8
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 11.8
+      "ms": 17.6
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 29.1
+      "ms": 10.4
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 19.4
+      "ms": 22.7
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 28.7
+      "ms": 19.6
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 112.1
+      "ms": 133.9
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 76.8
+      "ms": 98.2
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 32.6
+      "ms": 22.5
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 34.1
+      "ms": 41.0
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 31.4
+      "ms": 29.6
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 12.1
+      "ms": 11.8
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 35.6
+      "ms": 23.9
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 17.6
+      "ms": 49.0
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 37.8
+      "ms": 54.3
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 30.5
+      "ms": 33.0
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 7.9
+      "ms": 13.2
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 48.3
+      "ms": 63.8
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 77.4
+      "ms": 42.0
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 98.6
+      "ms": 108.8
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 599.9
+      "ms": 525.2
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 186.8
+      "ms": 151.2
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 149.0
+      "ms": 102.2
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 34.7
+      "ms": 73.3
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 38.8
+      "ms": 122.4
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 314.3
+      "ms": 309.5
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 30.0
+      "ms": 29.2
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 94.8
+      "ms": 290.3
     },
     {
       "scenario": "multipart_too_small",
       "status": "pass",
-      "ms": 32.7
+      "ms": 46.5
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 481.8
+      "ms": 372.2
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 11.3
+      "ms": 16.1
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 10.7
+      "ms": 19.4
     },
     {
       "scenario": "checksum_crc32",
       "status": "pass",
-      "ms": 25.5
+      "ms": 71.9
     },
     {
       "scenario": "checksum_crc32c",
       "status": "pass",
-      "ms": 9.2
+      "ms": 16.0
     },
     {
       "scenario": "checksum_sha1",
       "status": "pass",
-      "ms": 9.5
+      "ms": 19.2
     },
     {
       "scenario": "checksum_sha256",
       "status": "pass",
-      "ms": 16.0
+      "ms": 12.6
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "pass",
-      "ms": 10.3
+      "ms": 22.7
     },
     {
       "scenario": "content_md5_bad",
       "status": "fail",
-      "ms": 5.0,
+      "ms": 8.8,
       "error": "AssertionFailed: operation: expected error BadDigest/InvalidDigest/400, but it succeeded"
     },
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 14.5,
+      "ms": 14.2,
       "error": "AssertionFailed: operation: expected error SignatureDoesNotMatch/InvalidAccessKeyId/403, but it succeeded"
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 12.7
+      "ms": 15.0
     },
     {
       "scenario": "versioning",
       "status": "pass",
-      "ms": 40.2
+      "ms": 52.3
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 15.9
+      "ms": 37.4
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 30.8
+      "ms": 56.0
     }
   ]
 }

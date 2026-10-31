@@ -7,226 +7,226 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 3.217
+      "ms": 2.226
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 0.712
+      "ms": 1.019
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 1.136
+      "ms": 1.179
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 1.001
+      "ms": 1.098
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 3.005
+      "ms": 3.75
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 2.573
+      "ms": 4.764
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 68.39
+      "ms": 66.581
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 10.38
+      "ms": 17.396
     },
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 2.648,
+      "ms": 3.856,
       "error": "AssertionError: Content-Type: got \"text/x-matrix;charset=utf-8\", want \"text/x-matrix; charset=utf-8\""
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 4.462
+      "ms": 6.805
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 2.477
+      "ms": 3.962
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.9
+      "ms": 2.027
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 2.224
+      "ms": 4.224
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 2.095
+      "ms": 4.123
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 2.233
+      "ms": 4.428
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 3.179
+      "ms": 5.423
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.762
+      "ms": 1.088
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 6.984
+      "ms": 8.912
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 4.41
+      "ms": 5.701
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 6.984
+      "ms": 7.56
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 25.005
+      "ms": 40.636
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 5.91
+      "ms": 8.585
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 6.737
+      "ms": 10.904
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 3.744
+      "ms": 5.038
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "fail",
-      "ms": 3.287,
+      "ms": 5.566,
       "error": "AssertionError: Content-Type: got \"text/x-old\", want \"text/x-new\""
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 118.885
+      "ms": 109.164
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 6.838
+      "ms": 7.23
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 50.934
+      "ms": 44.192
     },
     {
       "scenario": "multipart_too_small",
       "status": "pass",
-      "ms": 8.046
+      "ms": 8.566
     },
     {
       "scenario": "high_level_upload",
       "status": "fail",
-      "ms": 110.795,
+      "ms": 103.341,
       "error": "BadRequest: The upload was created using a crc32 checksum. The complete request must include the checksum for each part. It was missing for part 1 in the request. (HTTP 400)"
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 3.599
+      "ms": 3.595
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 4.077
+      "ms": 2.977
     },
     {
       "scenario": "checksum_crc32",
       "status": "fail",
-      "ms": 2.274,
+      "ms": 2.817,
       "error": "AssertionError: GET checksum CRC32: got \"\", want \"fq5Ozg==\""
     },
     {
       "scenario": "checksum_crc32c",
       "status": "fail",
-      "ms": 2.981,
+      "ms": 2.683,
       "error": "AssertionError: GET checksum CRC32C: got \"\", want \"vVoBqw==\""
     },
     {
       "scenario": "checksum_sha1",
       "status": "fail",
-      "ms": 2.31,
+      "ms": 2.446,
       "error": "AssertionError: GET checksum SHA1: got \"\", want \"vFswkxBv7OkdQQIM3fyP3KUBrXk=\""
     },
     {
       "scenario": "checksum_sha256",
       "status": "fail",
-      "ms": 1.901,
+      "ms": 2.41,
       "error": "AssertionError: GET checksum SHA256: got \"\", want \"pEP6p9Ngvflw0+c9ajLGEGeW0lP34Yd56ZrWvtH5n2E=\""
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "fail",
-      "ms": 2.003,
+      "ms": 2.858,
       "error": "AssertionError: GET checksum CRC64NVME: got \"\", want \"JGIwLOqxo9M=\""
     },
     {
       "scenario": "content_md5_bad",
       "status": "pass",
-      "ms": 1.093
+      "ms": 1.509
     },
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 1.347,
+      "ms": 1.294,
       "error": "AssertionError: ListBuckets: expected error ([403] [SignatureDoesNotMatch InvalidAccessKeyId]), got success"
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 1.985
+      "ms": 2.156
     },
     {
       "scenario": "versioning",
       "status": "pass",
-      "ms": 7.705
+      "ms": 8.483
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 3.86
+      "ms": 4.189
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 56.288
+      "ms": 69.523
     }
   ]
 }

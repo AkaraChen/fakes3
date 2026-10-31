@@ -7,219 +7,219 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 3.191
+      "ms": 2.738
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 1.549
+      "ms": 1.365
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 1.456
+      "ms": 1.3
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 1.468
+      "ms": 1.358
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 3.193
+      "ms": 3.535
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 3.483
+      "ms": 3.187
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 68.232
+      "ms": 61.825
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 14.916
+      "ms": 12.464
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 3.58
+      "ms": 2.733
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 6.623
+      "ms": 6.596
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 3.208
+      "ms": 2.383
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 1.297
+      "ms": 1.006
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 2.92
+      "ms": 2.241
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 2.694
+      "ms": 2.407
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 3.065
+      "ms": 2.775
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 3.682
+      "ms": 4.055
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 1.177
+      "ms": 1.237
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 7.042
+      "ms": 6.749
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 6.451
+      "ms": 6.151
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 8.546
+      "ms": 8.292
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 42.263
+      "ms": 42.114
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 9.504
+      "ms": 9.258
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 14.107
+      "ms": 12.168
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 4.936
+      "ms": 4.593
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 4.767
+      "ms": 4.51
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 104.427
+      "ms": 83.301
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 9.78
+      "ms": 6.506
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 50.452
+      "ms": 41.264
     },
     {
       "scenario": "multipart_too_small",
       "status": "pass",
-      "ms": 9.317
+      "ms": 7.591
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 144.808
+      "ms": 132.993
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 6.686
+      "ms": 6.054
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 3.787
+      "ms": 3.381
     },
     {
       "scenario": "checksum_crc32",
       "status": "pass",
-      "ms": 4.114
+      "ms": 3.392
     },
     {
       "scenario": "checksum_crc32c",
       "status": "fail",
-      "ms": 2.418,
+      "ms": 1.793,
       "error": "InvalidRequest: Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed. (HTTP 400)"
     },
     {
       "scenario": "checksum_sha1",
       "status": "pass",
-      "ms": 4.13
+      "ms": 4.046
     },
     {
       "scenario": "checksum_sha256",
       "status": "pass",
-      "ms": 3.795
+      "ms": 2.958
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "pass",
-      "ms": 3.309
+      "ms": 2.994
     },
     {
       "scenario": "content_md5_bad",
       "status": "pass",
-      "ms": 1.943
+      "ms": 1.383
     },
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 2.659,
+      "ms": 1.509,
       "error": "AssertionError: ListBuckets: expected error ([403] [SignatureDoesNotMatch InvalidAccessKeyId]), got success"
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 2.86
+      "ms": 2.859
     },
     {
       "scenario": "versioning",
       "status": "pass",
-      "ms": 11.704
+      "ms": 9.434
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 4.248
+      "ms": 3.324
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 17.217
+      "ms": 13.973
     }
   ]
 }

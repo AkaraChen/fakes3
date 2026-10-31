@@ -7,225 +7,225 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 3.69
+      "ms": 2.98
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 1.66
+      "ms": 1.43
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 1.65
+      "ms": 1.31
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 1.91
+      "ms": 0.88
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 3.34
+      "ms": 2.56
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 3.57
+      "ms": 2.81
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 52.13
+      "ms": 50.72
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 18.07
+      "ms": 13.22
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 4.46
+      "ms": 2.55
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 7.71
+      "ms": 4.39
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 4.22
+      "ms": 2.67
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 1.34
+      "ms": 1.78
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 3.43
+      "ms": 2.38
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 3.49
+      "ms": 2.47
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 8.31
+      "ms": 5.22
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 3.67
+      "ms": 2.87
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 1.02
+      "ms": 0.67
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 12.85
+      "ms": 12.7
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 6.2
+      "ms": 4.87
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 20.37
+      "ms": 16.55
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 20.42
+      "ms": 19.92
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 8.9
+      "ms": 7.8
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 11.82
+      "ms": 14.26
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 8.02
+      "ms": 5.37
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "fail",
-      "ms": 6.44,
+      "ms": 4.1,
       "error": "AssertionError: Content-Type Some(\"text/x-old\")"
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 103.14
+      "ms": 104.79
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 9.27
+      "ms": 6.6
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 40.5
+      "ms": 45.39
     },
     {
       "scenario": "multipart_too_small",
       "status": "pass",
-      "ms": 11.38
+      "ms": 10.91
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 201.58
+      "ms": 199.13
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 8.27
+      "ms": 7.06
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 6.42
+      "ms": 6.36
     },
     {
       "scenario": "checksum_crc32",
       "status": "fail",
-      "ms": 3.39,
-      "error": "AssertionError: checksum None != /wa9rQ=="
+      "ms": 3.14,
+      "error": "AssertionError: checksum None != rI4zEQ=="
     },
     {
       "scenario": "checksum_crc32c",
       "status": "fail",
-      "ms": 3.09,
-      "error": "AssertionError: checksum None != kqHcig=="
+      "ms": 3.72,
+      "error": "AssertionError: checksum None != Q//BwA=="
     },
     {
       "scenario": "checksum_sha1",
       "status": "fail",
-      "ms": 3.44,
-      "error": "AssertionError: checksum None != 77+/kZJ5H0UDKKw7FXa7ObO9Nkw="
+      "ms": 3.22,
+      "error": "AssertionError: checksum None != XJW5Ce5B+m8cd1PZvPDhhgcwwcA="
     },
     {
       "scenario": "checksum_sha256",
       "status": "fail",
-      "ms": 3.27,
-      "error": "AssertionError: checksum None != +XVpzdL4xzKl1xLW8nx13HytEDLmEDtpCp/ub0T0CZQ="
+      "ms": 3.02,
+      "error": "AssertionError: checksum None != mcdipJA1G2dK9fk1mfJD9z0O2JJF4HrXTRyTE4Rvvfs="
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "fail",
-      "ms": 3.45,
-      "error": "AssertionError: checksum None != 8w3vYoGHqIk="
+      "ms": 3.23,
+      "error": "AssertionError: checksum None != vLHk6kHwMwc="
     },
     {
       "scenario": "content_md5_bad",
       "status": "pass",
-      "ms": 2.49
+      "ms": 2.05
     },
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 1.94,
+      "ms": 1.83,
       "error": "AssertionError: expected error [\"SignatureDoesNotMatch\", \"InvalidAccessKeyId\"]/[403], got success"
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 3.01
+      "ms": 2.91
     },
     {
       "scenario": "versioning",
       "status": "fail",
-      "ms": 162.08,
+      "ms": 126.46,
       "error": "HttpError: HTTP 200 service error: unhandled error: error parsing XML: encountered invalid XML root: expected ListVersionsResult but got StartEl { name: Name { prefix: \"\", local: \"ListBucketResult\" }, attributes: [Attr { name: Name { prefix: \"\", local: \"xmlns\" }, value: \"http://s3.amazonaws.com/doc/"
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 5.64
+      "ms": 3.59
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 91.23
+      "ms": 63.2
     }
   ]
 }

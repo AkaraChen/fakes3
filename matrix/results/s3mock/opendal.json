@@ -27,17 +27,17 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 7.0
+      "ms": 6.98
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 3.23
+      "ms": 4.46
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 36.64
+      "ms": 41.71
     },
     {
       "scenario": "special_keys",
@@ -47,42 +47,42 @@
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 2.53
+      "ms": 1.56
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 4.46
+      "ms": 4.34
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 3.31
+      "ms": 1.95
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 1.17
+      "ms": 3.32
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 3.37
+      "ms": 2.9
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 2.29
+      "ms": 3.58
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 6.4
+      "ms": 8.33
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 3.07
+      "ms": 3.26
     },
     {
       "scenario": "delete_missing_object",
@@ -92,37 +92,37 @@
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 10.23
+      "ms": 9.83
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 4.76
+      "ms": 4.83
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 20.45
+      "ms": 13.59
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 15.16
+      "ms": 16.84
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 10.06
+      "ms": 5.76
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 10.76
+      "ms": 5.87
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 7.32
+      "ms": 4.59
     },
     {
       "scenario": "copy_object_replace_metadata",
@@ -132,7 +132,7 @@
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 101.71
+      "ms": 91.57
     },
     {
       "scenario": "multipart_abort",
@@ -152,17 +152,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 121.69
+      "ms": 131.56
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 6.79
+      "ms": 6.17
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 5.59
+      "ms": 5.89
     },
     {
       "scenario": "checksum_crc32",
@@ -197,7 +197,7 @@
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 3.65,
+      "ms": 2.77,
       "error": "AssertionError: expected 403 PermissionDenied, got success"
     },
     {

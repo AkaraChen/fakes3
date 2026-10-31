@@ -33,7 +33,7 @@
 | java | minio-java | 9.0.4 | 42/43 | 42/43 | 2/43 | 2/43 | 33/43 | 31/43 |
 | js | aws-sdk-js-v2 | 2.1693.0 | 42/42 | 41/42 | 41/42 | 40/42 | 36/42 | 32/42 |
 | js | aws-sdk-js-v3 | 3.1161.0 | 43/43 | 42/43 | 42/43 | 41/43 | 35/43 | 31/43 |
-| js | bun-s3 | 1.4.3 | 18/18 | 17/18 | 17/18 | 17/18 | 17/18 | 17/18 |
+| js | bun-s3 | 1.4.4 | 18/18 | 17/18 | 17/18 | 17/18 | 17/18 | 17/18 |
 | js | minio-js | 8.0.7 | 35/35 | 34/35 | 34/35 | 33/35 | 32/35 | 30/35 |
 | php | aws-php | 3.402.5 | 43/43 | 42/43 | 42/43 | 41/43 | 35/43 | 31/43 |
 | python | boto3 | 1.43.123 | 43/43 | 42/43 | 42/43 | 41/43 | 35/43 | 31/43 |
@@ -167,9 +167,9 @@
 | `special_keys` | aws-sdk-go-v2 | XMinioInvalidObjectName: Object name contains unsupported characters. (HTTP 400) |
 | `special_keys` | gocloud-blob | XMinioInvalidObjectName: Object name contains unsupported characters. (HTTP 400) |
 | `special_keys` | minio-go | XMinioInvalidObjectName: Object name contains unsupported characters. (HTTP 400) |
-| `special_keys` | aws-java-v1 | AssertionError: [a//b] AmazonS3Exception: Object name contains unsupported characters. (Service: Amazon S3; Status Code: 400; Error Code: XMinioInvalidObjectName; Request ID: 18E381AE915C51B3; S3 Exte |
-| `special_keys` | aws-java-v2 | AssertionError: [a//b] S3Exception: Object name contains unsupported characters. (Service: S3, Status Code: 400, Request ID: 18E381AC8660A38F, Extended Request ID: 2007b11c225eb2520a138e595eb97e78e00e |
-| `special_keys` | aws-java-v2-crt | AssertionError: [a//b] S3Exception: Object name contains unsupported characters. (Service: S3, Status Code: 400, Request ID: 18E381ADB22CAACF, Extended Request ID: 2007b11c225eb2520a138e595eb97e78e00e |
+| `special_keys` | aws-java-v1 | AssertionError: [a//b] AmazonS3Exception: Object name contains unsupported characters. (Service: Amazon S3; Status Code: 400; Error Code: XMinioInvalidObjectName; Request ID: 18E3870DC35FD2DB; S3 Exte |
+| `special_keys` | aws-java-v2 | AssertionError: [a//b] S3Exception: Object name contains unsupported characters. (Service: S3, Status Code: 400, Request ID: 18E3870BCB0C8543, Extended Request ID: 2007b11c225eb2520a138e595eb97e78e00e |
+| `special_keys` | aws-java-v2-crt | AssertionError: [a//b] S3Exception: Object name contains unsupported characters. (Service: S3, Status Code: 400, Request ID: 18E3870CEE45E636, Extended Request ID: 2007b11c225eb2520a138e595eb97e78e00e |
 | `special_keys` | minio-java | AssertionError: [a//b] ErrorResponseException: Object name contains unsupported characters. |
 | `special_keys` | aws-sdk-js-v2 | XMinioInvalidObjectName: Object name contains unsupported characters. |
 | `special_keys` | aws-sdk-js-v3 | XMinioInvalidObjectName: Object name contains unsupported characters. |
@@ -177,7 +177,7 @@
 | `special_keys` | minio-js | S3Error(XMinioInvalidObjectName): Object name contains unsupported characters. |
 | `special_keys` | aws-php | S3Exception: XMinioInvalidObjectName (400): Object name contains unsupported characters. |
 | `special_keys` | boto3 | ClientError: An error occurred (XMinioInvalidObjectName) when calling the PutObject operation: Object name contains unsupported characters. |
-| `special_keys` | minio-py | S3Error: S3 operation failed; code: XMinioInvalidObjectName, message: Object name contains unsupported characters., resource: /m-miniopy-be1573dc/a//b, request_id: 18E381AB1C94AB15, host_id: 2007b11c2 |
+| `special_keys` | minio-py | S3Error: S3 operation failed; code: XMinioInvalidObjectName, message: Object name contains unsupported characters., resource: /m-miniopy-37b3c429/a//b, request_id: 18E3870A24846107, host_id: 2007b11c2 |
 | `special_keys` | obstore | ValueError: Could not parse path: Path "a//b" contained empty path segment |
 | `special_keys` | s3fs | OSError: [Errno 5] An error occurred (XMinioInvalidObjectName) when calling the PutObject operation: Object name contains unsupported characters. |
 | `special_keys` | aws-ruby | XMinioInvalidObjectName: (400) Object name contains unsupported characters. |
@@ -188,11 +188,11 @@
 | `get_range_invalid` | minio-dotnet | NullReferenceException: Object reference not set to an instance of an object. |
 | `get_if_none_match` | minio-dotnet | AssertionFailed: expected 304, but the call succeeded |
 | `get_if_match_fail` | minio-dotnet | AssertionFailed: expected PreconditionFailed/412, but the call succeeded |
-| `checksum_crc32` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc32: expected <ys9Znw==> got <null> |
-| `checksum_crc32c` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc32c: expected <GJJFag==> got <null> |
-| `checksum_sha1` | aws-java-v2-crt | AssertionError: x-amz-checksum-sha1: expected <4ZE7xzVYs7E7g/Xm6afEyihzd3A=> got <null> |
-| `checksum_sha256` | aws-java-v2-crt | AssertionError: x-amz-checksum-sha256: expected <UiYdqekwP6UpmgB43An9qEbjeoL2PIcaM7FPFVTmclI=> got <null> |
-| `checksum_crc64nvme` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc64nvme: expected <2ZxJaG+D/Dc=> got <null> |
+| `checksum_crc32` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc32: expected <ZQYiow==> got <null> |
+| `checksum_crc32c` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc32c: expected <1knc8g==> got <null> |
+| `checksum_sha1` | aws-java-v2-crt | AssertionError: x-amz-checksum-sha1: expected <Ia/V1H6ux31AuIoSdifDDVfRtMQ=> got <null> |
+| `checksum_sha256` | aws-java-v2-crt | AssertionError: x-amz-checksum-sha256: expected <B7M7I0PSLyQ1jr6uV7VHuL7K6jrZ81qyZ4qshYu+jlA=> got <null> |
+| `checksum_crc64nvme` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc64nvme: expected <HTT6eTgpLD0=> got <null> |
 
 </details>
 
@@ -251,7 +251,7 @@
 | `create_bucket` | minio-java | ErrorResponseException: The specified location-constraint is not valid |
 | `create_bucket` | rust-s3 | InvalidLocationConstraint: The specified location-constraint is not valid (HTTP 400) |
 | `head_bucket` | minio-java | AssertionError: bucketExists returned false |
-| `list_buckets` | minio-java | AssertionError: bucket m-minio-java-fy33n9lz not in ListBuckets (1 buckets) |
+| `list_buckets` | minio-java | AssertionError: bucket m-minio-java-7pyb4srv not in ListBuckets (0 buckets) |
 | `put_get_small` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `put_get_empty` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `put_get_large` | minio-java | ErrorResponseException: The specified bucket does not exist |
@@ -289,8 +289,8 @@
 | `checksum_crc32` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `checksum_crc32c` | aws-dotnet | InvalidRequestException: InvalidRequest (400): Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed. |
 | `checksum_crc32c` | minio-go | InvalidRequest: Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed. (HTTP 400) |
-| `checksum_crc32c` | aws-java-v2 | InvalidRequestException: Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed. (Service: S3, Status Code: 400, Request ID: 1fad2d45-41f9-4457-b46a-11882217ef03, Extended  |
-| `checksum_crc32c` | aws-java-v2-crt | InvalidRequestException: Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed. (Service: S3, Status Code: 400, Request ID: 49e56bf8-87c9-4ac5-9dd2-180669f98c63, Extended  |
+| `checksum_crc32c` | aws-java-v2 | InvalidRequestException: Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed. (Service: S3, Status Code: 400, Request ID: 6d9044f9-d6df-4a9b-bbd2-05781c7ffec1, Extended  |
+| `checksum_crc32c` | aws-java-v2-crt | InvalidRequestException: Expecting a single x-amz-checksum- header. Multiple checksum Types are not allowed. (Service: S3, Status Code: 400, Request ID: a624faae-ab72-402d-86fc-c4bc2c363152, Extended  |
 | `checksum_crc32c` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `checksum_sha1` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `checksum_sha256` | minio-java | ErrorResponseException: The specified bucket does not exist |
@@ -382,7 +382,7 @@
 | `create_bucket` | minio-java | ErrorResponseException: The specified location-constraint is not valid |
 | `create_bucket` | rust-s3 | InvalidLocationConstraint: The specified location-constraint is not valid (HTTP 400) |
 | `head_bucket` | minio-java | AssertionError: bucketExists returned false |
-| `list_buckets` | minio-java | AssertionError: bucket m-minio-java-etgsgwsv not in ListBuckets (1 buckets) |
+| `list_buckets` | minio-java | AssertionError: bucket m-minio-java-ow2brr0d not in ListBuckets (0 buckets) |
 | `put_get_small` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `put_get_empty` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `put_get_large` | minio-java | ErrorResponseException: The specified bucket does not exist |
@@ -421,26 +421,26 @@
 | `high_level_upload` | aws-java-v2 | S3Exception: (Service: S3, Status Code: 100, Request ID: null) (SDK Attempt Count: 1) |
 | `high_level_upload` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `high_level_upload` | aws-ruby | NoMethodError: TransferManager#download_file: undefined method 'match' for nil |
-| `high_level_upload` | aws-sdk-s3 | streaming error: body checksum mismatch. expected body checksum to be 718338a4 but it was 87d1ceb47f4f0e0f |
+| `high_level_upload` | aws-sdk-s3 | streaming error: body checksum mismatch. expected body checksum to be e40185c4 but it was e5739decdc442539 |
 | `presigned_get` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `presigned_put` | minio-java | AssertionError: presigned PUT status 404: <?xml version="1.0" encoding="utf-8"?> |
 | `checksum_crc32` | minio-go | AssertionError: GET checksum CRC32: got "", want "fq5Ozg==" |
-| `checksum_crc32` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc32: expected <FUKVyw==> got <null> |
+| `checksum_crc32` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc32: expected <TzxZEA==> got <null> |
 | `checksum_crc32` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `checksum_crc32c` | minio-go | AssertionError: GET checksum CRC32C: got "", want "vVoBqw==" |
-| `checksum_crc32c` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc32c: expected <3m0wWg==> got <null> |
+| `checksum_crc32c` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc32c: expected <HwT3tg==> got <null> |
 | `checksum_crc32c` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `checksum_sha1` | minio-go | AssertionError: GET checksum SHA1: got "", want "vFswkxBv7OkdQQIM3fyP3KUBrXk=" |
-| `checksum_sha1` | aws-java-v2-crt | AssertionError: x-amz-checksum-sha1: expected <daRUyATYs4nzXi7LHpPGByY/78k=> got <null> |
+| `checksum_sha1` | aws-java-v2-crt | AssertionError: x-amz-checksum-sha1: expected <tHtRbkET4m8KB0ooBEp4SOewovM=> got <null> |
 | `checksum_sha1` | minio-java | ErrorResponseException: The specified bucket does not exist |
 | `checksum_sha256` | minio-go | AssertionError: GET checksum SHA256: got "", want "pEP6p9Ngvflw0+c9ajLGEGeW0lP34Yd56ZrWvtH5n2E=" |
-| `checksum_sha256` | aws-java-v2-crt | AssertionError: x-amz-checksum-sha256: expected <gqkBF8Bl3tSFPCyzeoRWEoQs1yejrifPelRAxbYxIiM=> got <null> |
+| `checksum_sha256` | aws-java-v2-crt | AssertionError: x-amz-checksum-sha256: expected <BOHENM8lZAPnRKaKjQXPcsyykJENhciGf1mOJvTCTHU=> got <null> |
 | `checksum_sha256` | minio-java | ErrorResponseException: The specified bucket does not exist |
-| `checksum_sha256` | obstore | AssertionFailed: ChecksumSHA256 (verified via HeadObject): expected 'di376mqJhiMMGpTt3WXBiSEbmudXgRJqdaAJm1AhArk=', got None |
+| `checksum_sha256` | obstore | AssertionFailed: ChecksumSHA256 (verified via HeadObject): expected 'Vo+1ur7Ndu4AnzjXkqENwjnEoSDWly3N+T94b4plP8E=', got None |
 | `checksum_crc64nvme` | minio-go | AssertionError: GET checksum CRC64NVME: got "", want "JGIwLOqxo9M=" |
-| `checksum_crc64nvme` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc64nvme: expected <nkEej9J+WA4=> got <null> |
+| `checksum_crc64nvme` | aws-java-v2-crt | AssertionError: x-amz-checksum-crc64nvme: expected <fX9eZqf1Eck=> got <null> |
 | `checksum_crc64nvme` | minio-java | ErrorResponseException: The specified bucket does not exist |
-| `checksum_crc64nvme` | obstore | AssertionFailed: ChecksumCRC64NVME (verified via HeadObject): expected 'npmZj+Ul4iw=', got None |
+| `checksum_crc64nvme` | obstore | AssertionFailed: ChecksumCRC64NVME (verified via HeadObject): expected 'ENmEXMo5+F8=', got None |
 | `content_md5_bad` | aws-dotnet | AssertionFailed: expected BadDigest/InvalidDigest/400, but the call succeeded |
 | `content_md5_bad` | aws-sdk-go | AssertionError: PUT: expected error ([400] [BadDigest InvalidDigest]), got success |
 | `content_md5_bad` | aws-sdk-go-v2 | AssertionError: PUT: expected error ([400] [BadDigest InvalidDigest]), got success |
@@ -540,7 +540,7 @@
 
 | 场景 | SDK | 错误 |
 |---|---|---|
-| `create_bucket` | rust-s3 | HttpFailWithBody: {"detail":"Content-Type 'text/plain;charset=UTF-8' is not supported.","instance":"/m-rust-s3-1e81ff42","status":415,"title":"Unsupported Media Type"} (HTTP 415) |
+| `create_bucket` | rust-s3 | HttpFailWithBody: {"detail":"Content-Type 'text/plain;charset=UTF-8' is not supported.","instance":"/m-rust-s3-c1cc8651","status":415,"title":"Unsupported Media Type"} (HTTP 415) |
 | `special_keys` | minio-dotnet | AssertionFailed: "a//b" missing from listing |
 | `special_keys` | aws-java-v1 | AssertionError: [a//b] AmazonS3Exception: (Service: Amazon S3; Status Code: 400; Error Code: 400 ; Request ID: null; S3 Extended Request ID: null; Proxy: null) |
 | `special_keys` | aws-java-v2 | AssertionError: [a//b] S3Exception: (Service: S3, Status Code: 400, Request ID: null) (SDK Attempt Count: 1) |
@@ -590,56 +590,56 @@
 | `checksum_crc32` | aws-sdk-go | AssertionError: GET checksum CRC32: got "", want "fq5Ozg==" |
 | `checksum_crc32` | aws-sdk-go-v2 | AssertionError: GET checksum CRC32: got "", want "fq5Ozg==" |
 | `checksum_crc32` | minio-go | AssertionError: GET checksum CRC32: got "", want "fq5Ozg==" |
-| `checksum_crc32` | minio-java | AssertionError: x-amz-checksum-crc32: expected <GUrRKA==> got <null> |
-| `checksum_crc32` | aws-sdk-js-v2 | AssertionError: ChecksumCRC32: expected "4v3zTA==", got undefined |
-| `checksum_crc32` | aws-sdk-js-v3 | AssertionError: ChecksumCRC32: expected "BMpSCQ==", got undefined |
+| `checksum_crc32` | minio-java | AssertionError: x-amz-checksum-crc32: expected <UBlyxg==> got <null> |
+| `checksum_crc32` | aws-sdk-js-v2 | AssertionError: ChecksumCRC32: expected "ZSG1og==", got undefined |
+| `checksum_crc32` | aws-sdk-js-v3 | AssertionError: ChecksumCRC32: expected "Hk68BQ==", got undefined |
 | `checksum_crc32` | aws-php | AssertionFailed: PUT response ChecksumCRC32: expected '47rIBw==', got NULL |
-| `checksum_crc32` | boto3 | AssertionFailed: ChecksumCRC32: expected '7iE9VA==', got None |
-| `checksum_crc32` | s3fs | AssertionFailed: ChecksumCRC32: expected '7OW5Pw==', got None |
+| `checksum_crc32` | boto3 | AssertionFailed: ChecksumCRC32: expected 'eQpiqw==', got None |
+| `checksum_crc32` | s3fs | AssertionFailed: ChecksumCRC32: expected 'x0RscA==', got None |
 | `checksum_crc32` | aws-ruby | AssertionFailed: PUT response checksum_crc32: expected "47rIBw==", got nil |
-| `checksum_crc32` | aws-sdk-s3 | AssertionError: checksum None != /wa9rQ== |
+| `checksum_crc32` | aws-sdk-s3 | AssertionError: checksum None != rI4zEQ== |
 | `checksum_crc32c` | aws-sdk-go | AssertionError: GET checksum CRC32C: got "", want "vVoBqw==" |
 | `checksum_crc32c` | aws-sdk-go-v2 | AssertionError: GET checksum CRC32C: got "", want "vVoBqw==" |
 | `checksum_crc32c` | minio-go | AssertionError: GET checksum CRC32C: got "", want "vVoBqw==" |
-| `checksum_crc32c` | minio-java | AssertionError: x-amz-checksum-crc32c: expected <HvkyUQ==> got <null> |
-| `checksum_crc32c` | aws-sdk-js-v2 | AssertionError: ChecksumCRC32C: expected "zeM+6A==", got undefined |
-| `checksum_crc32c` | aws-sdk-js-v3 | AssertionError: ChecksumCRC32C: expected "4s3c+w==", got undefined |
+| `checksum_crc32c` | minio-java | AssertionError: x-amz-checksum-crc32c: expected <0mFWcA==> got <null> |
+| `checksum_crc32c` | aws-sdk-js-v2 | AssertionError: ChecksumCRC32C: expected "iMRNzA==", got undefined |
+| `checksum_crc32c` | aws-sdk-js-v3 | AssertionError: ChecksumCRC32C: expected "YcXEiQ==", got undefined |
 | `checksum_crc32c` | aws-php | AssertionFailed: PUT response ChecksumCRC32C: expected 'g/kujA==', got NULL |
-| `checksum_crc32c` | boto3 | AssertionFailed: ChecksumCRC32C: expected 'uELBvQ==', got None |
-| `checksum_crc32c` | s3fs | AssertionFailed: ChecksumCRC32C: expected 'f74ssg==', got None |
+| `checksum_crc32c` | boto3 | AssertionFailed: ChecksumCRC32C: expected 'cDZfdg==', got None |
+| `checksum_crc32c` | s3fs | AssertionFailed: ChecksumCRC32C: expected 'kI3CYA==', got None |
 | `checksum_crc32c` | aws-ruby | AssertionFailed: PUT response checksum_crc32c: expected "g/kujA==", got nil |
-| `checksum_crc32c` | aws-sdk-s3 | AssertionError: checksum None != kqHcig== |
+| `checksum_crc32c` | aws-sdk-s3 | AssertionError: checksum None != Q//BwA== |
 | `checksum_sha1` | aws-sdk-go | AssertionError: GET checksum SHA1: got "", want "vFswkxBv7OkdQQIM3fyP3KUBrXk=" |
 | `checksum_sha1` | aws-sdk-go-v2 | AssertionError: GET checksum SHA1: got "", want "vFswkxBv7OkdQQIM3fyP3KUBrXk=" |
 | `checksum_sha1` | minio-go | AssertionError: GET checksum SHA1: got "", want "vFswkxBv7OkdQQIM3fyP3KUBrXk=" |
-| `checksum_sha1` | minio-java | AssertionError: x-amz-checksum-sha1: expected <B5jnJZKpSqJu6NztupFaJCyJGXc=> got <null> |
-| `checksum_sha1` | aws-sdk-js-v2 | AssertionError: ChecksumSHA1: expected "l8qdJbpHWWceFPUOCHKpp1St5SE=", got undefined |
-| `checksum_sha1` | aws-sdk-js-v3 | AssertionError: ChecksumSHA1: expected "X+x2jhyPxtgKOTOYyk94aZmd31A=", got undefined |
+| `checksum_sha1` | minio-java | AssertionError: x-amz-checksum-sha1: expected <HONS8F2sExvfDBvOraBjhb7zl5g=> got <null> |
+| `checksum_sha1` | aws-sdk-js-v2 | AssertionError: ChecksumSHA1: expected "OGXrBwU8h93/1cLc2jW2ebx4DAg=", got undefined |
+| `checksum_sha1` | aws-sdk-js-v3 | AssertionError: ChecksumSHA1: expected "vPTqS8mkJlU3FRAIUy7Y3AAM3bE=", got undefined |
 | `checksum_sha1` | aws-php | AssertionFailed: PUT response ChecksumSHA1: expected 'VEFvg6Az8vtSpXBzV2pxVmCqTSw=', got NULL |
-| `checksum_sha1` | boto3 | AssertionFailed: ChecksumSHA1: expected '/HGX6pGv44gELh+IbbhHUWztzJ8=', got None |
-| `checksum_sha1` | s3fs | AssertionFailed: ChecksumSHA1: expected 'qtVajPRi5rgNET0/o6KJwWerYRc=', got None |
+| `checksum_sha1` | boto3 | AssertionFailed: ChecksumSHA1: expected 'RQf2mlwZosneeXo0YVQ5+mbdDKU=', got None |
+| `checksum_sha1` | s3fs | AssertionFailed: ChecksumSHA1: expected 'QhAzXgK4f6dK+21r56s3YR3YGoQ=', got None |
 | `checksum_sha1` | aws-ruby | AssertionFailed: PUT response checksum_sha1: expected "VEFvg6Az8vtSpXBzV2pxVmCqTSw=", got nil |
-| `checksum_sha1` | aws-sdk-s3 | AssertionError: checksum None != 77+/kZJ5H0UDKKw7FXa7ObO9Nkw= |
+| `checksum_sha1` | aws-sdk-s3 | AssertionError: checksum None != XJW5Ce5B+m8cd1PZvPDhhgcwwcA= |
 | `checksum_sha256` | aws-sdk-go | AssertionError: GET checksum SHA256: got "", want "pEP6p9Ngvflw0+c9ajLGEGeW0lP34Yd56ZrWvtH5n2E=" |
 | `checksum_sha256` | aws-sdk-go-v2 | AssertionError: GET checksum SHA256: got "", want "pEP6p9Ngvflw0+c9ajLGEGeW0lP34Yd56ZrWvtH5n2E=" |
 | `checksum_sha256` | minio-go | AssertionError: GET checksum SHA256: got "", want "pEP6p9Ngvflw0+c9ajLGEGeW0lP34Yd56ZrWvtH5n2E=" |
-| `checksum_sha256` | minio-java | AssertionError: x-amz-checksum-sha256: expected <I2OcB2gwanLLTq4kJKBadbSX1zeErs2/IzAnO9FoIAU=> got <null> |
-| `checksum_sha256` | aws-sdk-js-v2 | AssertionError: ChecksumSHA256: expected "4HsSgmHwAlVHcDX0wIoVSsJLQ21NvOsWoDsPETdQC8E=", got undefined |
-| `checksum_sha256` | aws-sdk-js-v3 | AssertionError: ChecksumSHA256: expected "bHZOehHfYMWICIxM/0ZuzCZ5go0g84KDn7+KSUZdiko=", got undefined |
+| `checksum_sha256` | minio-java | AssertionError: x-amz-checksum-sha256: expected <Tt8Qq5AyyUbcqq3h+JQ/f/4PnbRERb5HfEpHV0/2Kg4=> got <null> |
+| `checksum_sha256` | aws-sdk-js-v2 | AssertionError: ChecksumSHA256: expected "KvQBfrEkf0kUThAq+uyXPcwxRPsVGGk98sbt2jmwb38=", got undefined |
+| `checksum_sha256` | aws-sdk-js-v3 | AssertionError: ChecksumSHA256: expected "Ry1OTe/VOscZeQWPXb5LljxMcVlema0j9SzfKT5vh5c=", got undefined |
 | `checksum_sha256` | aws-php | AssertionFailed: PUT response ChecksumSHA256: expected 'QtqiG8v6SozQ6LK/LxVwvHshEr383u5UNqjFHrzlMvQ=', got NULL |
-| `checksum_sha256` | boto3 | AssertionFailed: ChecksumSHA256: expected '4G7AqpUiX9BhcBHfCdbD6wwBbDtvslxDeiIOsBNH5rU=', got None |
-| `checksum_sha256` | s3fs | AssertionFailed: ChecksumSHA256: expected 'FG72OvzZx0FZ79TRrrECQWiDTGk9+RWYDXGvjGrlbfo=', got None |
+| `checksum_sha256` | boto3 | AssertionFailed: ChecksumSHA256: expected 'u1wxO+C//mhfAAyz90tq9to8qAbxc1sqCWcEMson18w=', got None |
+| `checksum_sha256` | s3fs | AssertionFailed: ChecksumSHA256: expected 'VU2lLji0epSBtBMW2NJW4QzCYsChcT0W98a97uWBJ34=', got None |
 | `checksum_sha256` | aws-ruby | AssertionFailed: PUT response checksum_sha256: expected "QtqiG8v6SozQ6LK/LxVwvHshEr383u5UNqjFHrzlMvQ=", got nil |
-| `checksum_sha256` | aws-sdk-s3 | AssertionError: checksum None != +XVpzdL4xzKl1xLW8nx13HytEDLmEDtpCp/ub0T0CZQ= |
+| `checksum_sha256` | aws-sdk-s3 | AssertionError: checksum None != mcdipJA1G2dK9fk1mfJD9z0O2JJF4HrXTRyTE4Rvvfs= |
 | `checksum_crc64nvme` | aws-sdk-go-v2 | AssertionError: GET checksum CRC64NVME: got "", want "JGIwLOqxo9M=" |
 | `checksum_crc64nvme` | minio-go | AssertionError: GET checksum CRC64NVME: got "", want "JGIwLOqxo9M=" |
-| `checksum_crc64nvme` | minio-java | AssertionError: x-amz-checksum-crc64nvme: expected <ITDfghgIZvg=> got <null> |
-| `checksum_crc64nvme` | aws-sdk-js-v3 | AssertionError: ChecksumCRC64NVME: expected "32JJau2qHkc=", got undefined |
+| `checksum_crc64nvme` | minio-java | AssertionError: x-amz-checksum-crc64nvme: expected <YIE7FaMKKa0=> got <null> |
+| `checksum_crc64nvme` | aws-sdk-js-v3 | AssertionError: ChecksumCRC64NVME: expected "q/rXqKJe9cI=", got undefined |
 | `checksum_crc64nvme` | aws-php | AssertionFailed: PUT response ChecksumCRC64NVME: expected 'gQ8GHjFwvI8=', got NULL |
-| `checksum_crc64nvme` | boto3 | AssertionFailed: ChecksumCRC64NVME: expected 'FhL100WSaTY=', got None |
-| `checksum_crc64nvme` | s3fs | AssertionFailed: ChecksumCRC64NVME: expected 'aTIr+W6bX5Q=', got None |
+| `checksum_crc64nvme` | boto3 | AssertionFailed: ChecksumCRC64NVME: expected 'HsrRjsYUKgI=', got None |
+| `checksum_crc64nvme` | s3fs | AssertionFailed: ChecksumCRC64NVME: expected 'ruhzh/L/qqo=', got None |
 | `checksum_crc64nvme` | aws-ruby | AssertionFailed: PUT response checksum_crc64nvme: expected "gQ8GHjFwvI8=", got nil |
-| `checksum_crc64nvme` | aws-sdk-s3 | AssertionError: checksum None != 8w3vYoGHqIk= |
+| `checksum_crc64nvme` | aws-sdk-s3 | AssertionError: checksum None != vLHk6kHwMwc= |
 | `bad_credentials` | aws-dotnet | AssertionFailed: expected SignatureDoesNotMatch/InvalidAccessKeyId/403, but the call succeeded |
 | `bad_credentials` | minio-dotnet | AssertionFailed: expected SignatureDoesNotMatch/InvalidAccessKeyId/403, but the call succeeded |
 | `bad_credentials` | aws-sdk-go | AssertionError: ListBuckets: expected error ([403] [SignatureDoesNotMatch InvalidAccessKeyId]), got success |
@@ -667,7 +667,7 @@
 | `versioning` | aws-java-v1 | AssertionError: version count: expected <2> got <0> |
 | `versioning` | minio-js | AssertionError: version count: expected 2, got 0 |
 | `versioning` | aws-sdk-s3 | HttpError: HTTP 200 service error: unhandled error: error parsing XML: encountered invalid XML root: expected ListVersionsResult but got StartEl { name: Name { prefix: "", local: "ListBucketResult" }, |
-| `object_tagging` | rust-s3 | HttpFailWithBody: {"detail":"Content-Type 'text/plain;charset=UTF-8' is not supported.","instance":"/m-rust-s3-1e81ff42/tagged","status":415,"title":"Unsupported Media Type"} (HTTP 415) |
+| `object_tagging` | rust-s3 | HttpFailWithBody: {"detail":"Content-Type 'text/plain;charset=UTF-8' is not supported.","instance":"/m-rust-s3-c1cc8651/tagged","status":415,"title":"Unsupported Media Type"} (HTTP 415) |
 
 </details>
 
@@ -724,22 +724,22 @@
 | 场景 | SDK | 错误 |
 |---|---|---|
 | `put_get_small` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `put_get_small` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DE9ACF3430) (SDK Attempt Count: 1) |
-| `put_get_small` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF94F4F8EB) (SDK Attempt Count: 1) |
-| `put_get_empty` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DE9B64F55F) (SDK Attempt Count: 1) |
-| `put_get_empty` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF95B83918) (SDK Attempt Count: 1) |
+| `put_get_small` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BB41CF572) (SDK Attempt Count: 1) |
+| `put_get_small` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CA1BDB93F) (SDK Attempt Count: 1) |
+| `put_get_empty` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BB4BB49CD) (SDK Attempt Count: 1) |
+| `put_get_empty` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CA2581F67) (SDK Attempt Count: 1) |
 | `put_get_large` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `put_get_large` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DE9D7369BC) (SDK Attempt Count: 1) |
-| `put_get_large` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF97F58BD2) (SDK Attempt Count: 1) |
+| `put_get_large` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BB68F4472) (SDK Attempt Count: 1) |
+| `put_get_large` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CB6445CF6) (SDK Attempt Count: 1) |
 | `special_keys` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `special_keys` | minio-dotnet | AssertionFailed: "a//b" missing from listing |
 | `special_keys` | aws-sdk-go | AssertionError: key "a//b" missing from list |
 | `special_keys` | aws-sdk-go-v2 | AssertionError: key "a//b" missing from list |
 | `special_keys` | gocloud-blob | AssertionError: key "a//b" missing from list |
 | `special_keys` | minio-go | AssertionError: key "a//b" missing from list |
-| `special_keys` | aws-java-v1 | AssertionError: [a//b] AmazonS3Exception: Object name contains unsupported characters. (Service: Amazon S3; Status Code: 400; Error Code: XMinioInvalidObjectName; Request ID: 18E381E05F733E00; S3 Exte |
-| `special_keys` | aws-java-v2 | AssertionError: [sp ace/üñí©ødé/a+b=c&d?e#f.txt] S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DE9DE2687F) |
-| `special_keys` | aws-java-v2-crt | AssertionError: [sp ace/üñí©ødé/a+b=c&d?e#f.txt] S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF986801AC) |
+| `special_keys` | aws-java-v1 | AssertionError: [a//b] AmazonS3Exception: Object name contains unsupported characters. (Service: Amazon S3; Status Code: 400; Error Code: XMinioInvalidObjectName; Request ID: 18E3873D42F73796; S3 Exte |
+| `special_keys` | aws-java-v2 | AssertionError: [sp ace/üñí©ødé/a+b=c&d?e#f.txt] S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BB708719E) |
+| `special_keys` | aws-java-v2-crt | AssertionError: [sp ace/üñí©ødé/a+b=c&d?e#f.txt] S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CB6B0A07F) |
 | `special_keys` | minio-java | AssertionError: [a//b] ErrorResponseException: Object name contains unsupported characters. |
 | `special_keys` | aws-sdk-js-v2 | AssertionError: key "a//b" missing from list |
 | `special_keys` | aws-sdk-js-v3 | AssertionError: key "a//b" missing from list |
@@ -760,8 +760,8 @@
 | `head_object_metadata` | gocloud-blob | AssertionError: Content-Encoding: got "", want "gzip" |
 | `head_object_metadata` | minio-go | AssertionError: Content-Encoding: got "", want "gzip" |
 | `head_object_metadata` | aws-java-v1 | AssertionError: Content-Encoding: expected <gzip> got <null> |
-| `head_object_metadata` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DE9EF0891D) (SDK Attempt Count: 1) |
-| `head_object_metadata` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF997B5BF7) (SDK Attempt Count: 1) |
+| `head_object_metadata` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BB7E7B11F) (SDK Attempt Count: 1) |
+| `head_object_metadata` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CB7A722BD) (SDK Attempt Count: 1) |
 | `head_object_metadata` | minio-java | AssertionError: Content-Encoding: expected <gzip> got <null> |
 | `head_object_metadata` | aws-sdk-js-v2 | AssertionError: ContentEncoding: expected "gzip", got undefined |
 | `head_object_metadata` | aws-sdk-js-v3 | AssertionError: ContentEncoding: expected "gzip", got undefined |
@@ -778,28 +778,28 @@
 | `head_object_metadata` | rust-s3 | AssertionError: Content-Encoding None |
 | `get_range` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `get_range` | minio-dotnet | PartialContentException: Exception of type 'Minio.Exceptions.PartialContentException' was thrown. |
-| `get_range` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DE9F452F63) (SDK Attempt Count: 1) |
-| `get_range` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF99C3E47B) (SDK Attempt Count: 1) |
+| `get_range` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BB825E035) (SDK Attempt Count: 1) |
+| `get_range` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CB7FBDA1E) (SDK Attempt Count: 1) |
 | `get_range_invalid` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `get_range_invalid` | minio-dotnet | NullReferenceException: Object reference not set to an instance of an object. |
-| `get_range_invalid` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DE9F8F4BDA) (SDK Attempt Count: 1) |
-| `get_range_invalid` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9A16D2B1) (SDK Attempt Count: 1) |
+| `get_range_invalid` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BB8850B51) (SDK Attempt Count: 1) |
+| `get_range_invalid` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CB84C27F6) (SDK Attempt Count: 1) |
 | `get_if_none_match` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `get_if_none_match` | minio-dotnet | AssertionFailed: expected 304, but the call succeeded |
-| `get_if_none_match` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA0DFD2A3) (SDK Attempt Count: 1) |
-| `get_if_none_match` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9BB9EC92) (SDK Attempt Count: 1) |
+| `get_if_none_match` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BB9D6D2A8) (SDK Attempt Count: 1) |
+| `get_if_none_match` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CB9DAF8C0) (SDK Attempt Count: 1) |
 | `get_if_match_fail` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `get_if_match_fail` | minio-dotnet | AssertionFailed: expected PreconditionFailed/412, but the call succeeded |
-| `get_if_match_fail` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA12D9053) (SDK Attempt Count: 1) |
-| `get_if_match_fail` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9C076D58) (SDK Attempt Count: 1) |
+| `get_if_match_fail` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBA452939) (SDK Attempt Count: 1) |
+| `get_if_match_fail` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBA29D1A8) (SDK Attempt Count: 1) |
 | `put_if_none_match` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `put_if_none_match` | aws-sdk-go | AssertionError: second PUT: expected error ([412] [PreconditionFailed]), got success |
 | `put_if_none_match` | aws-sdk-go-v2 | AssertionError: second PUT: expected error ([412] [PreconditionFailed]), got success |
 | `put_if_none_match` | gocloud-blob | AssertionError: second PUT: expected error ([412] [PreconditionFailed]), got success |
 | `put_if_none_match` | minio-go | AssertionError: second PUT: expected error ([412] [PreconditionFailed]), got success |
 | `put_if_none_match` | aws-java-v1 | AssertionError: PUT If-None-Match:* existing: expected error [412]/[PreconditionFailed] but call succeeded |
-| `put_if_none_match` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA170924A) (SDK Attempt Count: 1) |
-| `put_if_none_match` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9C4FE545) (SDK Attempt Count: 1) |
+| `put_if_none_match` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBA91B58B) (SDK Attempt Count: 1) |
+| `put_if_none_match` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBA95CC9D) (SDK Attempt Count: 1) |
 | `put_if_none_match` | minio-java | AssertionError: PUT If-None-Match:* existing: expected error [412]/[PreconditionFailed] but call succeeded |
 | `put_if_none_match` | aws-sdk-js-v2 | AssertionError: operation: expected error PreconditionFailed/412, but it succeeded |
 | `put_if_none_match` | aws-sdk-js-v3 | AssertionError: operation: expected error PreconditionFailed/412, but it succeeded |
@@ -814,16 +814,16 @@
 | `put_if_none_match` | opendal | AssertionError: expected 412, got success |
 | `put_if_none_match` | rust-s3 | AssertionError: expected []/[412], got success |
 | `delete_object` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `delete_object` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA1B48A1A) (SDK Attempt Count: 1) |
-| `delete_object` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9C8BAA69) (SDK Attempt Count: 1) |
+| `delete_object` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBADCDFF9) (SDK Attempt Count: 1) |
+| `delete_object` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBAE5D072) (SDK Attempt Count: 1) |
 | `delete_object` | obstore | GenericError: Generic S3 error: Got invalid DeleteObjects response: missing field `Key` |
 | `delete_object` | object_store | object_store::Error::Generic: Generic S3 error: Got invalid DeleteObjects response: missing field `Key` |
 | `delete_missing_object` | obstore | GenericError: Generic S3 error: Got invalid DeleteObjects response: missing field `Key` |
 | `delete_missing_object` | object_store | object_store::Error::Generic: Generic S3 error: Got invalid DeleteObjects response: missing field `Key` |
 | `delete_objects` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `delete_objects` | aws-sdk-go-v2 | MissingContentMD5: Missing required header for this request: Content-Md5. (HTTP 400) |
-| `delete_objects` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA26653EE) (SDK Attempt Count: 1) |
-| `delete_objects` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9D4848DA) (SDK Attempt Count: 1) |
+| `delete_objects` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBBBF9C80) (SDK Attempt Count: 1) |
+| `delete_objects` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBBDE7199) (SDK Attempt Count: 1) |
 | `delete_objects` | minio-java | XmlParserException: org.simpleframework.xml.core.ValueRequiredException: Unable to satisfy @org.simpleframework.xml.Element(name="Key", type=void.class, data=false, required=true) on field 'name' priv |
 | `delete_objects` | aws-sdk-js-v2 | AssertionError: Deleted: expected ["dm/1","dm/2","dm/3"], got [null,null,null] |
 | `delete_objects` | aws-sdk-js-v3 | MissingContentMD5: Missing required header for this request: Content-Md5. |
@@ -836,42 +836,42 @@
 | `delete_objects` | object_store | AssertionError: 1 results |
 | `delete_objects` | rust-s3 | S3Error::SerdeXml: serde xml: missing field `Key` |
 | `list_v2_basic` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `list_v2_basic` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA2C1F4E8) (SDK Attempt Count: 1) |
-| `list_v2_basic` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9D837632) (SDK Attempt Count: 1) |
+| `list_v2_basic` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBC2F7943) (SDK Attempt Count: 1) |
+| `list_v2_basic` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBC2FFBBD) (SDK Attempt Count: 1) |
 | `list_v2_prefix_delimiter` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `list_v2_prefix_delimiter` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA37C205B) (SDK Attempt Count: 1) |
-| `list_v2_prefix_delimiter` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9E29FE39) (SDK Attempt Count: 1) |
+| `list_v2_prefix_delimiter` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBCF68441) (SDK Attempt Count: 1) |
+| `list_v2_prefix_delimiter` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBCEBA525) (SDK Attempt Count: 1) |
 | `list_v2_pagination` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `list_v2_pagination` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA3E1C5B1) (SDK Attempt Count: 1) |
-| `list_v2_pagination` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9E6C9D32) (SDK Attempt Count: 1) |
+| `list_v2_pagination` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBD497719) (SDK Attempt Count: 1) |
+| `list_v2_pagination` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBD2EBEE4) (SDK Attempt Count: 1) |
 | `list_v2_start_after` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `list_v2_start_after` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA43B6231) (SDK Attempt Count: 1) |
-| `list_v2_start_after` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9EC0A5E2) (SDK Attempt Count: 1) |
+| `list_v2_start_after` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBDBE1009) (SDK Attempt Count: 1) |
+| `list_v2_start_after` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBD85ABAC) (SDK Attempt Count: 1) |
 | `list_v1` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `list_v1` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA481DBBF) (SDK Attempt Count: 1) |
-| `list_v1` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9EFFA6CE) (SDK Attempt Count: 1) |
+| `list_v1` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBE23EEF6) (SDK Attempt Count: 1) |
+| `list_v1` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBDB2FAE1) (SDK Attempt Count: 1) |
 | `copy_object` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `copy_object` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA4C7AFE4) (SDK Attempt Count: 1) |
-| `copy_object` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9F3CAB6E) (SDK Attempt Count: 1) |
+| `copy_object` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBE86619C) (SDK Attempt Count: 1) |
+| `copy_object` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBDDFF059) (SDK Attempt Count: 1) |
 | `copy_object_replace_metadata` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `copy_object_replace_metadata` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA50C555F) (SDK Attempt Count: 1) |
-| `copy_object_replace_metadata` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DF9F7AB168) (SDK Attempt Count: 1) |
+| `copy_object_replace_metadata` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BBEE28DC7) (SDK Attempt Count: 1) |
+| `copy_object_replace_metadata` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CBE032CF4) (SDK Attempt Count: 1) |
 | `multipart_upload` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `multipart_upload` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA84571B8) (SDK Attempt Count: 1) |
-| `multipart_upload` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFA2EC6868) (SDK Attempt Count: 1) |
+| `multipart_upload` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BC2350A38) (SDK Attempt Count: 1) |
+| `multipart_upload` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CC202F75A) (SDK Attempt Count: 1) |
 | `multipart_abort` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `multipart_abort` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEA93EB46E) (SDK Attempt Count: 1) |
-| `multipart_abort` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFA3C8774B) (SDK Attempt Count: 1) |
+| `multipart_abort` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BC35CF738) (SDK Attempt Count: 1) |
+| `multipart_abort` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CC2C65425) (SDK Attempt Count: 1) |
 | `multipart_list_parts` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `multipart_list_parts` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEAA7D964F) (SDK Attempt Count: 1) |
-| `multipart_list_parts` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFA54CF536) (SDK Attempt Count: 1) |
+| `multipart_list_parts` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BC4726584) (SDK Attempt Count: 1) |
+| `multipart_list_parts` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CC42D05B7) (SDK Attempt Count: 1) |
 | `multipart_too_small` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `multipart_too_small` | aws-sdk-go | AssertionError: Complete: expected error ([] [EntityTooSmall]), got success |
 | `multipart_too_small` | aws-sdk-go-v2 | AssertionError: Complete: expected error ([] [EntityTooSmall]), got success |
 | `multipart_too_small` | minio-go | AssertionError: Complete: expected error ([] [EntityTooSmall]), got success |
 | `multipart_too_small` | aws-java-v1 | AssertionError: Complete with 1 KiB parts: expected error []/[EntityTooSmall] but call succeeded |
-| `multipart_too_small` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEAB8DE4E7) (SDK Attempt Count: 1) |
-| `multipart_too_small` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFA6585C9A) (SDK Attempt Count: 1) |
+| `multipart_too_small` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BC54FCF03) (SDK Attempt Count: 1) |
+| `multipart_too_small` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CC5399CA4) (SDK Attempt Count: 1) |
 | `multipart_too_small` | minio-java | AssertionError: Complete with 1 KiB parts: expected error []/[EntityTooSmall] but call succeeded |
 | `multipart_too_small` | aws-sdk-js-v2 | AssertionError: operation: expected error EntityTooSmall, but it succeeded |
 | `multipart_too_small` | aws-sdk-js-v3 | AssertionError: operation: expected error EntityTooSmall, but it succeeded |
@@ -884,108 +884,108 @@
 | `multipart_too_small` | object_store | AssertionError: expected EntityTooSmall, got success |
 | `multipart_too_small` | rust-s3 | AssertionError: expected EntityTooSmall, got success: <?xml version="1.0" encoding="UTF-8"?> |
 | `high_level_upload` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `high_level_upload` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEB8D2543B) (SDK Attempt Count: 1) |
-| `high_level_upload` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFAB26D447) (SDK Attempt Count: 1) |
+| `high_level_upload` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BD1EDB7E2) (SDK Attempt Count: 1) |
+| `high_level_upload` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CC9EAE451) (SDK Attempt Count: 1) |
 | `presigned_get` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `presigned_get` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEB99CD2DF) (SDK Attempt Count: 1) |
-| `presigned_get` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFB47B0532) (SDK Attempt Count: 1) |
+| `presigned_get` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BD2D6B8A0) (SDK Attempt Count: 1) |
+| `presigned_get` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CD99A3952) (SDK Attempt Count: 1) |
 | `checksum_crc32` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `checksum_crc32` | aws-sdk-go | AssertionError: GET checksum CRC32: got "", want "fq5Ozg==" |
 | `checksum_crc32` | aws-sdk-go-v2 | AssertionError: GET checksum CRC32: got "", want "fq5Ozg==" |
 | `checksum_crc32` | minio-go | XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400) |
-| `checksum_crc32` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEBF5BB01F) (SDK Attempt Count: 1) |
-| `checksum_crc32` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFBAB3DC53) (SDK Attempt Count: 1) |
-| `checksum_crc32` | minio-java | AssertionError: x-amz-checksum-crc32: expected <oAIVvg==> got <null> |
-| `checksum_crc32` | aws-sdk-js-v2 | AssertionError: ChecksumCRC32: expected "VVDJaw==", got undefined |
-| `checksum_crc32` | aws-sdk-js-v3 | AssertionError: ChecksumCRC32: expected "va9kOg==", got undefined |
+| `checksum_crc32` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BD6BBACD7) (SDK Attempt Count: 1) |
+| `checksum_crc32` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CE0568CB1) (SDK Attempt Count: 1) |
+| `checksum_crc32` | minio-java | AssertionError: x-amz-checksum-crc32: expected <d5khNw==> got <null> |
+| `checksum_crc32` | aws-sdk-js-v2 | AssertionError: ChecksumCRC32: expected "L8C54w==", got undefined |
+| `checksum_crc32` | aws-sdk-js-v3 | AssertionError: ChecksumCRC32: expected "L0xJfw==", got undefined |
 | `checksum_crc32` | aws-php | AssertionFailed: PUT response ChecksumCRC32: expected '47rIBw==', got NULL |
-| `checksum_crc32` | boto3 | AssertionFailed: ChecksumCRC32: expected 'pjCA0Q==', got None |
-| `checksum_crc32` | s3fs | AssertionFailed: ChecksumCRC32: expected '+38uqQ==', got None |
+| `checksum_crc32` | boto3 | AssertionFailed: ChecksumCRC32: expected 'nd3jWQ==', got None |
+| `checksum_crc32` | s3fs | AssertionFailed: ChecksumCRC32: expected 'lAEKUw==', got None |
 | `checksum_crc32` | aws-ruby | AssertionFailed: PUT response checksum_crc32: expected "47rIBw==", got nil |
-| `checksum_crc32` | aws-sdk-s3 | AssertionError: checksum None != 7QA4hw== |
+| `checksum_crc32` | aws-sdk-s3 | AssertionError: checksum None != O6jgNw== |
 | `checksum_crc32c` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `checksum_crc32c` | aws-sdk-go | AssertionError: GET checksum CRC32C: got "", want "vVoBqw==" |
 | `checksum_crc32c` | aws-sdk-go-v2 | AssertionError: GET checksum CRC32C: got "", want "vVoBqw==" |
 | `checksum_crc32c` | minio-go | XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400) |
-| `checksum_crc32c` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEC02590BE) (SDK Attempt Count: 1) |
-| `checksum_crc32c` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFBB10871B) (SDK Attempt Count: 1) |
-| `checksum_crc32c` | minio-java | AssertionError: x-amz-checksum-crc32c: expected <tc7ajw==> got <null> |
-| `checksum_crc32c` | aws-sdk-js-v2 | AssertionError: ChecksumCRC32C: expected "C9OxDw==", got undefined |
-| `checksum_crc32c` | aws-sdk-js-v3 | AssertionError: ChecksumCRC32C: expected "CzSU/Q==", got undefined |
+| `checksum_crc32c` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BD73632F1) (SDK Attempt Count: 1) |
+| `checksum_crc32c` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CE0AFDD0A) (SDK Attempt Count: 1) |
+| `checksum_crc32c` | minio-java | AssertionError: x-amz-checksum-crc32c: expected <3d4t0g==> got <null> |
+| `checksum_crc32c` | aws-sdk-js-v2 | AssertionError: ChecksumCRC32C: expected "abKzjQ==", got undefined |
+| `checksum_crc32c` | aws-sdk-js-v3 | AssertionError: ChecksumCRC32C: expected "6+w+hQ==", got undefined |
 | `checksum_crc32c` | aws-php | AssertionFailed: PUT response ChecksumCRC32C: expected 'g/kujA==', got NULL |
-| `checksum_crc32c` | boto3 | AssertionFailed: ChecksumCRC32C: expected 't550lw==', got None |
-| `checksum_crc32c` | s3fs | AssertionFailed: ChecksumCRC32C: expected '++Z7IQ==', got None |
+| `checksum_crc32c` | boto3 | AssertionFailed: ChecksumCRC32C: expected 'zB97vg==', got None |
+| `checksum_crc32c` | s3fs | AssertionFailed: ChecksumCRC32C: expected 'iYqeTQ==', got None |
 | `checksum_crc32c` | aws-ruby | AssertionFailed: PUT response checksum_crc32c: expected "g/kujA==", got nil |
-| `checksum_crc32c` | aws-sdk-s3 | AssertionError: checksum None != 3dQPwA== |
+| `checksum_crc32c` | aws-sdk-s3 | AssertionError: checksum None != LDknQQ== |
 | `checksum_sha1` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `checksum_sha1` | aws-sdk-go | AssertionError: GET checksum SHA1: got "", want "vFswkxBv7OkdQQIM3fyP3KUBrXk=" |
 | `checksum_sha1` | aws-sdk-go-v2 | AssertionError: GET checksum SHA1: got "", want "vFswkxBv7OkdQQIM3fyP3KUBrXk=" |
 | `checksum_sha1` | minio-go | XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400) |
-| `checksum_sha1` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEC0C1BB01) (SDK Attempt Count: 1) |
-| `checksum_sha1` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFBB7B3A60) (SDK Attempt Count: 1) |
-| `checksum_sha1` | minio-java | AssertionError: x-amz-checksum-sha1: expected <yhS7Xx+KTGHnqjTZ5DHUvBvxoWA=> got <null> |
-| `checksum_sha1` | aws-sdk-js-v2 | AssertionError: ChecksumSHA1: expected "DuXhxvLbAcOWFMNs5y78YCXG6dA=", got undefined |
-| `checksum_sha1` | aws-sdk-js-v3 | AssertionError: ChecksumSHA1: expected "woTkt06INzeaiSuC6KSTphuU3PI=", got undefined |
+| `checksum_sha1` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BD796F6D3) (SDK Attempt Count: 1) |
+| `checksum_sha1` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CE109549F) (SDK Attempt Count: 1) |
+| `checksum_sha1` | minio-java | AssertionError: x-amz-checksum-sha1: expected <vGchiqr5R5HF9e7F3AoDuiFQAg4=> got <null> |
+| `checksum_sha1` | aws-sdk-js-v2 | AssertionError: ChecksumSHA1: expected "6tZpORhLqG/5IZN3RFdLfvzSdwo=", got undefined |
+| `checksum_sha1` | aws-sdk-js-v3 | AssertionError: ChecksumSHA1: expected "d3tpgppltot9LwqRk+NvvroHm14=", got undefined |
 | `checksum_sha1` | aws-php | AssertionFailed: PUT response ChecksumSHA1: expected 'VEFvg6Az8vtSpXBzV2pxVmCqTSw=', got NULL |
-| `checksum_sha1` | boto3 | AssertionFailed: ChecksumSHA1: expected 'xr9NSRGAspBqM/2kPBTUuohmbDA=', got None |
-| `checksum_sha1` | s3fs | AssertionFailed: ChecksumSHA1: expected 'LIU71Rm9JyZSYTQyHvd99vUISH0=', got None |
+| `checksum_sha1` | boto3 | AssertionFailed: ChecksumSHA1: expected 'HSZoi4SW2tiQBTzoJzRIftrPAaY=', got None |
+| `checksum_sha1` | s3fs | AssertionFailed: ChecksumSHA1: expected '9LyhgP9VJ3kGZPhMoqgMjBrjcOE=', got None |
 | `checksum_sha1` | aws-ruby | AssertionFailed: PUT response checksum_sha1: expected "VEFvg6Az8vtSpXBzV2pxVmCqTSw=", got nil |
-| `checksum_sha1` | aws-sdk-s3 | AssertionError: checksum None != ukNteJ7G+Xk3NrhkLZGJqghEIwk= |
+| `checksum_sha1` | aws-sdk-s3 | AssertionError: checksum None != /+O0RaWg9vfKD7YD9XQdgvTWaHw= |
 | `checksum_sha256` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `checksum_sha256` | aws-sdk-go | AssertionError: GET checksum SHA256: got "", want "pEP6p9Ngvflw0+c9ajLGEGeW0lP34Yd56ZrWvtH5n2E=" |
 | `checksum_sha256` | aws-sdk-go-v2 | AssertionError: GET checksum SHA256: got "", want "pEP6p9Ngvflw0+c9ajLGEGeW0lP34Yd56ZrWvtH5n2E=" |
 | `checksum_sha256` | minio-go | XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400) |
-| `checksum_sha256` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEC12DD40F) (SDK Attempt Count: 1) |
-| `checksum_sha256` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFBBE67915) (SDK Attempt Count: 1) |
-| `checksum_sha256` | minio-java | AssertionError: x-amz-checksum-sha256: expected <4+1LO1VXWRfrEl2MxpGjAMOyXI/1SFtmYHQw6oY8c6s=> got <null> |
-| `checksum_sha256` | aws-sdk-js-v2 | AssertionError: ChecksumSHA256: expected "YhnP6WSRMW602M6wwvcr9z1+odQZwYOMNIYzCtnTc8Q=", got undefined |
-| `checksum_sha256` | aws-sdk-js-v3 | AssertionError: ChecksumSHA256: expected "Qbtg6bPPrx6FDb8NJJaVx095uJiZV51184MH5i2NXig=", got undefined |
+| `checksum_sha256` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BD7F18D80) (SDK Attempt Count: 1) |
+| `checksum_sha256` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CE17B9D75) (SDK Attempt Count: 1) |
+| `checksum_sha256` | minio-java | AssertionError: x-amz-checksum-sha256: expected <oYBy5PWX9uwNSjazq95/KmVv7TqAxL6oVpHSUE/+AMQ=> got <null> |
+| `checksum_sha256` | aws-sdk-js-v2 | AssertionError: ChecksumSHA256: expected "wvxA/9lDSUkOnl3Hjf99+WCTIyty3lu9lUEvVMRRiH4=", got undefined |
+| `checksum_sha256` | aws-sdk-js-v3 | AssertionError: ChecksumSHA256: expected "Byh1lYIO03uz5XbJiSpWpTDRbnF4qLVCQBaJd369RW8=", got undefined |
 | `checksum_sha256` | aws-php | AssertionFailed: PUT response ChecksumSHA256: expected 'QtqiG8v6SozQ6LK/LxVwvHshEr383u5UNqjFHrzlMvQ=', got NULL |
-| `checksum_sha256` | boto3 | AssertionFailed: ChecksumSHA256: expected 'B2VN7BqMFIYNJbxgjEgEEsOySo30fL+CPP0A25OW9u0=', got None |
-| `checksum_sha256` | obstore | AssertionFailed: ChecksumSHA256 (verified via HeadObject): expected 'bpM4ADxf2spByWNsBRZWlZr0Cz4Zih/ecVe9WNVgRo8=', got None |
-| `checksum_sha256` | s3fs | AssertionFailed: ChecksumSHA256: expected 'pGTSDnBDsATIN8k/M/fRloiS9PydaksyaIiHOS4Pg2Q=', got None |
+| `checksum_sha256` | boto3 | AssertionFailed: ChecksumSHA256: expected 'cqDnYFyik2Kvr6OcifRMKoVtjBOVMl+33OLADGGbQ5Y=', got None |
+| `checksum_sha256` | obstore | AssertionFailed: ChecksumSHA256 (verified via HeadObject): expected 'SdVbZ1BMa9dxaKSKe+3rM71FGz9gcUhdvFoBhl6tMW8=', got None |
+| `checksum_sha256` | s3fs | AssertionFailed: ChecksumSHA256: expected 'dh7hcYnIg6Ik21DfJ15YO00yFWfcl+2kfcn2OqtUt54=', got None |
 | `checksum_sha256` | aws-ruby | AssertionFailed: PUT response checksum_sha256: expected "QtqiG8v6SozQ6LK/LxVwvHshEr383u5UNqjFHrzlMvQ=", got nil |
-| `checksum_sha256` | aws-sdk-s3 | AssertionError: checksum None != ZAsQos2FbefCp3GNI6IHO/RdA5j2glDqTQbw41IuoIY= |
+| `checksum_sha256` | aws-sdk-s3 | AssertionError: checksum None != EyCJVelTWazxgtXBzr0yNJpC2enCcs6ELICruhDuVzw= |
 | `checksum_crc64nvme` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
 | `checksum_crc64nvme` | aws-sdk-go-v2 | AssertionError: GET checksum CRC64NVME: got "", want "JGIwLOqxo9M=" |
 | `checksum_crc64nvme` | minio-go | XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400) |
-| `checksum_crc64nvme` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEC659EB46) (SDK Attempt Count: 1) |
-| `checksum_crc64nvme` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFBC3CF45F) (SDK Attempt Count: 1) |
-| `checksum_crc64nvme` | minio-java | AssertionError: x-amz-checksum-crc64nvme: expected <iEj27vkA6O0=> got <null> |
-| `checksum_crc64nvme` | aws-sdk-js-v3 | AssertionError: ChecksumCRC64NVME: expected "Ngx80eKhXUo=", got undefined |
+| `checksum_crc64nvme` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BDE340B9F) (SDK Attempt Count: 1) |
+| `checksum_crc64nvme` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CE1B2803F) (SDK Attempt Count: 1) |
+| `checksum_crc64nvme` | minio-java | AssertionError: x-amz-checksum-crc64nvme: expected <pkpTBQIwVQY=> got <null> |
+| `checksum_crc64nvme` | aws-sdk-js-v3 | AssertionError: ChecksumCRC64NVME: expected "x4rmNKxVEOU=", got undefined |
 | `checksum_crc64nvme` | aws-php | AssertionFailed: PUT response ChecksumCRC64NVME: expected 'gQ8GHjFwvI8=', got NULL |
-| `checksum_crc64nvme` | boto3 | AssertionFailed: ChecksumCRC64NVME: expected '8km1svMcNI8=', got None |
-| `checksum_crc64nvme` | obstore | AssertionFailed: ChecksumCRC64NVME (verified via HeadObject): expected 'zeS8xOq1lRA=', got None |
-| `checksum_crc64nvme` | s3fs | AssertionFailed: ChecksumCRC64NVME: expected '7CwYZrNAFXo=', got None |
+| `checksum_crc64nvme` | boto3 | AssertionFailed: ChecksumCRC64NVME: expected 'MkvfuIYzuKk=', got None |
+| `checksum_crc64nvme` | obstore | AssertionFailed: ChecksumCRC64NVME (verified via HeadObject): expected 'o/EelpYN23Y=', got None |
+| `checksum_crc64nvme` | s3fs | AssertionFailed: ChecksumCRC64NVME: expected 'VObQFEEF1lk=', got None |
 | `checksum_crc64nvme` | aws-ruby | AssertionFailed: PUT response checksum_crc64nvme: expected "gQ8GHjFwvI8=", got nil |
-| `checksum_crc64nvme` | aws-sdk-s3 | AssertionError: checksum None != 3bcRay42faM= |
+| `checksum_crc64nvme` | aws-sdk-s3 | AssertionError: checksum None != Wce7qsVLEIc= |
 | `delete_bucket_not_empty` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `delete_bucket_not_empty` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEC79F94CB) (SDK Attempt Count: 1) |
-| `delete_bucket_not_empty` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFBDFE0A50) (SDK Attempt Count: 1) |
+| `delete_bucket_not_empty` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BDF63F07B) (SDK Attempt Count: 1) |
+| `delete_bucket_not_empty` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CE2B26372) (SDK Attempt Count: 1) |
 | `versioning` | aws-dotnet | AmazonS3Exception: NotImplemented (501): A header you provided implies functionality that is not implemented |
 | `versioning` | minio-dotnet | NotImplementedException: A header you provided implies functionality that is not implemented |
 | `versioning` | aws-sdk-go | NotImplemented: A header you provided implies functionality that is not implemented (HTTP 501) |
 | `versioning` | aws-sdk-go-v2 | NotImplemented: A header you provided implies functionality that is not implemented (HTTP 501) |
 | `versioning` | minio-go | NotImplemented: A header you provided implies functionality that is not implemented (HTTP 501) |
-| `versioning` | aws-java-v1 | AmazonS3Exception: A header you provided implies functionality that is not implemented (Service: Amazon S3; Status Code: 501; Error Code: NotImplemented; Request ID: 18E381E0B3E87745; S3 Extended Requ |
-| `versioning` | aws-java-v2 | S3Exception: A header you provided implies functionality that is not implemented (Service: S3, Status Code: 501, Request ID: 18E381DEC8A85C0B) (SDK Attempt Count: 1) |
-| `versioning` | aws-java-v2-crt | S3Exception: A header you provided implies functionality that is not implemented (Service: S3, Status Code: 501, Request ID: 18E381DFBEE77C3B) (SDK Attempt Count: 1) |
+| `versioning` | aws-java-v1 | AmazonS3Exception: A header you provided implies functionality that is not implemented (Service: Amazon S3; Status Code: 501; Error Code: NotImplemented; Request ID: 18E3873DA0AC022E; S3 Extended Requ |
+| `versioning` | aws-java-v2 | S3Exception: A header you provided implies functionality that is not implemented (Service: S3, Status Code: 501, Request ID: 18E3873BE0497BCA) (SDK Attempt Count: 1) |
+| `versioning` | aws-java-v2-crt | S3Exception: A header you provided implies functionality that is not implemented (Service: S3, Status Code: 501, Request ID: 18E3873CE3B03D24) (SDK Attempt Count: 1) |
 | `versioning` | minio-java | ErrorResponseException: A header you provided implies functionality that is not implemented |
 | `versioning` | aws-sdk-js-v2 | NotImplemented: A header you provided implies functionality that is not implemented |
 | `versioning` | aws-sdk-js-v3 | NotImplemented: A header you provided implies functionality that is not implemented |
 | `versioning` | minio-js | S3Error(NotImplemented): A header you provided implies functionality that is not implemented |
 | `versioning` | aws-php | S3Exception: NotImplemented (501): A header you provided implies functionality that is not implemented |
 | `versioning` | boto3 | ClientError: An error occurred (NotImplemented) when calling the PutBucketVersioning operation: A header you provided implies functionality that is not implemented |
-| `versioning` | minio-py | S3Error: S3 operation failed; code: NotImplemented, message: A header you provided implies functionality that is not implemented, resource: /m-miniopy-ccdf5ea0-v, request_id: 18E381DCA8DE956F, host_id |
+| `versioning` | minio-py | S3Error: S3 operation failed; code: NotImplemented, message: A header you provided implies functionality that is not implemented, resource: /m-miniopy-6198c06d-v, request_id: 18E38738E34C7A35, host_id |
 | `versioning` | s3fs | OSError: [Errno 38] A header you provided implies functionality that is not implemented |
 | `versioning` | aws-ruby | NotImplemented: (501) A header you provided implies functionality that is not implemented |
 | `versioning` | aws-sdk-s3 | NotImplemented: A header you provided implies functionality that is not implemented (HTTP 501) |
 | `object_tagging` | aws-dotnet | AmazonS3Exception: XAmzContentSHA256Mismatch (400): The provided 'x-amz-content-sha256' header does not match what was computed. |
-| `object_tagging` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DEC8F6C98E) (SDK Attempt Count: 1) |
-| `object_tagging` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E381DFBF23A5BA) (SDK Attempt Count: 1) |
+| `object_tagging` | aws-java-v2 | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873BE09C7B8A) (SDK Attempt Count: 1) |
+| `object_tagging` | aws-java-v2-crt | S3Exception: The provided 'x-amz-content-sha256' header does not match what was computed. (Service: S3, Status Code: 400, Request ID: 18E3873CE3F11DF5) (SDK Attempt Count: 1) |
 | `delete_bucket` | aws-dotnet | AmazonS3Exception: MissingContentMD5 (400): Missing required header for this request: Content-Md5. |
-| `delete_bucket` | aws-java-v2 | S3Exception: Missing required header for this request: Content-Md5. (Service: S3, Status Code: 400, Request ID: 18E381DECAC11872) (SDK Attempt Count: 1) |
-| `delete_bucket` | aws-java-v2-crt | S3Exception: Missing required header for this request: Content-Md5. (Service: S3, Status Code: 400, Request ID: 18E381DFC0876D25) (SDK Attempt Count: 1) |
+| `delete_bucket` | aws-java-v2 | S3Exception: Missing required header for this request: Content-Md5. (Service: S3, Status Code: 400, Request ID: 18E3873BE20F98BD) (SDK Attempt Count: 1) |
+| `delete_bucket` | aws-java-v2-crt | S3Exception: Missing required header for this request: Content-Md5. (Service: S3, Status Code: 400, Request ID: 18E3873CE5426A17) (SDK Attempt Count: 1) |
 | `delete_bucket` | minio-java | XmlParserException: org.simpleframework.xml.core.ValueRequiredException: Unable to satisfy @org.simpleframework.xml.Element(name="Key", type=void.class, data=false, required=true) on field 'name' priv |
 | `delete_bucket` | aws-sdk-js-v3 | MissingContentMD5: Missing required header for this request: Content-Md5. |
 | `delete_bucket` | aws-php | S3Exception: MissingContentMD5 (400): Missing required header for this request: Content-Md5. |

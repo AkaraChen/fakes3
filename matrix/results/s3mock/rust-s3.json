@@ -7,8 +7,8 @@
     {
       "scenario": "create_bucket",
       "status": "fail",
-      "ms": 49.9,
-      "error": "HttpFailWithBody: {\"detail\":\"Content-Type 'text/plain;charset=UTF-8' is not supported.\",\"instance\":\"/m-rust-s3-1e81ff42\",\"status\":415,\"title\":\"Unsupported Media Type\"} (HTTP 415)"
+      "ms": 48.1,
+      "error": "HttpFailWithBody: {\"detail\":\"Content-Type 'text/plain;charset=UTF-8' is not supported.\",\"instance\":\"/m-rust-s3-c1cc8651\",\"status\":415,\"title\":\"Unsupported Media Type\"} (HTTP 415)"
     },
     {
       "scenario": "head_bucket",
@@ -23,117 +23,117 @@
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 13.57
+      "ms": 25.99
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 4.7
+      "ms": 2.44
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 3.33
+      "ms": 2.76
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 80.26
+      "ms": 71.75
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 15.96
+      "ms": 13.27
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 4.14
+      "ms": 2.49
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 8.46
+      "ms": 3.83
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 3.33
+      "ms": 2.21
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.99
+      "ms": 0.69
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 2.88
+      "ms": 3.19
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 5.2
+      "ms": 3.32
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 15.95
+      "ms": 4.33
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 5.02
+      "ms": 3.22
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.89
+      "ms": 0.44
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 7.46
+      "ms": 7.84
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 4.96
+      "ms": 4.42
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 26.17
+      "ms": 42.2
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 20.7
+      "ms": 20.51
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 9.13
+      "ms": 5.31
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 9.76
+      "ms": 7.41
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 6.49
+      "ms": 5.61
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 5.79
+      "ms": 5.35
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 119.19
+      "ms": 110.93
     },
     {
       "scenario": "multipart_abort",
@@ -148,22 +148,22 @@
     {
       "scenario": "multipart_too_small",
       "status": "pass",
-      "ms": 10.96
+      "ms": 10.74
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 199.82
+      "ms": 190.96
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 7.49
+      "ms": 6.02
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 5.48
+      "ms": 4.92
     },
     {
       "scenario": "checksum_crc32",
@@ -198,13 +198,13 @@
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 13.15,
+      "ms": 25.87,
       "error": "AssertionError: expected [\"SignatureDoesNotMatch\", \"InvalidAccessKeyId\"]/[403], got success"
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 4.02
+      "ms": 3.41
     },
     {
       "scenario": "versioning",
@@ -214,13 +214,13 @@
     {
       "scenario": "object_tagging",
       "status": "fail",
-      "ms": 5.18,
-      "error": "HttpFailWithBody: {\"detail\":\"Content-Type 'text/plain;charset=UTF-8' is not supported.\",\"instance\":\"/m-rust-s3-1e81ff42/tagged\",\"status\":415,\"title\":\"Unsupported Media Type\"} (HTTP 415)"
+      "ms": 3.26,
+      "error": "HttpFailWithBody: {\"detail\":\"Content-Type 'text/plain;charset=UTF-8' is not supported.\",\"instance\":\"/m-rust-s3-c1cc8651/tagged\",\"status\":415,\"title\":\"Unsupported Media Type\"} (HTTP 415)"
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 38.17
+      "ms": 44.68
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "sdk": "bun-s3",
   "lang": "js",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "server": "minio",
   "results": [
     {
@@ -27,22 +27,22 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 4.2
+      "ms": 5.6
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 1.9
+      "ms": 1.7
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 62.5
+      "ms": 65.5
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 7.7,
+      "ms": 3.9,
       "error": "S3Error(XMinioInvalidObjectName): Object name contains unsupported characters."
     },
     {
@@ -53,17 +53,17 @@
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 3.6
+      "ms": 2.3
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 2.9
+      "ms": 2.1
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.8
+      "ms": 5.3
     },
     {
       "scenario": "get_if_none_match",
@@ -83,12 +83,12 @@
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 2.4
+      "ms": 3.8
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.8
+      "ms": 0.5
     },
     {
       "scenario": "delete_objects",
@@ -98,22 +98,22 @@
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 5.9
+      "ms": 3.7
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 13
+      "ms": 5.5
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 11.5
+      "ms": 13.5
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 5.2
+      "ms": 8.3
     },
     {
       "scenario": "list_v1",
@@ -133,7 +133,7 @@
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 68.9
+      "ms": 76.1
     },
     {
       "scenario": "multipart_abort",
@@ -153,17 +153,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 126.2
+      "ms": 142.6
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 2.5
+      "ms": 2.7
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 3.1
+      "ms": 6.5
     },
     {
       "scenario": "checksum_crc32",
@@ -198,7 +198,7 @@
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 2
+      "ms": 1.1
     },
     {
       "scenario": "delete_bucket_not_empty",

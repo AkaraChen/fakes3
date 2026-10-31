@@ -27,83 +27,83 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 29.6
+      "ms": 407.2
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 28.7
+      "ms": 31.2
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 293.5
+      "ms": 156.9
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 18.9,
+      "ms": 21.2,
       "error": "ValueError: Could not parse path: Path \"a//b\" contained empty path segment"
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 15.5
+      "ms": 25.9
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 29.6
+      "ms": 35.2
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 41.5
+      "ms": 35.9
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 3.5
+      "ms": 10.6
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 20.1
+      "ms": 25.0
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 15.0
+      "ms": 122.8
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 20.7
+      "ms": 18.8
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 82.0
+      "ms": 171.8
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 4.0
+      "ms": 13.1
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 19.8
+      "ms": 41.5
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 23.0
+      "ms": 40.4
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 18.5
+      "ms": 31.9
     },
     {
       "scenario": "list_v2_pagination",
@@ -113,7 +113,7 @@
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 168.5
+      "ms": 62.7
     },
     {
       "scenario": "list_v1",
@@ -123,7 +123,7 @@
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 45.2
+      "ms": 14.0
     },
     {
       "scenario": "copy_object_replace_metadata",
@@ -133,7 +133,7 @@
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 170.3
+      "ms": 505.9
     },
     {
       "scenario": "multipart_abort",
@@ -153,17 +153,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 213.5
+      "ms": 426.2
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 13.6
+      "ms": 118.8
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 21.1
+      "ms": 19.5
     },
     {
       "scenario": "checksum_crc32",
@@ -183,12 +183,12 @@
     {
       "scenario": "checksum_sha256",
       "status": "pass",
-      "ms": 171.6
+      "ms": 169.2
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "pass",
-      "ms": 95.4
+      "ms": 127.3
     },
     {
       "scenario": "content_md5_bad",
@@ -198,7 +198,7 @@
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 16.9,
+      "ms": 24.4,
       "error": "AssertionFailed: operation: expected error PermissionDeniedError/UnauthenticatedError/BaseError, but it succeeded"
     },
     {

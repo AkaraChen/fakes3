@@ -7,227 +7,227 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 6.228
+      "ms": 4.458
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 0.731
+      "ms": 0.369
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 0.905
+      "ms": 0.437
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 1.289
+      "ms": 1.678
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 6.396
+      "ms": 7.241
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 3.559
+      "ms": 3.547
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 65.825
+      "ms": 58.13
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 19.524,
+      "ms": 18.116,
       "error": "AssertionError: key \"a//b\" missing from list"
     },
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 3.935,
+      "ms": 4.239,
       "error": "AssertionError: Content-Encoding: got \"\", want \"gzip\""
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 6.298
+      "ms": 5.968
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 3.812
+      "ms": 3.631
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 0.683
+      "ms": 0.431
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 3.942
+      "ms": 5.307
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 3.881
+      "ms": 3.726
     },
     {
       "scenario": "put_if_none_match",
       "status": "fail",
-      "ms": 5.722,
+      "ms": 5.32,
       "error": "AssertionError: second PUT: expected error ([412] [PreconditionFailed]), got success"
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 4.782
+      "ms": 4.959
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 0.614
+      "ms": 0.443
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 14.345
+      "ms": 11.992
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 11.658
+      "ms": 9.998
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 22.586
+      "ms": 16.666
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 82.058
+      "ms": 69.7
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 17.702
+      "ms": 17.381
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 17.172
+      "ms": 19.085
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 8.144
+      "ms": 7.956
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 8.736
+      "ms": 7.181
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 91.097
+      "ms": 82.002
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 8.768
+      "ms": 7.817
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 49.897
+      "ms": 40.086
     },
     {
       "scenario": "multipart_too_small",
       "status": "fail",
-      "ms": 12.874,
+      "ms": 11.112,
       "error": "AssertionError: Complete: expected error ([] [EntityTooSmall]), got success"
     },
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 119.783
+      "ms": 117.061
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 8.357
+      "ms": 6.308
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 5.301
+      "ms": 4.209
     },
     {
       "scenario": "checksum_crc32",
       "status": "fail",
-      "ms": 1.04,
+      "ms": 0.819,
       "error": "XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400)"
     },
     {
       "scenario": "checksum_crc32c",
       "status": "fail",
-      "ms": 0.653,
+      "ms": 0.535,
       "error": "XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400)"
     },
     {
       "scenario": "checksum_sha1",
       "status": "fail",
-      "ms": 0.397,
+      "ms": 0.414,
       "error": "XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400)"
     },
     {
       "scenario": "checksum_sha256",
       "status": "fail",
-      "ms": 0.503,
+      "ms": 0.382,
       "error": "XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400)"
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "fail",
-      "ms": 0.624,
+      "ms": 0.416,
       "error": "XAmzContentSHA256Mismatch: The provided 'x-amz-content-sha256' header does not match what was computed. (HTTP 400)"
     },
     {
       "scenario": "content_md5_bad",
       "status": "pass",
-      "ms": 3.425
+      "ms": 2.734
     },
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 0.892
+      "ms": 2.611
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 5.408
+      "ms": 4.629
     },
     {
       "scenario": "versioning",
       "status": "fail",
-      "ms": 6.101,
+      "ms": 3.703,
       "error": "NotImplemented: A header you provided implies functionality that is not implemented (HTTP 501)"
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 6.853
+      "ms": 4.927
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 28.421
+      "ms": 29.842
     }
   ]
 }

@@ -12,12 +12,12 @@
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 1.213
+      "ms": 1.493
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 1.116
+      "ms": 1.242
     },
     {
       "scenario": "list_buckets",
@@ -27,63 +27,63 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 3.372
+      "ms": 6.476
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 2.297
+      "ms": 3.724
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 102.543
+      "ms": 96.332
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 11.402
+      "ms": 11.525
     },
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 3.069,
+      "ms": 2.779,
       "error": "AssertionError: Content-Type: got \"text/x-matrix;charset=utf-8\", want \"text/x-matrix; charset=utf-8\""
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 4.378
+      "ms": 4.555
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 2.614
+      "ms": 2.818
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 1.27
+      "ms": 0.961
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 3.095
+      "ms": 5.248
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 2.18
+      "ms": 3.355
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 2.524
+      "ms": 5.057
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 3.654
+      "ms": 4.342
     },
     {
       "scenario": "delete_missing_object",
@@ -98,37 +98,37 @@
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 6.747
+      "ms": 5.093
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 8.452
+      "ms": 7.503
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 29.105
+      "ms": 42.109
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 6.678
+      "ms": 6.921
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 7.036
+      "ms": 8.624
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 4.436
+      "ms": 5.355
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "fail",
-      "ms": 3.833,
+      "ms": 6.519,
       "error": "AssertionError: Content-Type: got \"text/x-old\", want \"text/x-new\""
     },
     {
@@ -154,18 +154,18 @@
     {
       "scenario": "high_level_upload",
       "status": "fail",
-      "ms": 116.618,
+      "ms": 118.347,
       "error": "BadRequest: The upload was created using a crc32 checksum. The complete request must include the checksum for each part. It was missing for part 1 in the request. (HTTP 400)"
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 3.267
+      "ms": 3.591
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 2.399
+      "ms": 2.477
     },
     {
       "scenario": "checksum_crc32",
@@ -200,7 +200,7 @@
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 2.236,
+      "ms": 2.488,
       "error": "AssertionError: List: expected error ([403] [SignatureDoesNotMatch InvalidAccessKeyId]), got success"
     },
     {

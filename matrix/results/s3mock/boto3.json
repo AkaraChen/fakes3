@@ -7,47 +7,47 @@
     {
       "scenario": "create_bucket",
       "status": "pass",
-      "ms": 11.0
+      "ms": 201.3
     },
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 210.2
+      "ms": 108.5
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 8.6
+      "ms": 12.3
     },
     {
       "scenario": "list_buckets",
       "status": "pass",
-      "ms": 7.0
+      "ms": 10.3
     },
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 14.9
+      "ms": 120.1
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 13.1
+      "ms": 32.9
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 92.2
+      "ms": 168.5
     },
     {
       "scenario": "special_keys",
       "status": "pass",
-      "ms": 68.4
+      "ms": 234.3
     },
     {
       "scenario": "head_object_metadata",
       "status": "pass",
-      "ms": 17.2
+      "ms": 34.7
     },
     {
       "scenario": "get_range",
@@ -57,175 +57,175 @@
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 15.3
+      "ms": 16.5
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 5.0
+      "ms": 6.2
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 17.2
+      "ms": 9.6
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 13.8
+      "ms": 19.4
     },
     {
       "scenario": "put_if_none_match",
       "status": "pass",
-      "ms": 20.1
+      "ms": 32.0
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 18.8
+      "ms": 19.8
     },
     {
       "scenario": "delete_missing_object",
       "status": "pass",
-      "ms": 9.5
+      "ms": 6.8
     },
     {
       "scenario": "delete_objects",
       "status": "pass",
-      "ms": 151.7
+      "ms": 50.5
     },
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 35.7
+      "ms": 45.3
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 33.4
+      "ms": 51.4
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 249.6
+      "ms": 335.0
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 97.9
+      "ms": 75.8
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 69.8
+      "ms": 53.8
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 26.2
+      "ms": 35.3
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "fail",
-      "ms": 161.6,
+      "ms": 18.0,
       "error": "AssertionFailed: ContentType: expected 'application/x-new', got 'application/x-old'"
     },
     {
       "scenario": "multipart_upload",
       "status": "pass",
-      "ms": 158.8
+      "ms": 314.4
     },
     {
       "scenario": "multipart_abort",
       "status": "pass",
-      "ms": 28.9
+      "ms": 33.6
     },
     {
       "scenario": "multipart_list_parts",
       "status": "pass",
-      "ms": 73.6
+      "ms": 143.3
     },
     {
       "scenario": "multipart_too_small",
       "status": "pass",
-      "ms": 34.9
+      "ms": 162.5
     },
     {
       "scenario": "high_level_upload",
       "status": "fail",
-      "ms": 328.2,
+      "ms": 301.8,
       "error": "ClientError: An error occurred (BadRequest) when calling the CompleteMultipartUpload operation: The upload was created using a crc32 checksum. The complete request must include the checksum for each part. It was missing for part 1 in the request."
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 10.9
+      "ms": 42.2
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 10.4
+      "ms": 16.1
     },
     {
       "scenario": "checksum_crc32",
       "status": "fail",
-      "ms": 9.6,
-      "error": "AssertionFailed: ChecksumCRC32: expected '7iE9VA==', got None"
+      "ms": 18.9,
+      "error": "AssertionFailed: ChecksumCRC32: expected 'eQpiqw==', got None"
     },
     {
       "scenario": "checksum_crc32c",
       "status": "fail",
-      "ms": 10.2,
-      "error": "AssertionFailed: ChecksumCRC32C: expected 'uELBvQ==', got None"
+      "ms": 15.8,
+      "error": "AssertionFailed: ChecksumCRC32C: expected 'cDZfdg==', got None"
     },
     {
       "scenario": "checksum_sha1",
       "status": "fail",
-      "ms": 11.0,
-      "error": "AssertionFailed: ChecksumSHA1: expected '/HGX6pGv44gELh+IbbhHUWztzJ8=', got None"
+      "ms": 20.6,
+      "error": "AssertionFailed: ChecksumSHA1: expected 'RQf2mlwZosneeXo0YVQ5+mbdDKU=', got None"
     },
     {
       "scenario": "checksum_sha256",
       "status": "fail",
-      "ms": 8.5,
-      "error": "AssertionFailed: ChecksumSHA256: expected '4G7AqpUiX9BhcBHfCdbD6wwBbDtvslxDeiIOsBNH5rU=', got None"
+      "ms": 14.3,
+      "error": "AssertionFailed: ChecksumSHA256: expected 'u1wxO+C//mhfAAyz90tq9to8qAbxc1sqCWcEMson18w=', got None"
     },
     {
       "scenario": "checksum_crc64nvme",
       "status": "fail",
-      "ms": 9.0,
-      "error": "AssertionFailed: ChecksumCRC64NVME: expected 'FhL100WSaTY=', got None"
+      "ms": 26.5,
+      "error": "AssertionFailed: ChecksumCRC64NVME: expected 'HsrRjsYUKgI=', got None"
     },
     {
       "scenario": "content_md5_bad",
       "status": "pass",
-      "ms": 3.9
+      "ms": 6.4
     },
     {
       "scenario": "bad_credentials",
       "status": "fail",
-      "ms": 10.9,
+      "ms": 13.2,
       "error": "AssertionFailed: operation: expected error SignatureDoesNotMatch/InvalidAccessKeyId/403, but it succeeded"
     },
     {
       "scenario": "delete_bucket_not_empty",
       "status": "pass",
-      "ms": 9.1
+      "ms": 15.5
     },
     {
       "scenario": "versioning",
       "status": "pass",
-      "ms": 28.6
+      "ms": 192.5
     },
     {
       "scenario": "object_tagging",
       "status": "pass",
-      "ms": 17.5
+      "ms": 51.4
     },
     {
       "scenario": "delete_bucket",
       "status": "pass",
-      "ms": 37.7
+      "ms": 72.1
     }
   ]
 }

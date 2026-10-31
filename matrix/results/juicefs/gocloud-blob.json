@@ -12,12 +12,12 @@
     {
       "scenario": "head_bucket",
       "status": "pass",
-      "ms": 1.771
+      "ms": 1.79
     },
     {
       "scenario": "head_bucket_missing",
       "status": "pass",
-      "ms": 1.278
+      "ms": 1.335
     },
     {
       "scenario": "list_buckets",
@@ -27,65 +27,65 @@
     {
       "scenario": "put_get_small",
       "status": "pass",
-      "ms": 10.033
+      "ms": 8.877
     },
     {
       "scenario": "put_get_empty",
       "status": "pass",
-      "ms": 4.763
+      "ms": 4.165
     },
     {
       "scenario": "put_get_large",
       "status": "pass",
-      "ms": 100.172
+      "ms": 90.054
     },
     {
       "scenario": "special_keys",
       "status": "fail",
-      "ms": 22.712,
+      "ms": 17.79,
       "error": "AssertionError: key \"a//b\" missing from list"
     },
     {
       "scenario": "head_object_metadata",
       "status": "fail",
-      "ms": 5.283,
+      "ms": 5.436,
       "error": "AssertionError: Content-Encoding: got \"\", want \"gzip\""
     },
     {
       "scenario": "get_range",
       "status": "pass",
-      "ms": 7.948
+      "ms": 9.739
     },
     {
       "scenario": "get_range_invalid",
       "status": "pass",
-      "ms": 5.488
+      "ms": 4.547
     },
     {
       "scenario": "get_missing_key",
       "status": "pass",
-      "ms": 1.28
+      "ms": 0.846
     },
     {
       "scenario": "get_if_none_match",
       "status": "pass",
-      "ms": 6.723
+      "ms": 4.115
     },
     {
       "scenario": "get_if_match_fail",
       "status": "pass",
-      "ms": 5.241
+      "ms": 5.935
     },
     {
       "scenario": "put_if_none_match",
       "status": "fail",
-      "ms": 7.252,
+      "ms": 7.425,
       "error": "AssertionError: second PUT: expected error ([412] [PreconditionFailed]), got success"
     },
     {
       "scenario": "delete_object",
       "status": "pass",
-      "ms": 7.8
+      "ms": 6.738
     },
     {
       "scenario": "delete_missing_object",
@@ -100,37 +100,37 @@
     {
       "scenario": "list_v2_basic",
       "status": "pass",
-      "ms": 12.808
+      "ms": 11.53
     },
     {
       "scenario": "list_v2_prefix_delimiter",
       "status": "pass",
-      "ms": 24.414
+      "ms": 21.318
     },
     {
       "scenario": "list_v2_pagination",
       "status": "pass",
-      "ms": 100.948
+      "ms": 80.143
     },
     {
       "scenario": "list_v2_start_after",
       "status": "pass",
-      "ms": 22.58
+      "ms": 18.81
     },
     {
       "scenario": "list_v1",
       "status": "pass",
-      "ms": 21.593
+      "ms": 19.66
     },
     {
       "scenario": "copy_object",
       "status": "pass",
-      "ms": 11.444
+      "ms": 10.555
     },
     {
       "scenario": "copy_object_replace_metadata",
       "status": "pass",
-      "ms": 11.485
+      "ms": 9.963
     },
     {
       "scenario": "multipart_upload",
@@ -155,17 +155,17 @@
     {
       "scenario": "high_level_upload",
       "status": "pass",
-      "ms": 130.387
+      "ms": 125.556
     },
     {
       "scenario": "presigned_get",
       "status": "pass",
-      "ms": 8.108
+      "ms": 7.915
     },
     {
       "scenario": "presigned_put",
       "status": "pass",
-      "ms": 5.27
+      "ms": 4.705
     },
     {
       "scenario": "checksum_crc32",
@@ -200,7 +200,7 @@
     {
       "scenario": "bad_credentials",
       "status": "pass",
-      "ms": 1.008
+      "ms": 1.214
     },
     {
       "scenario": "delete_bucket_not_empty",
