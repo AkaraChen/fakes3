@@ -4,6 +4,9 @@
 #
 #   docker build -t fakes3 .
 #   docker run --rm -p 9000:9000 fakes3
+#
+# Signatures are not verified by default (any credentials work); `-e FAKES3_AUTH=1` verifies them
+# against FAKES3_ACCESS_KEY / FAKES3_SECRET_KEY.
 
 FROM rust:1-alpine AS build
 RUN apk add --no-cache musl-dev perl make linux-headers

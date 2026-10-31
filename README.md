@@ -23,7 +23,7 @@ cargo build --release
 ./target/release/fakes3 --port 0      # 0 表示随机选一个空闲端口，实际地址会打印到 stdout
 ```
 
-客户端按 path-style 寻址连接，默认凭证是 `fakes3` / `fakes3secret`：
+客户端按 path-style 寻址连接。默认任意凭证都可以（不校验签名，见[认证模式](#认证模式)）；加 `--auth` 后必须用配置的凭证，默认是 `fakes3` / `fakes3secret`：
 
 ```python
 import boto3
@@ -62,7 +62,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3:latest
 
 不需要专门的 Testcontainers 模块：通用容器（generic container）加一个等待策略就够了。
 暴露 9000 端口，等 stdout 里出现 `http://`（或者等端口监听），然后用映射出来的主机和端口作为 endpoint。
-客户端用 path-style 寻址，默认凭证 `fakes3` / `fakes3secret`。
+客户端用 path-style 寻址，凭证随意（默认不校验签名；设置环境变量 `FAKES3_AUTH=1` 后必须用 `fakes3` / `fakes3secret`，见[认证模式](#认证模式)）。
 
 Python（[testcontainers-python](https://github.com/testcontainers/testcontainers-python)）：
 
@@ -180,8 +180,8 @@ await server.stop();
 |---|---|---|
 | `host` | `127.0.0.1` | 监听地址 |
 | `port` | `0` | 监听端口，`0` 表示随机端口 |
-| `accessKey` / `secretKey` | `fakes3` / `fakes3secret` | 访问凭证 |
-| `noAuth` | `false` | 不校验签名：用任意 access key 和 secret 签名的请求都接受，未签名的也接受（见下面“`--no-auth`”） |
+| `accessKey` / `secretKey` | `fakes3` / `fakes3secret` | 访问凭证，只在 `auth: true` 时用于校验 |
+| `auth` | `false` | 校验签名。默认不校验：任意 access key 和 secret 签名的请求都接受（身份是 owner），未签名的是匿名请求（见[认证模式](#认证模式)）。原来的 `noAuth` 选项已删除，它现在就是默认行为 |
 | `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
 | `requestLog` / `requestLogCapacity` | `true` / `10000` | 是否记录 S3 请求（见下面的控制面），以及最多保留多少条 |
 | `domains` | 无 | 虚拟主机寻址的基础域名（`<bucket>.<domain>`），path-style 始终可用 |
@@ -231,27 +231,46 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 |---|---|---|---|
 | `--host` | `FAKES3_HOST` | `127.0.0.1`（镜像里是 `0.0.0.0`） | 监听地址 |
 | `--port` | `FAKES3_PORT` | `9000` | 监听端口，`0` 表示随机端口 |
-| `--access-key` | `FAKES3_ACCESS_KEY` | `fakes3` | 访问凭证 |
-| `--secret-key` | `FAKES3_SECRET_KEY` | `fakes3secret` | 访问凭证 |
-| `--no-auth` | | 关 | 不校验签名：任意 access key / secret 签的名都接受，未签名的也接受，且不做授权（见下文） |
+| `--access-key` | `FAKES3_ACCESS_KEY` | `fakes3` | 访问凭证，`--auth` 时用于校验 |
+| `--secret-key` | `FAKES3_SECRET_KEY` | `fakes3secret` | 访问凭证，`--auth` 时用于校验 |
+| `--auth` | `FAKES3_AUTH` | 关 | 校验签名（SigV4 / SigV2），要求用 `--access-key` / `--secret-key`。默认不校验：任意凭证都可以，带签名的请求是 owner，未签名的是匿名请求（见[认证模式](#认证模式)） |
+| `--no-auth` | | | 已弃用，不起作用（不校验签名现在是默认行为）；不能和 `--auth` 同时用 |
 | `--domain` | `FAKES3_DOMAIN` | `localhost` | virtual-host 寻址的基础域名，可重复（或逗号分隔）；`<bucket>.<domain>` 选择 bucket，其它主机名仍按 path-style 处理；传空字符串关闭 |
 | `--inline-threshold` | | `1048576` | 达到这个大小的对象或 part 存进 memfd，小于它的放在堆上 |
 | `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | 对象数据占用内存的上限，见下文。可以写 `2GiB`、`512MiB`、`unlimited`、`auto` |
 | `--bucket-defaults` | `FAKES3_BUCKET_DEFAULTS` | `legacy` | 新建 bucket 的初始设置：`legacy` 或 `aws`，见[新建 bucket 的默认值](#新建-bucket-的默认值)。库里对应 `Config::bucket_defaults`（`BucketDefaults::Legacy` / `Aws`） |
 
-**`--no-auth`**（库里是 `Config { auth: false, .. }`，Node 里是 `noAuth`）：LocalStack / moto 式的“任意凭证都可以”。
-SDK 用什么 access key 和 secret 签名都行，签名本身不校验。覆盖 SigV4 的 `Authorization` 头和 presigned URL、SigV2 的头和 presigned URL，
-以及流式上传（`STREAMING-AWS4-HMAC-SHA256-PAYLOAD`、`STREAMING-UNSIGNED-PAYLOAD-TRAILER`、`STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`）；
-未签名的请求照常可用。几点说明：
+### 认证模式
+
+默认**不校验签名**（LocalStack / moto 式的“任意凭证都可以”），但授权照常生效；`--auth` 才严格校验签名。
+
+| | 默认 | `--auth` |
+|---|---|---|
+| 配置 | `Config { auth: false, .. }`（Node：`auth: false`） | `--auth` 或 `FAKES3_AUTH=1`；`Config { auth: true, .. }`；Node：`auth: true` |
+| 带签名的请求 | 不验签，任意 access key 和 secret 都接受，身份是 bucket 的 owner（目前 fakes3 只有这一个账户） | 用配置的 access key / secret 校验 SigV4 / SigV2，错误返回 403（`SignatureDoesNotMatch`、`NotSignedUp`） |
+| 不带签名的请求 | **匿名**，走正常的匿名授权：ACL、Bucket Policy、Block Public Access、OwnershipControls | 同左 |
+| 授权（含显式 Deny） | 生效 | 生效 |
+
+也就是说，两种模式下授权的行为完全一样，差别只在“带签名”是否要验证：默认模式下，任何带了签名的请求都是 owner，
+所以 `PutBucketPolicy`、`PutBucketAcl` 等 owner 才能做的操作用任意凭证即可；而不带签名的请求在私有 bucket 上会得到 403 `AccessDenied`，
+要在 policy 或公开 ACL 允许之后才能访问。需要“请求没有签名”时，用不带 `Authorization` 头、也不是 presigned URL 的请求就行
+（比如 `curl`、浏览器直接访问）。
+
+默认模式覆盖 SigV4 的 `Authorization` 头和 presigned URL、SigV2 的头和 presigned URL，以及流式上传
+（`STREAMING-AWS4-HMAC-SHA256-PAYLOAD`、`STREAMING-UNSIGNED-PAYLOAD-TRAILER`、`STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`）。几点说明：
 
 - **完整性校验仍然生效**：aws-chunked 的分块照常解码，trailer 里的校验和（`x-amz-checksum-*`）仍会和数据比对，不一致返回 400 `BadDigest`；
   `Content-MD5`、header 里的校验和、`x-amz-decoded-content-length` 也一样。不再检查的是签名本身以及由它派生的东西：
   时钟偏差、`x-amz-content-sha256` 里的负载哈希、signed headers 列表。
-- **不做授权**：ACL、Bucket Policy、Block Public Access 都不求值，已签名和匿名的请求一视同仁，都有 owner 的权限。
-  需要测访问控制时用默认的认证模式。
 - **presigned URL 的过期**：只在使用虚拟时钟（`/_fakes3/clock`）时判断，真实时钟下不检查。
-- 请求日志的 `access_key` 字段记录请求用的 access key（认证模式下它永远是配置的那一个，所以不记录）。
-- 带签名的 POST 表单上传（表单里有 `x-amz-signature` / `signature` 字段）暂不支持，仍返回 501；不带签名的表单可用。
+- 请求日志的 `access_key` 字段在默认模式下记录请求用的 access key（未签名的请求为 `null`）；`--auth` 时它永远是配置的那一个，所以不记录。
+- Bucket Policy 的 `aws:PrincipalType`、`s3:authType` 等条件对带签名的请求按 owner 求值，presigned URL 的 `s3:authType` 是 `REST-QUERY-STRING`。
+- 带签名的 POST 表单上传（表单里有 `x-amz-signature` / `signature` 字段）仍由 s3s 校验，所以必须用配置的 access key / secret 签名（任意凭证不行）；不带签名的表单是匿名请求。
+- **从旧版本升级**：以前默认校验签名，现在不校验；要保持原样，加 `--auth`（Node：`auth: true`，库：`Config { auth: true, .. }`）。
+  `--no-auth` 以前还会跳过全部授权，现在它只是一个已弃用、不起作用的别名（默认就不校验签名），启动时会在 stderr 提示；
+  依赖“未签名请求等同 owner”的测试需要改为带上任意签名（例如任何 SDK 的随机凭证）。
+- 以后会支持 `--user name:access-key:secret[:canonical-id]` 配置多个身份，默认模式下按请求里的 access key 选身份、不校验 secret；
+  “带签名的请求是谁”的判断集中在 `src/access.rs` 的 `identify`。
 
 **内存上限**：fakes3 统计所有对象数据实际占用的内存（堆上的小对象、memfd 里的大对象、尚未 Complete 的分段上传的 part），
 超出上限的写入会被拒绝，而不是让进程被 OOM killer 杀掉。
@@ -334,11 +353,11 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认**保留旧的�
 - 条件请求：If-Match、If-None-Match（包括条件写入）、If-Modified-Since、If-Unmodified-Since、CopySource 的条件头
 - 校验和：CRC32、CRC32C、CRC64NVME、SHA1、SHA256 等，支持 header 和 aws-chunked trailer 两种方式；
   分段上传支持 COMPOSITE 和 FULL_OBJECT；没指定算法时默认计算 CRC64NVME，和现在的 AWS S3 一致
-- 认证：SigV4（包括 presigned URL 和带 trailer 的流式上传）、SigV2
+- 认证：SigV4（包括 presigned URL 和带 trailer 的流式上传）、SigV2；默认接受任意凭证，`--auth` 时严格校验（见[认证模式](#认证模式)）
 - 对象标签、Range 读取、Content-MD5 校验
 - 访问控制：Bucket/Object ACL（canned、grant 头、请求体）、OwnershipControls（BucketOwnerEnforced 时 ACL 被禁用）、
-  PublicAccessBlock、Bucket Policy（含 Condition，显式 Deny 对已签名请求也生效）；未签名的匿名请求在 policy 或公开 ACL 允许时放行，
-  `--no-auth` 时不做授权（见“`--no-auth`”）
+  PublicAccessBlock、Bucket Policy（含 Condition，显式 Deny 对已签名请求也生效）；未签名的匿名请求在 policy 或公开 ACL 允许时放行
+  （两种认证模式下都一样，见[认证模式](#认证模式)）
 - CORS：预检 `OPTIONS` 和实际响应上的 CORS 头
 - Lifecycle：过期（含版本控制下的删除标记、非当前版本、`NewerNoncurrentVersions`）和清理未完成的分段上传，按服务端虚拟时钟在 UTC 日期变化后的第一次访问时执行；
   没有规则的 bucket 零开销

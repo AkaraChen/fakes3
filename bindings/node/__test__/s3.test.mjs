@@ -10,6 +10,7 @@ import {
   HeadObjectCommand,
   ListBucketsCommand,
   GetPublicAccessBlockCommand,
+  PutBucketPolicyCommand,
 } from '@aws-sdk/client-s3'
 
 const { start } = createRequire(import.meta.url)('../index.js')
@@ -55,7 +56,7 @@ test('servers are independent', async () => {
 })
 
 test('options: custom credentials', async () => {
-  const server = await start({ accessKey: 'AK', secretKey: 'SK' })
+  const server = await start({ accessKey: 'AK', secretKey: 'SK', auth: true })
   try {
     assert.equal(server.accessKey, 'AK')
     const good = client(server)
@@ -74,19 +75,8 @@ test('options: custom credentials', async () => {
   }
 })
 
-test('option noAuth accepts unsigned requests', async () => {
-  const server = await start({ noAuth: true })
-  try {
-    const res = await fetch(server.endpoint)
-    assert.equal(res.status, 200)
-    assert.match(await res.text(), /ListAllMyBucketsResult/)
-  } finally {
-    await server.stop()
-  }
-})
-
-test('option noAuth accepts requests signed with any credentials', async () => {
-  const server = await start({ noAuth: true })
+test('by default requests signed with any credentials are accepted', async () => {
+  const server = await start()
   try {
     const s3 = new S3Client({
       endpoint: server.endpoint,
@@ -98,6 +88,46 @@ test('option noAuth accepts requests signed with any credentials', async () => {
     await s3.send(new PutObjectCommand({ Bucket: 'any', Key: 'k', Body: 'hello' }))
     const got = await s3.send(new GetObjectCommand({ Bucket: 'any', Key: 'k' }))
     assert.equal(await got.Body.transformToString(), 'hello')
+  } finally {
+    await server.stop()
+  }
+})
+
+test('by default unsigned requests are anonymous', async () => {
+  const server = await start()
+  try {
+    const s3 = client(server)
+    await s3.send(new CreateBucketCommand({ Bucket: 'priv' }))
+    await s3.send(new PutObjectCommand({ Bucket: 'priv', Key: 'k', Body: 'hello' }))
+    assert.equal((await fetch(server.endpoint)).status, 403)
+    assert.equal((await fetch(`${server.endpoint}/priv/k`)).status, 403)
+    // A public-read policy, set with any credentials, opens it.
+    const policy = {
+      Version: '2012-10-17',
+      Statement: [{ Effect: 'Allow', Principal: '*', Action: 's3:GetObject', Resource: 'arn:aws:s3:::priv/*' }],
+    }
+    await s3.send(new PutBucketPolicyCommand({ Bucket: 'priv', Policy: JSON.stringify(policy) }))
+    const res = await fetch(`${server.endpoint}/priv/k`)
+    assert.equal(res.status, 200)
+    assert.equal(await res.text(), 'hello')
+  } finally {
+    await server.stop()
+  }
+})
+
+test('option auth verifies signatures', async () => {
+  const server = await start({ auth: true })
+  try {
+    const good = client(server)
+    await good.send(new ListBucketsCommand({}))
+    const bad = new S3Client({
+      endpoint: server.endpoint,
+      region: 'us-east-1',
+      forcePathStyle: true,
+      credentials: { accessKeyId: server.accessKey, secretAccessKey: 'not-the-server-secret' },
+    })
+    await assert.rejects(bad.send(new ListBucketsCommand({})), { name: 'SignatureDoesNotMatch' })
+    assert.equal((await fetch(server.endpoint)).status, 403)
   } finally {
     await server.stop()
   }
@@ -337,10 +367,12 @@ test('control methods fail after stop', async () => {
   assert.throws(() => requests.list(), /stopped/)
 })
 
+const FAKE_AUTH = 'AWS4-HMAC-SHA256 Credential=any/20240101/us-east-1/s3/aws4_request, Signature=00'
+
 function request(server, method, path, { host, body } = {}) {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { host: server.host, port: server.port, method, path, headers: host ? { host } : {} },
+      { host: server.host, port: server.port, method, path, headers: { authorization: FAKE_AUTH, ...(host ? { host } : {}) } },
       (res) => {
         const chunks = []
         res.on('data', (c) => chunks.push(c))
@@ -353,8 +385,9 @@ function request(server, method, path, { host, body } = {}) {
 }
 
 test('domains enables virtual-host addressing', async () => {
-  // noAuth lets a bare HTTP request stand in for a client with a custom Host header.
-  const server = await start({ noAuth: true, domains: ['s3.test'] })
+  // Without `auth`, any Authorization header lets a bare HTTP request stand in for a client with a
+  // custom Host header.
+  const server = await start({ domains: ['s3.test'] })
   try {
     assert.equal((await request(server, 'PUT', '/vhb')).status, 200)
     assert.equal((await request(server, 'PUT', '/obj', { host: 'vhb.s3.test', body: 'data' })).status, 200)

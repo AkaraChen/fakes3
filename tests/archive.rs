@@ -1,12 +1,15 @@
 //! Archive storage classes over real HTTP: InvalidObjectState, RestoreObject, Intelligent-Tiering
 //! archive tiers and lifecycle transitions, all driven by the server's virtual clock. A bare-bones
-//! HTTP/1.1 client keeps this free of SDK dependencies; the server runs unauthenticated.
+//! HTTP/1.1 client keeps this free of SDK dependencies; its requests carry a signature the server
+//! does not verify.
 
 use std::time::{Duration, UNIX_EPOCH};
 
 use fakes3::{Config, Server};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+
+mod common;
 
 const MIN: i64 = 60 * 1_000_000_000;
 const HOUR: i64 = 60 * MIN;
@@ -49,9 +52,10 @@ impl Client {
     async fn call(&self, method: &str, path: &str, headers: &[(&str, &str)], body: &[u8]) -> Resp {
         let mut s = TcpStream::connect(&self.0).await.unwrap();
         let mut head = format!(
-            "{method} {path} HTTP/1.1\r\nhost: {}\r\nconnection: close\r\ncontent-length: {}\r\n",
+            "{method} {path} HTTP/1.1\r\nhost: {}\r\nconnection: close\r\ncontent-length: {}\r\nauthorization: {}\r\n",
             self.0,
-            body.len()
+            body.len(),
+            common::UNVERIFIED_AUTH
         );
         for (k, v) in headers {
             head.push_str(&format!("{k}: {v}\r\n"));
@@ -129,12 +133,7 @@ fn dechunk(mut b: &[u8]) -> Vec<u8> {
 
 /// A server with the clock frozen at [`T0`] and a bucket `bkt`.
 async fn start() -> (Server, Client) {
-    let server = Server::start(Config {
-        auth: false,
-        ..Config::default()
-    })
-    .await
-    .unwrap();
+    let server = Server::start(Config::default()).await.unwrap();
     server.clock().freeze(Some(UNIX_EPOCH + Duration::from_secs(T0))).unwrap();
     let c = Client(server.addr().to_string());
     assert_eq!(c.put("/bkt", &[], "").await.status, 200);

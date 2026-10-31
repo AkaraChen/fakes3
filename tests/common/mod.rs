@@ -14,6 +14,10 @@ pub const ACCESS: &str = "fakes3";
 pub const SECRET: &str = "fakes3secret";
 const REGION: &str = "us-east-1";
 
+/// A SigV4 `Authorization` header nobody computed. Unless `Config::auth` is on, it is enough to
+/// make a hand-written request count as signed (and so act as the bucket owner).
+pub const UNVERIFIED_AUTH: &str = "AWS4-HMAC-SHA256 Credential=anyone/20240101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=00";
+
 pub struct Resp {
     pub status: u16,
     pub headers: Vec<(String, String)>,
@@ -76,6 +80,11 @@ impl<'a> Req<'a> {
     pub fn anon(mut self) -> Self {
         self.signed = false;
         self
+    }
+    /// Unsigned as far as the signature goes, but with an `Authorization` header: a request that
+    /// carries a signature nobody can verify.
+    pub fn unverified(self) -> Self {
+        self.anon().header("authorization", UNVERIFIED_AUTH)
     }
     pub fn host(mut self, h: &str) -> Self {
         self.host = Some(h.to_owned());

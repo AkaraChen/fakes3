@@ -120,7 +120,8 @@ pub struct RequestRecord {
     pub latency_us: f64,
     pub bytes_in: f64,
     pub bytes_out: f64,
-    /// The access key the request was signed with. Only recorded with `noAuth`; otherwise `null`.
+    /// The access key the request was signed with. `null` for unsigned requests, and with
+    /// `auth: true`, where it is always the configured key.
     pub access_key: Option<String>,
 }
 
