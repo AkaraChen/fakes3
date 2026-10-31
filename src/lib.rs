@@ -35,6 +35,8 @@ mod digest;
 mod host;
 mod lifecycle;
 mod memory;
+mod objext;
+mod objops;
 mod policy;
 mod presign;
 mod reqlog;

@@ -8,7 +8,7 @@
 //! * [`BucketDefaults::Aws`]: what AWS documents for new buckets today. Object Ownership is
 //!   `BucketOwnerEnforced` (ACLs disabled, since April 2023) and all four Block Public Access
 //!   settings are on (April 2023); new objects are encrypted with SSE-S3 (January 2023, see
-//!   [`BucketDefaults::sse_s3_by_default`]).
+//!   [`BucketDefaults::default_encryption`]).
 //!
 //! The mode only decides the state of a bucket at creation. Afterwards the bucket's own
 //! documents rule, so snapshots, restores and resets never consult it.
@@ -16,7 +16,10 @@
 use std::fmt;
 use std::str::FromStr;
 
+use s3s::dto::ServerSideEncryption;
+
 use crate::bucket_config::{BucketConfig, Ownership, PublicAccessBlock};
+use crate::objext::EncryptionRule;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BucketDefaults {
@@ -47,13 +50,17 @@ impl BucketDefaults {
         }
     }
 
-    /// Whether a bucket without an encryption configuration encrypts new objects with SSE-S3:
-    /// GetBucketEncryption then reports `AES256`, and PUT, GET and HEAD carry
-    /// `x-amz-server-side-encryption: AES256`. The server-side encryption code asks this instead
-    /// of checking the mode itself.
-    #[allow(dead_code)] // Nothing consults it until the SSE code (feat/s3-object-semantics) lands.
-    pub(crate) fn sse_s3_by_default(self) -> bool {
-        self == Self::Aws
+    /// The default encryption configuration of a new bucket, and what DeleteBucketEncryption
+    /// goes back to: in `aws` mode SSE-S3, which AWS applies to every bucket and no longer lets
+    /// anyone remove. GetBucketEncryption then reports `AES256`, and PUT, GET and HEAD carry
+    /// `x-amz-server-side-encryption: AES256`; in `legacy` mode there is none.
+    pub(crate) fn default_encryption(self) -> Option<EncryptionRule> {
+        (self == Self::Aws).then(|| EncryptionRule {
+            algorithm: ServerSideEncryption::from_static(ServerSideEncryption::AES256),
+            kms_key_id: None,
+            bucket_key: Some(false),
+            blocked: None,
+        })
     }
 }
 
@@ -98,5 +105,6 @@ mod tests {
         assert!(!aws.acls_enabled());
         let pab = aws.public_access_block.read().unwrap();
         assert!(pab.block_public_acls && pab.ignore_public_acls && pab.block_public_policy && pab.restrict_public_buckets);
+        assert!(BucketDefaults::Aws.default_encryption().is_some() && BucketDefaults::Legacy.default_encryption().is_none());
     }
 }

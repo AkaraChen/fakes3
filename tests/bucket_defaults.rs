@@ -256,3 +256,58 @@ async fn control_plane_reports_the_mode() {
         assert_eq!(v["bucket_defaults"], name, "{}", r.body);
     }
 }
+
+#[tokio::test]
+async fn default_encryption_is_sse_s3_in_aws_mode_only() {
+    let kms = "<ServerSideEncryptionConfiguration><Rule><ApplyServerSideEncryptionByDefault><SSEAlgorithm>aws:kms</SSEAlgorithm></ApplyServerSideEncryptionByDefault></Rule></ServerSideEncryptionConfiguration>";
+    let (_s, a) = start(BucketDefaults::Aws).await;
+    make_bucket(a, "bkt").await;
+    let r = get_sub(a, "bkt", "encryption").await;
+    assert!(r.body.contains("<SSEAlgorithm>AES256</SSEAlgorithm>"), "{}", r.body);
+    let r = send(a, req("PUT", "/bkt/k").body(b"x")).await;
+    assert_eq!(r.header("x-amz-server-side-encryption"), Some("AES256"));
+    assert_eq!(
+        send(a, req("HEAD", "/bkt/k")).await.header("x-amz-server-side-encryption"),
+        Some("AES256")
+    );
+    assert_eq!(
+        send(a, req("GET", "/bkt/k")).await.header("x-amz-server-side-encryption"),
+        Some("AES256")
+    );
+    // SSE-S3 keeps the content's MD5 as the ETag.
+    assert_eq!(r.header("etag"), Some("\"9dd4e461268c8034f5c8564e155c67a6\""));
+    // Deleting the configuration cannot turn encryption off: SSE-S3 comes back.
+    assert_eq!(put_sub(a, "bkt", "encryption", kms).await.status, 200);
+    assert_eq!(send(a, req("DELETE", "/bkt").query("encryption")).await.status, 204);
+    let r = get_sub(a, "bkt", "encryption").await;
+    assert!(r.body.contains("<SSEAlgorithm>AES256</SSEAlgorithm>"), "{}", r.body);
+    let r = send(a, req("PUT", "/bkt/after").body(b"x")).await;
+    assert_eq!(r.header("x-amz-server-side-encryption"), Some("AES256"));
+
+    let (_s, a) = start(BucketDefaults::Legacy).await;
+    make_bucket(a, "bkt").await;
+    let r = get_sub(a, "bkt", "encryption").await;
+    assert_eq!(
+        (r.status, r.code()),
+        (404, "ServerSideEncryptionConfigurationNotFoundError"),
+        "{}",
+        r.body
+    );
+    let r = send(a, req("PUT", "/bkt/k").body(b"x")).await;
+    assert_eq!(r.header("x-amz-server-side-encryption"), None);
+    assert_eq!(send(a, req("HEAD", "/bkt/k")).await.header("x-amz-server-side-encryption"), None);
+    // Asking for SSE-S3, per request or for the bucket, still works.
+    let r = send(a, req("PUT", "/bkt/s3").header("x-amz-server-side-encryption", "AES256").body(b"x")).await;
+    assert_eq!(r.header("x-amz-server-side-encryption"), Some("AES256"));
+    let aes = "<ServerSideEncryptionConfiguration><Rule><ApplyServerSideEncryptionByDefault><SSEAlgorithm>AES256</SSEAlgorithm></ApplyServerSideEncryptionByDefault></Rule></ServerSideEncryptionConfiguration>";
+    assert_eq!(put_sub(a, "bkt", "encryption", aes).await.status, 200);
+    let r = send(a, req("PUT", "/bkt/later").body(b"x")).await;
+    assert_eq!(r.header("x-amz-server-side-encryption"), Some("AES256"));
+    // The object written before the configuration stays unencrypted; deleting it goes back to none.
+    assert_eq!(send(a, req("HEAD", "/bkt/k")).await.header("x-amz-server-side-encryption"), None);
+    assert_eq!(send(a, req("DELETE", "/bkt").query("encryption")).await.status, 204);
+    assert_eq!(
+        get_sub(a, "bkt", "encryption").await.code(),
+        "ServerSideEncryptionConfigurationNotFoundError"
+    );
+}
