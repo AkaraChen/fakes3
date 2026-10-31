@@ -336,17 +336,22 @@ pub fn resolve(cfg: &BucketConfig, args: &AclArgs<'_>, bucket: bool) -> S3Result
     Ok(acl.filter(|a| *a != Acl::private()))
 }
 
-/// CreateBucket's variant: the ownership setting comes from the same request.
+/// CreateBucket's variant: the ownership setting comes from the same request. With ACLs disabled
+/// the bucket ACL must give full control only to the owner, which is what `private` is; anything
+/// else is `InvalidBucketAclWithObjectOwnership`.
+/// <https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-ownership-error-responses.html>
 pub fn resolve_for_new_bucket(cfg: &BucketConfig, args: &AclArgs<'_>) -> S3Result<Option<Acl>> {
-    resolve(cfg, args, true).map_err(|e| {
-        if *e.code() == s3s::S3ErrorCode::AccessControlListNotSupported {
-            s3_error!(
-                InvalidBucketAclWithObjectOwnership,
-                "Bucket cannot have ACLs set with ObjectOwnership's BucketOwnerEnforced setting"
-            )
-        } else {
-            e
+    resolve(cfg, args, true).or_else(|e| {
+        if *e.code() != s3s::S3ErrorCode::AccessControlListNotSupported {
+            return Err(e);
         }
+        if args.to_acl(true).is_ok_and(|a| a.is_none_or(|a| a == Acl::private())) {
+            return Ok(None);
+        }
+        Err(s3_error!(
+            InvalidBucketAclWithObjectOwnership,
+            "Bucket cannot have ACLs set with ObjectOwnership's BucketOwnerEnforced setting"
+        ))
     })
 }
 
@@ -402,6 +407,20 @@ mod tests {
         assert!(resolve(&cfg, &args(Some("public-read")), false).is_err());
         assert!(resolve(&cfg, &args(Some("bucket-owner-full-control")), false).unwrap().is_none());
         assert!(resolve(&cfg, &args(None), false).unwrap().is_none());
+    }
+
+    #[test]
+    fn new_bucket_with_acls_disabled_accepts_only_owner_acls() {
+        let cfg = BucketConfig::default();
+        *cfg.ownership.write() = Some(crate::bucket_config::Ownership::Enforced);
+        assert!(resolve_for_new_bucket(&cfg, &args(Some("private"))).unwrap().is_none());
+        let e = resolve_for_new_bucket(&cfg, &args(Some("public-read"))).unwrap_err();
+        assert_eq!(e.code().as_str(), "InvalidBucketAclWithObjectOwnership");
+        let grant = AclArgs {
+            read: Some(r#"uri="http://acs.amazonaws.com/groups/global/AllUsers""#),
+            ..Default::default()
+        };
+        assert!(resolve_for_new_bucket(&cfg, &grant).is_err());
     }
 
     #[test]
