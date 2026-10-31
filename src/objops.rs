@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use s3s::dto::*;
-use s3s::{S3Request, S3Response, S3Result, s3_error};
+use s3s::{S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 
 use crate::objext::{self, BucketCfg, EncryptionRule, LockMode, Retention};
 use crate::s3impl::{FakeS3, obj, ts};
@@ -87,10 +87,12 @@ impl FakeS3 {
                     _ => return Err(s3_error!(MalformedXML)),
                 };
                 if n <= 0 {
-                    return Err(s3_error!(
-                        InvalidArgument,
-                        "Default retention period must be a positive integer value"
-                    ));
+                    let mut e = S3Error::with_message(
+                        S3ErrorCode::Custom("InvalidRetentionPeriod".into()),
+                        "Default retention period must be a positive integer value",
+                    );
+                    e.set_status_code(http::StatusCode::BAD_REQUEST);
+                    return Err(e);
                 }
                 Some((mode, n, years))
             }

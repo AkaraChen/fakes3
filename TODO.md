@@ -69,5 +69,8 @@
 ## 一致性验证
 
 - [x] 接入 ceph/s3-tests，作为进度基线（`conformance/s3-tests/run.sh`、`.github/workflows/s3-tests.yml`，分类后的基线和待办见 [conformance/S3-TESTS.md](conformance/S3-TESTS.md)）
+- [x] ceph/s3-tests 里“便宜”的一批修复（请求 id、对已有 bucket 再次 CreateBucket 返回 200、`?partNumber=` 的分段校验和、ListObjects 字段、Object Lock 边角、Content-MD5、
+      `x-amz-expected-bucket-owner` 等，见 [conformance/S3-TESTS.md](conformance/S3-TESTS.md)）：AWS 适用的 816 个里通过 475 → 513
+  - 剩下的 `test_copy_part_enc[…-sse-c-…]`（SSE-C 分段上传的 Complete 不带 key 是否应该 400，AWS 行为未确认）、`test_object_read_unreadable`（C1 控制字符的 key）没动
 - [ ] 接入 MinIO mint
 - [ ] 对真实 AWS S3 做差分测试（录制和回放）

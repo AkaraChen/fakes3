@@ -123,6 +123,8 @@ pub struct RequestRecord {
     /// The access key the request was signed with. `null` for unsigned requests, and with
     /// `auth: true`, where it is always the configured key.
     pub access_key: Option<String>,
+    /// The `x-amz-request-id` the response carried.
+    pub request_id: String,
 }
 
 /// Settings for the request log.
@@ -176,6 +178,7 @@ fn record(r: fakes3::RequestRecord) -> RequestRecord {
         latency_us: r.latency.as_micros() as f64,
         bytes_in: r.bytes_in as f64,
         bytes_out: r.bytes_out as f64,
+        request_id: r.request_id(),
         access_key: r.access_key,
     }
 }

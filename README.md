@@ -355,6 +355,8 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认**保留旧的�
   分段上传支持 COMPOSITE 和 FULL_OBJECT；没指定算法时默认计算 CRC64NVME，和现在的 AWS S3 一致
 - 认证：SigV4（包括 presigned URL 和带 trailer 的流式上传）、SigV2；默认接受任意凭证，`--auth` 时严格校验（见[认证模式](#认证模式)）
 - 对象标签、Range 读取、Content-MD5 校验
+- 请求 id：每个响应都带 `x-amz-request-id`（16 位大写十六进制）和 `x-amz-id-2`，错误响应体里有 `<RequestId>` / `<HostId>`；请求日志的 `request_id` 是同一个值，可用来对上客户端日志
+- `x-amz-expected-bucket-owner`：只有一个账号（`000000000000`），带其他账号 id 的请求返回 403 `AccessDenied`
 - 访问控制：Bucket/Object ACL（canned、grant 头、请求体）、OwnershipControls（BucketOwnerEnforced 时 ACL 被禁用）、
   PublicAccessBlock、Bucket Policy（含 Condition，显式 Deny 对已签名请求也生效）；未签名的匿名请求在 policy 或公开 ACL 允许时放行
   （两种认证模式下都一样，见[认证模式](#认证模式)）

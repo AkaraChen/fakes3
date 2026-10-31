@@ -95,6 +95,23 @@ pub fn denied() -> S3Error {
     S3Error::with_message(S3ErrorCode::AccessDenied, "Access Denied")
 }
 
+/// The response for a request whose `x-amz-expected-bucket-owner` (or, for copies,
+/// `x-amz-source-expected-bucket-owner`) names an account other than the only one there is
+/// ([`crate::policy::ACCOUNT_ID`]): 403 `AccessDenied`, before the operation runs.
+pub fn expected_owner_mismatch(headers: &http::HeaderMap) -> Option<s3s::HttpResponse> {
+    let mismatch = ["x-amz-expected-bucket-owner", "x-amz-source-expected-bucket-owner"]
+        .iter()
+        .filter_map(|h| headers.get(*h))
+        .any(|v| v.as_bytes() != crate::policy::ACCOUNT_ID.as_bytes());
+    mismatch.then(|| {
+        denied().to_http_response().unwrap_or_else(|_| {
+            let mut r = s3s::HttpResponse::new(s3s::Body::empty());
+            *r.status_mut() = http::StatusCode::FORBIDDEN;
+            r
+        })
+    })
+}
+
 /// The IAM action a request needs, as bucket policies spell it.
 fn action_of(op: &str, version: bool) -> String {
     let v = |plain: &str, versioned: &str| format!("s3:{}", if version { versioned } else { plain });

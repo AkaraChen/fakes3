@@ -286,7 +286,7 @@ fn print_human(command: &Command, v: &Value) {
         Command::Requests(Requests::List { .. }) => {
             for r in v["requests"].as_array().into_iter().flatten() {
                 println!(
-                    "{:>6}  {}  {:<6} {:<4} {:<24} {:>8}us  in={} out={}  {}",
+                    "{:>6}  {}  {:<6} {:<4} {:<24} {:>8}us  in={} out={}  {}  {}",
                     r["seq"],
                     text(r, "time"),
                     text(r, "method"),
@@ -295,6 +295,7 @@ fn print_human(command: &Command, v: &Value) {
                     r["latency_us"],
                     r["bytes_in"],
                     r["bytes_out"],
+                    text(r, "request_id"),
                     text(r, "path"),
                 );
             }
