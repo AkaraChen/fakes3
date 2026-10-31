@@ -119,7 +119,26 @@ $ curl -X POST localhost:9000/_fakes3/snapshots/seeded/restore
   但跨 bucket 不保证（例如跨 bucket 的 CopyObject 正在进行）。**请在测试之间、没有未完成请求时使用。**
 - 快照存在内存里，随服务进程消失，不能导出。
 
-SNAPSHOT_DESIGN
+### 快照的实现和选型
+
+快照复制的是每个 bucket 的索引（`BTreeMap<key, 版本链>`）：每个 key 一次 `String` 和一个小 `Vec<Arc<Version>>` 的克隆，
+不碰对象数据。比较过两种做法，在 GitHub Actions（4 核托管 runner）上用 `snapshot_scale` 测试（`cargo test --release snapshot_scale -- --ignored --nocapture`，
+同一个 bucket，key 形如 `prefix/00000042`，5 次取最好）测得：
+
+| 对象数 | 方案 A：复制 `BTreeMap`（采用） 快照 / restore | 方案 B：`imbl::OrdMap` 快照 / restore | 构造并插入一个对象：A / B |
+|---:|---:|---:|---:|
+| 1,000 | 14 µs / 45 µs | 0.09 µs / 42 µs | 253 ns / 568 ns |
+| 100,000 | 2.6 ms / 4.4 ms | 0.08 µs / 0.22 ms | 239 ns / 637 ns |
+| 1,000,000 | 31 ms / 47 ms | 0.11 µs / 0.34 ms | 265 ns / 689 ns |
+
+- 方案 B 的快照是 O(1)，restore 也几乎是 O(1)；方案 A 的快照和 restore 是 O(对象个数)，100 万个对象时是几十毫秒。
+- 方案 B 的代价在每次普通写入：持久化 B 树的节点是 `Arc`，“构造一个对象并插入索引”这一整步慢 2.2～2.6 倍（上表最后一列，其中索引插入之外的部分对两种方案相同，所以索引插入本身的差距更大），
+  快照之后第一次改动还要复制路径上的节点；它也把 `imbl`（及其依赖）带进二进制，并且让所有直接操作索引的代码（`range`、`entry` 等）依赖另一套 API。
+- 测试服务器的典型规模是几十到几万个对象，快照用得很少（每个测试一次，或每个套件一次），在这个规模上方案 A 的快照不超过几毫秒，
+  不到一次 HTTP 请求往返的量级；而方案 B 的代价每个 PUT 都要付。所以采用方案 A。
+- 方案 A 的额外内存：每个快照要多一份索引（key 字符串、版本链的 `Vec` 和 `Arc` 计数），与对象个数成正比，数据本身不复制。
+
+如果以后需要在上百万对象的状态上频繁快照，换成持久化 map 是一处集中的改动（`store::Index` 类型别名，`exp/ordmap` 分支证明了只需要改两处调用）。
 
 ## 时钟
 
