@@ -259,6 +259,8 @@ fn bad_body_digest(message: String) -> S3Error {
     let mut e = S3Error::with_message(S3ErrorCode::BadDigest, message);
     let mut h = http::HeaderMap::new();
     h.insert(http::header::CONNECTION, http::HeaderValue::from_static("close"));
+    // Headers set on an error replace the ones s3s would add, the content type among them.
+    h.insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("application/xml"));
     e.set_headers(h);
     e
 }

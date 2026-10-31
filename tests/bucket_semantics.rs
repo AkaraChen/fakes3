@@ -1106,5 +1106,6 @@ async fn a_body_that_fails_its_digest_closes_the_connection() {
         text.contains("connection: close") && text.contains("<code>baddigest</code>"),
         "{text}"
     );
+    assert!(text.contains("content-type: application/xml"), "{text}");
     assert_eq!(send(a, req("GET", "/bkt/k")).await.status, 404);
 }
