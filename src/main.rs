@@ -35,6 +35,10 @@ struct Opt {
     #[arg(long, default_value_t = 1 << 20)]
     inline_threshold: usize,
 
+    /// Base domain for virtual-host-style addressing (`<bucket>.<domain>`); repeatable.
+    /// `--domain ""` turns virtual-host addressing off.
+    #[arg(long = "domain", default_value = "localhost", env = "FAKES3_DOMAIN", value_delimiter = ',')]
+    domains: Vec<String>,
     /// Do not record S3 requests for the control plane's request log.
     #[arg(long)]
     no_request_log: bool,
@@ -73,6 +77,7 @@ fn main() -> std::io::Result<std::process::ExitCode> {
         secret_key: opt.secret_key,
         auth: !opt.no_auth,
         inline_threshold: opt.inline_threshold,
+        domains: opt.domains.into_iter().filter(|d| !d.is_empty()).collect(),
         request_log: !opt.no_request_log,
         request_log_capacity: opt.request_log_capacity,
         memory_limit: opt.memory_limit,

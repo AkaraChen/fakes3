@@ -29,10 +29,13 @@
 - [x] `encoding-type=url`
 - [x] 条件请求：If-Match / If-None-Match / If-Modified-Since / If-Unmodified-Since，CopySource 的条件头
 - [x] 对象和 bucket 的 Tagging
-- [ ] ACL、Bucket Policy 求值、CORS 预检、Lifecycle、Website、Notification
+- [x] ACL（canned / grant / 请求体）、OwnershipControls、PublicAccessBlock、Bucket Policy 求值（匿名访问 + 显式 Deny）、
+      CORS 预检与响应头、Lifecycle（按服务端时钟惰性执行）、Website 与 Notification 的配置读写
+- [ ] Website 端点（按 index/error document 和 routing rules 提供静态网站）、Notification 实际投递、
+      Lifecycle 的 Transition、新建 bucket 默认启用 BucketOwnerEnforced 和 Block Public Access（AWS 2023 年之后的默认值）
 - [ ] SSE-C（校验 key MD5）、SSE-S3/KMS header 回显
-- [ ] POST policy 表单上传
-- [ ] virtual-host 寻址的默认域名配置
+- [x] POST policy 表单上传（条件校验由 s3s 完成；过期时间按宿主机时钟判断，不受虚拟时钟影响）
+- [x] virtual-host 寻址：`--domain`（可重复），默认 `localhost`，即 `http://<bucket>.localhost:<port>`
 - [x] ListMultipartUploads
 - [ ] GetObjectAttributes
 - [ ] 回显 `storage_class`、`x-amz-website-redirect-location` 等剩余元数据

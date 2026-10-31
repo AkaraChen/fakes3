@@ -889,6 +889,7 @@ dependencies = [
  "form_urlencoded",
  "futures",
  "hex",
+ "hmac",
  "http 1.5.0",
  "http-body-util",
  "hyper 1.12.0",
@@ -900,8 +901,10 @@ dependencies = [
  "percent-encoding",
  "rustix",
  "s3s",
+ "s3s-policy",
  "serde",
  "serde_json",
+ "sha2",
  "time",
  "tokio",
  "tracing",
@@ -1459,6 +1462,8 @@ checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
  "hashbrown",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -2235,6 +2240,18 @@ dependencies = [
  "futures-core",
  "httparse",
  "memchr",
+ "thiserror",
+]
+
+[[package]]
+name = "s3s-policy"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6d5ac4664ab876a66eb8dde6f1706a1e608bb3149c6ea3c295bbccdde6c4e04"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 

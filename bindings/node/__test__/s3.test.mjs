@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import http from 'node:http'
 import { test } from 'node:test'
 import { createRequire } from 'node:module'
 import {
@@ -291,4 +292,32 @@ test('control methods fail after stop', async () => {
   assert.throws(() => server.snapshot(), /stopped/)
   assert.throws(() => clock.now(), /stopped/)
   assert.throws(() => requests.list(), /stopped/)
+})
+
+function request(server, method, path, { host, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      { host: server.host, port: server.port, method, path, headers: host ? { host } : {} },
+      (res) => {
+        const chunks = []
+        res.on('data', (c) => chunks.push(c))
+        res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString() }))
+      },
+    )
+    req.on('error', reject)
+    req.end(body)
+  })
+}
+
+test('domains enables virtual-host addressing', async () => {
+  // noAuth lets a bare HTTP request stand in for a client with a custom Host header.
+  const server = await start({ noAuth: true, domains: ['s3.test'] })
+  try {
+    assert.equal((await request(server, 'PUT', '/vhb')).status, 200)
+    assert.equal((await request(server, 'PUT', '/obj', { host: 'vhb.s3.test', body: 'data' })).status, 200)
+    assert.equal((await request(server, 'GET', '/vhb/obj')).body, 'data') // path style still works
+    assert.equal((await request(server, 'GET', '/obj', { host: 'vhb.s3.test' })).body, 'data')
+  } finally {
+    await server.stop()
+  }
 })

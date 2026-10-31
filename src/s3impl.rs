@@ -10,6 +10,8 @@ use s3s::checksum::ChecksumHasher;
 use s3s::dto::*;
 use s3s::{S3, S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 
+use crate::acl;
+use crate::bucket_config::Ownership;
 use crate::clock::Clock;
 use crate::digest;
 use crate::memory::{LimitExceeded, MemoryTracker};
@@ -491,13 +493,26 @@ fn meta_from(
 }
 
 impl FakeS3 {
-    fn bucket(&self, name: &str) -> S3Result<Arc<StoreBucket>> {
-        self.store.bucket(name).ok_or_else(|| s3_error!(NoSuchBucket))
+    pub(crate) fn bucket(&self, name: &str) -> S3Result<Arc<StoreBucket>> {
+        let b = self.store.bucket(name).ok_or_else(|| s3_error!(NoSuchBucket))?;
+        if b.config.has_lifecycle.load(std::sync::atomic::Ordering::Acquire) {
+            crate::lifecycle::tick(&b, self.clock.now());
+        }
+        Ok(b)
+    }
+
+    /// The `x-amz-expiration` value for `obj`, if its bucket has a lifecycle rule that expires it.
+    fn expiration_header(&self, bucket: &str, key: &str, obj: &StoreObject) -> Option<String> {
+        if !self.store.access.any_lifecycle.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
+        let lc = self.store.bucket(bucket)?.config.lifecycle.read().clone()?;
+        lc.expiration_header(key, obj)
     }
 
     /// Resolves the version a read addresses. Returns the version and whether the bucket reports
     /// version ids.
-    fn version(&self, bucket: &str, key: &str, version_id: Option<&str>) -> S3Result<(Arc<Version>, bool)> {
+    pub(crate) fn version(&self, bucket: &str, key: &str, version_id: Option<&str>) -> S3Result<(Arc<Version>, bool)> {
         let b = self.bucket(bucket)?;
         let versioned = *b.versioning.read() != Versioning::Unversioned;
         let objects = b.objects.read();
@@ -700,12 +715,21 @@ fn owner() -> Owner {
 #[async_trait::async_trait]
 impl S3 for FakeS3 {
     async fn create_bucket(&self, req: S3Request<CreateBucketInput>) -> S3Result<S3Response<CreateBucketOutput>> {
-        let name = req.input.bucket;
+        let input = req.input;
+        let name = input.bucket.clone();
+        let bucket = StoreBucket::new(self.clock.now());
+        if let Some(o) = &input.object_ownership {
+            let o = Ownership::parse(o.as_str()).ok_or_else(|| s3_error!(InvalidArgument, "Invalid x-amz-object-ownership"))?;
+            *bucket.config.ownership.write() = Some(o);
+        }
+        if let Some(acl) = acl::resolve_for_new_bucket(&bucket.config, &acl::acl_args!(&input, bucket))? {
+            *bucket.config.acl.write() = acl;
+        }
         let mut buckets = self.store.buckets.write();
         if buckets.contains_key(&name) {
             return Err(s3_error!(BucketAlreadyOwnedByYou));
         }
-        buckets.insert(name.clone(), Arc::new(StoreBucket::new(self.clock.now())));
+        buckets.insert(name.clone(), Arc::new(bucket));
         Ok(S3Response::new(CreateBucketOutput {
             location: Some(format!("/{name}")),
             ..Default::default()
@@ -799,10 +823,143 @@ impl S3 for FakeS3 {
         Ok(S3Response::new(DeleteBucketTaggingOutput {}))
     }
 
+    // Bucket configuration (ACL, ownership, public access block, policy, CORS, lifecycle, website,
+    // notification); the handlers live in bucket_ops.rs.
+    async fn get_bucket_acl(&self, req: S3Request<GetBucketAclInput>) -> S3Result<S3Response<GetBucketAclOutput>> {
+        self.do_get_bucket_acl(req)
+    }
+
+    async fn put_bucket_acl(&self, req: S3Request<PutBucketAclInput>) -> S3Result<S3Response<PutBucketAclOutput>> {
+        self.do_put_bucket_acl(req)
+    }
+
+    async fn get_object_acl(&self, req: S3Request<GetObjectAclInput>) -> S3Result<S3Response<GetObjectAclOutput>> {
+        self.do_get_object_acl(req)
+    }
+
+    async fn put_object_acl(&self, req: S3Request<PutObjectAclInput>) -> S3Result<S3Response<PutObjectAclOutput>> {
+        self.do_put_object_acl(req)
+    }
+
+    async fn get_bucket_ownership_controls(
+        &self,
+        req: S3Request<GetBucketOwnershipControlsInput>,
+    ) -> S3Result<S3Response<GetBucketOwnershipControlsOutput>> {
+        self.do_get_bucket_ownership_controls(req)
+    }
+
+    async fn put_bucket_ownership_controls(
+        &self,
+        req: S3Request<PutBucketOwnershipControlsInput>,
+    ) -> S3Result<S3Response<PutBucketOwnershipControlsOutput>> {
+        self.do_put_bucket_ownership_controls(req)
+    }
+
+    async fn delete_bucket_ownership_controls(
+        &self,
+        req: S3Request<DeleteBucketOwnershipControlsInput>,
+    ) -> S3Result<S3Response<DeleteBucketOwnershipControlsOutput>> {
+        self.do_delete_bucket_ownership_controls(req)
+    }
+
+    async fn get_public_access_block(&self, req: S3Request<GetPublicAccessBlockInput>) -> S3Result<S3Response<GetPublicAccessBlockOutput>> {
+        self.do_get_public_access_block(req)
+    }
+
+    async fn put_public_access_block(&self, req: S3Request<PutPublicAccessBlockInput>) -> S3Result<S3Response<PutPublicAccessBlockOutput>> {
+        self.do_put_public_access_block(req)
+    }
+
+    async fn delete_public_access_block(
+        &self,
+        req: S3Request<DeletePublicAccessBlockInput>,
+    ) -> S3Result<S3Response<DeletePublicAccessBlockOutput>> {
+        self.do_delete_public_access_block(req)
+    }
+
+    async fn get_bucket_policy(&self, req: S3Request<GetBucketPolicyInput>) -> S3Result<S3Response<GetBucketPolicyOutput>> {
+        self.do_get_bucket_policy(req)
+    }
+
+    async fn put_bucket_policy(&self, req: S3Request<PutBucketPolicyInput>) -> S3Result<S3Response<PutBucketPolicyOutput>> {
+        self.do_put_bucket_policy(req)
+    }
+
+    async fn delete_bucket_policy(&self, req: S3Request<DeleteBucketPolicyInput>) -> S3Result<S3Response<DeleteBucketPolicyOutput>> {
+        self.do_delete_bucket_policy(req)
+    }
+
+    async fn get_bucket_policy_status(
+        &self,
+        req: S3Request<GetBucketPolicyStatusInput>,
+    ) -> S3Result<S3Response<GetBucketPolicyStatusOutput>> {
+        self.do_get_bucket_policy_status(req)
+    }
+
+    async fn get_bucket_cors(&self, req: S3Request<GetBucketCorsInput>) -> S3Result<S3Response<GetBucketCorsOutput>> {
+        self.do_get_bucket_cors(req)
+    }
+
+    async fn put_bucket_cors(&self, req: S3Request<PutBucketCorsInput>) -> S3Result<S3Response<PutBucketCorsOutput>> {
+        self.do_put_bucket_cors(req)
+    }
+
+    async fn delete_bucket_cors(&self, req: S3Request<DeleteBucketCorsInput>) -> S3Result<S3Response<DeleteBucketCorsOutput>> {
+        self.do_delete_bucket_cors(req)
+    }
+
+    async fn get_bucket_lifecycle_configuration(
+        &self,
+        req: S3Request<GetBucketLifecycleConfigurationInput>,
+    ) -> S3Result<S3Response<GetBucketLifecycleConfigurationOutput>> {
+        self.do_get_bucket_lifecycle(req)
+    }
+
+    async fn put_bucket_lifecycle_configuration(
+        &self,
+        req: S3Request<PutBucketLifecycleConfigurationInput>,
+    ) -> S3Result<S3Response<PutBucketLifecycleConfigurationOutput>> {
+        self.do_put_bucket_lifecycle(req)
+    }
+
+    async fn delete_bucket_lifecycle(
+        &self,
+        req: S3Request<DeleteBucketLifecycleInput>,
+    ) -> S3Result<S3Response<DeleteBucketLifecycleOutput>> {
+        self.do_delete_bucket_lifecycle(req)
+    }
+
+    async fn get_bucket_website(&self, req: S3Request<GetBucketWebsiteInput>) -> S3Result<S3Response<GetBucketWebsiteOutput>> {
+        self.do_get_bucket_website(req)
+    }
+
+    async fn put_bucket_website(&self, req: S3Request<PutBucketWebsiteInput>) -> S3Result<S3Response<PutBucketWebsiteOutput>> {
+        self.do_put_bucket_website(req)
+    }
+
+    async fn delete_bucket_website(&self, req: S3Request<DeleteBucketWebsiteInput>) -> S3Result<S3Response<DeleteBucketWebsiteOutput>> {
+        self.do_delete_bucket_website(req)
+    }
+
+    async fn get_bucket_notification_configuration(
+        &self,
+        req: S3Request<GetBucketNotificationConfigurationInput>,
+    ) -> S3Result<S3Response<GetBucketNotificationConfigurationOutput>> {
+        self.do_get_bucket_notification(req)
+    }
+
+    async fn put_bucket_notification_configuration(
+        &self,
+        req: S3Request<PutBucketNotificationConfigurationInput>,
+    ) -> S3Result<S3Response<PutBucketNotificationConfigurationOutput>> {
+        self.do_put_bucket_notification(req)
+    }
+
     async fn put_object(&self, req: S3Request<PutObjectInput>) -> S3Result<S3Response<PutObjectOutput>> {
         let input = req.input;
         let bucket = self.bucket(&input.bucket)?;
         let tags = parse_tagging_header(input.tagging.as_deref())?;
+        let acl = acl::resolve(&bucket.config, &acl::acl_args!(&input), false)?.map(Arc::new);
         let expected = checksum_from!(&input);
         let ing = ingest(
             self.sink(&req.headers),
@@ -833,7 +990,9 @@ impl S3 for FakeS3 {
             parts_count: None,
             part_sizes: None,
             tags,
+            acl,
         };
+        let expiration = self.expiration_header(&input.bucket, &input.key, &obj);
         let version_id = {
             let mut objects = bucket.objects.write();
             check_write_conditions(objects.get(&input.key), input.if_match.as_ref(), input.if_none_match.as_ref())?;
@@ -842,6 +1001,7 @@ impl S3 for FakeS3 {
         Ok(S3Response::new(with_checksum!(
             PutObjectOutput {
                 e_tag: Some(ETag::Strong(e_tag)),
+                expiration: expiration,
                 version_id: version_id,
                 checksum_type: Some(checksum_type(ChecksumType::FULL_OBJECT)),
             },
@@ -912,6 +1072,7 @@ impl S3 for FakeS3 {
                 tag_count: tag_count(&o.tags),
                 version_id: versioned.then(|| v.id.clone()),
                 checksum_type: ctype,
+                expiration: self.expiration_header(&input.bucket, &input.key, o),
             },
             checksum
         );
@@ -973,6 +1134,7 @@ impl S3 for FakeS3 {
                 tag_count: tag_count(&o.tags),
                 version_id: versioned.then(|| v.id.clone()),
                 checksum_type: ctype,
+                expiration: self.expiration_header(&input.bucket, &input.key, o),
             },
             checksum
         );
@@ -1018,9 +1180,22 @@ impl S3 for FakeS3 {
         let b = self.bucket(&req.input.bucket)?;
         let quiet = req.input.delete.quiet.unwrap_or(false);
         let mut deleted = Vec::new();
+        let mut errors = Vec::new();
+        let denied = req.extensions.get::<crate::access::Denied>();
         {
             let mut objects = b.objects.write();
             for id in req.input.delete.objects {
+                if let Some(d) = denied
+                    && d.0.iter().any(|(k, v)| *k == id.key && *v == id.version_id)
+                {
+                    errors.push(Error {
+                        code: Some("AccessDenied".into()),
+                        key: Some(id.key),
+                        message: Some("Access Denied".into()),
+                        version_id: id.version_id,
+                    });
+                    continue;
+                }
                 let d = match id.version_id {
                     Some(vid) => {
                         let marker = StoreBucket::delete_version(&mut objects, &id.key, &vid);
@@ -1051,6 +1226,7 @@ impl S3 for FakeS3 {
         }
         Ok(S3Response::new(DeleteObjectsOutput {
             deleted: Some(deleted),
+            errors: (!errors.is_empty()).then_some(errors),
             ..Default::default()
         }))
     }
@@ -1074,6 +1250,7 @@ impl S3 for FakeS3 {
             }
         })?;
         let dst_bucket = self.bucket(&input.bucket)?;
+        let acl = acl::resolve(&dst_bucket.config, &acl::acl_args!(&input), false)?.map(Arc::new);
         let replace = input
             .metadata_directive
             .as_ref()
@@ -1125,6 +1302,7 @@ impl S3 for FakeS3 {
             parts_count: src.parts_count,
             part_sizes: src.part_sizes.clone(),
             tags,
+            acl,
         };
         let version_id = {
             let mut objects = dst_bucket.objects.write();
@@ -1398,6 +1576,7 @@ impl S3 for FakeS3 {
         let b = self.bucket(&input.bucket)?;
         let tags = parse_tagging_header(input.tagging.as_deref())?;
         let ty = upload_checksum_type(input.checksum_algorithm.as_ref(), input.checksum_type.as_ref())?;
+        let acl = acl::resolve(&b.config, &acl::acl_args!(&input), false)?.map(Arc::new);
         let upload_id = uuid::Uuid::new_v4().simple().to_string();
         b.uploads.write().insert(
             (input.key.clone(), upload_id.clone()),
@@ -1412,6 +1591,7 @@ impl S3 for FakeS3 {
                     input.metadata,
                 ),
                 tags,
+                acl,
                 initiated: self.clock.now(),
                 checksum_algorithm: input.checksum_algorithm.clone(),
                 checksum_type: ty.clone(),
@@ -1756,6 +1936,7 @@ impl S3 for FakeS3 {
                 parts_count: Some(md5s.len() as i32),
                 part_sizes: Some(sizes.into()),
                 tags: up.tags.clone(),
+                acl: up.acl.clone(),
             };
             (obj, checksum)
         };
@@ -1888,6 +2069,7 @@ mod tests {
                             parts_count: None,
                             part_sizes: None,
                             tags: Vec::new(),
+                            acl: None,
                         }),
                         last_modified: now,
                     })

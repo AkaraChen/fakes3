@@ -30,6 +30,9 @@ pub struct StartOptions {
     /// Objects and parts at or above this many bytes are stored in a memfd instead of on the heap.
     /// Default 1 MiB.
     pub inline_threshold: Option<u32>,
+    /// Base domains for virtual-host-style addressing: `<bucket>.<domain>` selects the bucket.
+    /// Path-style requests keep working on every host. Default none.
+    pub domains: Option<Vec<String>>,
     /// Cap on the object data held in memory: a number of bytes, or a string such as `"512MiB"`,
     /// `"2GiB"`, `"unlimited"` or `"auto"`. Writes past it fail with HTTP 507. Default `"auto"`,
     /// which is 75% of the container's or machine's memory.
@@ -243,6 +246,7 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         secret_key: None,
         no_auth: None,
         inline_threshold: None,
+        domains: None,
         memory_limit: None,
         request_log: None,
         request_log_capacity: None,
@@ -254,6 +258,7 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         secret_key: options.secret_key.unwrap_or(defaults.secret_key),
         auth: !options.no_auth.unwrap_or(false),
         inline_threshold: options.inline_threshold.map_or(defaults.inline_threshold, |n| n as usize),
+        domains: options.domains.unwrap_or(defaults.domains),
         request_log: options.request_log.unwrap_or(defaults.request_log),
         request_log_capacity: options.request_log_capacity.map_or(defaults.request_log_capacity, |n| n as usize),
         memory_limit: match options.memory_limit {
