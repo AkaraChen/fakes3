@@ -34,7 +34,7 @@ fakes3 的协议层（路由、XML、签名校验）由 [s3s](https://github.com
 | s3s | StringToSign 的 CanonicalizedResource 直接用请求路径，`/bucket` 就是 `/bucket` |
 | S3 / botocore | botocore 对请求行是 `/bucket` 的 path-style 请求签 `/bucket/`（`CreateBucket`、`ListObjects`、`HeadBucket`……）；S3 两种都接受。所以 boto3 的 SigV2 bucket 级调用在 s3s 上全部 `SignatureDoesNotMatch` |
 | fakes3 | SigV2 签名的 bucket 级请求（路径只有一段）先原样交给 s3s；如果回 403 `SignatureDoesNotMatch`，把路径改成 `/bucket/` 再调用一次。HEAD 的响应没有 body，所以 HEAD 在任何 403 后重试，并且只有第二次不是 403 才采用第二次的结果 |
-| 安全性 | 验签仍然由 s3s 完成，用的还是配置的密钥；`/bucket` 和 `/bucket/` 是同一个操作，接受任一种写法不会放宽授权。第一次失败发生在操作执行之前，重放不会重复副作用 |
+| 安全性 | 验签仍然由 s3s 完成，用的是请求里 access key 对应账号的密钥（多账号时每个账号用自己的）；`/bucket` 和 `/bucket/` 是同一个操作，接受任一种写法不会放宽授权。第一次失败发生在操作执行之前，重放不会重复副作用 |
 | 代价 | 只有 SigV2 的 bucket 级请求会把 body 读进内存（上限 4 MiB，超过或没有 Content-Length 的不重试）。SigV4 请求只多一次 `Authorization` 头查找 |
 | 何时可以删 | s3s 的 `create_string_to_sign` 对 bucket 级路径两种写法都试 |
 
