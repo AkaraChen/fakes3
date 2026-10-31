@@ -10,8 +10,11 @@
 - [ ] `POST /_fakes3/faults`：按操作、bucket/key 前缀或概率注入故障
   - 503 SlowDown、500 InternalError、固定或随机延迟、body 截断、连接重置
 - [x] `GET /_fakes3/requests`：请求日志，用于断言调用次数和顺序
-- [x] 命令行 `fakes3 ctl` 和 Rust 进程内的 `Server` 方法（不做各语言的客户端封装）
-- [ ] testcontainers 模块、pytest fixture 之类的框架集成（基于 `fakes3 ctl` 或 HTTP API）
+- [x] 命令行 `fakes3 ctl` 和 Rust 进程内的 `Server` 方法
+- [x] Rust 进程内库模式（`Server::start` / `Server::start_blocking`）、Node.js 绑定（napi-rs）、GHCR 镜像
+- [x] testcontainers：不需要专门的模块，通用容器 + 日志等待即可（见 README）
+- [ ] 其余语言的框架集成（pytest fixture 等，基于 `fakes3 ctl` 或 HTTP API）
+- [ ] `--no-auth` 模式下已签名的请求会得到 501 `This service has no authentication provider`（s3s 在没有 auth provider 时拒绝带签名的请求），只有匿名请求能通过
 
 ## S3 语义完整度
 

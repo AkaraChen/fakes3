@@ -1,6 +1,9 @@
 //! fakes3: an in-memory S3 server for tests.
 //!
-//! The binary is a thin CLI over this library; tests can also run the server in-process:
+//! The binary is a thin CLI over this library; tests can also run the server in-process.
+//! It listens on a random free port by default, so parallel tests never collide.
+//!
+//! In async code, start it on the current Tokio runtime:
 //!
 //! ```no_run
 //! # async fn demo() -> std::io::Result<()> {
@@ -11,9 +14,17 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! Synchronous code can use [`Server::start_blocking`], which runs the server on a background
+//! runtime and stops it when the returned handle is dropped.
+//!
+//! Clients need path-style addressing, and the credentials from [`Config`] (`fakes3` /
+//! `fakes3secret` unless changed) unless `auth` is off. Any region works. See
+//! `examples/aws_sdk.rs` for a complete setup with `aws-sdk-s3`.
 
 mod access;
 mod acl;
+mod blocking;
 mod bucket_config;
 mod bucket_ops;
 mod clock;
@@ -42,6 +53,7 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
+pub use blocking::BlockingServer;
 pub use clock::{Clock, OutOfRange, parse_duration};
 pub use control::{Control, ControlError, ResetOptions, SnapshotInfo};
 pub use memory::{MemoryLimit, MemoryStats};
@@ -51,9 +63,11 @@ pub use snapshot::Counts;
 /// Server settings. `Default` listens on a random localhost port with the default credentials.
 #[derive(Clone, Debug)]
 pub struct Config {
+    /// Address to listen on.
     pub host: String,
     /// 0 picks a free port.
     pub port: u16,
+    /// Credentials clients must sign with when `auth` is on.
     pub access_key: String,
     pub secret_key: String,
     /// Verify request signatures.
@@ -90,8 +104,9 @@ impl Default for Config {
     }
 }
 
-/// A running server. Dropping it without [`Server::shutdown`] leaves it running until the
-/// Tokio runtime it was started on shuts down.
+/// A running server. [`Server::shutdown`] stops it and waits; dropping it also closes the
+/// listener, but does not wait. Connections that are already open keep being served until their
+/// clients hang up or the Tokio runtime shuts down.
 pub struct Server {
     addr: SocketAddr,
     control: Arc<Control>,
@@ -148,6 +163,7 @@ impl Server {
         })
     }
 
+    /// The address actually bound; the real port when `Config::port` was 0.
     pub fn addr(&self) -> SocketAddr {
         self.addr
     }

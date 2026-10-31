@@ -1,0 +1,88 @@
+//! A server on its own background runtime, for tests that are not async.
+
+use std::io;
+use std::net::SocketAddr;
+use std::ops::Deref;
+
+use tokio::runtime::Runtime;
+
+use crate::{Config, Server};
+
+/// A [`Server`] together with the Tokio runtime it runs on, started by [`Server::start_blocking`].
+///
+/// Everything [`Server`] offers through `&self` is available here by deref. Dropping the handle
+/// stops the server; it does not block, so it is safe to drop anywhere, including inside async code.
+pub struct BlockingServer {
+    // Declared first so the listener closes before the runtime goes away.
+    server: Option<Server>,
+    runtime: Option<Runtime>,
+}
+
+impl Server {
+    /// Starts a server on a new background runtime and returns once it is listening.
+    ///
+    /// For synchronous tests, or tests that already have a runtime of their own and do not want
+    /// the server to share it. Must not be called from inside an async context; use
+    /// [`Server::start`] there. The runtime has at most 4 worker threads.
+    ///
+    /// ```no_run
+    /// let server = fakes3::Server::start_blocking(fakes3::Config::default()).unwrap();
+    /// println!("{}", server.endpoint());
+    /// // The server stops when `server` goes out of scope.
+    /// ```
+    pub fn start_blocking(config: Config) -> io::Result<BlockingServer> {
+        let threads = std::thread::available_parallelism().map_or(2, |n| n.get().min(4));
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(threads)
+            .thread_name("fakes3")
+            .enable_all()
+            .build()?;
+        let server = runtime.block_on(Server::start(config))?;
+        Ok(BlockingServer {
+            server: Some(server),
+            runtime: Some(runtime),
+        })
+    }
+}
+
+impl BlockingServer {
+    pub fn addr(&self) -> SocketAddr {
+        self.server().addr()
+    }
+
+    /// `http://host:port`, ready to use as an S3 endpoint URL.
+    pub fn endpoint(&self) -> String {
+        self.server().endpoint()
+    }
+
+    /// Stops the server and waits for the runtime to wind down. Same as dropping it, except that
+    /// this waits for the listener to close. Must not be called from inside an async context.
+    pub fn shutdown(mut self) {
+        if let (Some(server), Some(runtime)) = (self.server.take(), self.runtime.take()) {
+            runtime.block_on(server.shutdown());
+        }
+    }
+
+    fn server(&self) -> &Server {
+        self.server.as_ref().expect("server is only taken by shutdown and drop")
+    }
+}
+
+impl Deref for BlockingServer {
+    type Target = Server;
+
+    fn deref(&self) -> &Server {
+        self.server()
+    }
+}
+
+impl Drop for BlockingServer {
+    fn drop(&mut self) {
+        // Dropping the server closes the listener; `shutdown_background` abandons the remaining
+        // connection tasks without blocking, which `Runtime::drop` would refuse to do in async code.
+        drop(self.server.take());
+        if let Some(runtime) = self.runtime.take() {
+            runtime.shutdown_background();
+        }
+    }
+}
