@@ -27,6 +27,7 @@ mod acl;
 mod archive;
 mod blocking;
 mod bucket_config;
+mod bucket_defaults;
 mod bucket_ops;
 mod clock;
 mod control;
@@ -57,6 +58,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 pub use blocking::BlockingServer;
+pub use bucket_defaults::BucketDefaults;
 pub use clock::{Clock, OutOfRange, parse_duration};
 pub use control::{Control, ControlError, ResetOptions, SnapshotInfo};
 pub use memory::{MemoryLimit, MemoryStats};
@@ -88,6 +90,10 @@ pub struct Config {
     /// is refused with HTTP 507 `XFakeS3MemoryLimitExceeded`. The default, [`MemoryLimit::Auto`],
     /// is 75% of the container's or machine's memory.
     pub memory_limit: MemoryLimit,
+    /// The settings new buckets start with. [`BucketDefaults::Legacy`] (the default) leaves ACLs
+    /// enabled and Block Public Access off; [`BucketDefaults::Aws`] applies the defaults AWS has
+    /// for new buckets today. Buckets that already exist are not affected.
+    pub bucket_defaults: BucketDefaults,
 }
 
 impl Default for Config {
@@ -103,6 +109,7 @@ impl Default for Config {
             request_log: true,
             request_log_capacity: DEFAULT_REQUEST_LOG_CAPACITY,
             memory_limit: MemoryLimit::Auto,
+            bucket_defaults: BucketDefaults::Legacy,
         }
     }
 }
@@ -132,6 +139,7 @@ impl Server {
             Arc::default(),
             MemoryTracker::new(limit),
             reqlog::RequestLog::new(config.request_log, config.request_log_capacity),
+            config.bucket_defaults,
         ));
         let (stop, mut stopped) = oneshot::channel();
         let service = service(&config, control.clone());
@@ -243,6 +251,7 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
         inline_threshold: config.inline_threshold,
         memory: control.memory.clone(),
         clock: control.clock.clone(),
+        defaults: config.bucket_defaults,
     };
     let mut b = S3ServiceBuilder::new(fake);
     // Legacy clients (s3fs/aiobotocore presigning, old SDKs) still sign with SigV2.

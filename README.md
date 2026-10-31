@@ -185,6 +185,7 @@ await server.stop();
 | `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
 | `requestLog` / `requestLogCapacity` | `true` / `10000` | 是否记录 S3 请求（见下面的控制面），以及最多保留多少条 |
 | `domains` | 无 | 虚拟主机寻址的基础域名（`<bucket>.<domain>`），path-style 始终可用 |
+| `bucketDefaults` | `"legacy"` | 新建 bucket 的初始设置：`"legacy"` 或 `"aws"`，见[新建 bucket 的默认值](#新建-bucket-的默认值) |
 | `memoryLimit` | `"auto"` | 对象数据占用内存的上限：字节数，或 `"512MiB"`、`"2GiB"`、`"unlimited"`、`"auto"`；超出时写入返回 HTTP 507 |
 
 `FakeS3Server` 有只读属性 `endpoint`、`host`、`port`、`accessKey`、`secretKey`，以及方法 `memory(): { used, limit }`（当前用量和上限，字节；无上限时没有 `limit` 字段），`stop(): Promise<void>`（可重复调用，调用后端口立即释放）。
@@ -236,6 +237,7 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 | `--domain` | `FAKES3_DOMAIN` | `localhost` | virtual-host 寻址的基础域名，可重复（或逗号分隔）；`<bucket>.<domain>` 选择 bucket，其它主机名仍按 path-style 处理；传空字符串关闭 |
 | `--inline-threshold` | | `1048576` | 达到这个大小的对象或 part 存进 memfd，小于它的放在堆上 |
 | `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | 对象数据占用内存的上限，见下文。可以写 `2GiB`、`512MiB`、`unlimited`、`auto` |
+| `--bucket-defaults` | `FAKES3_BUCKET_DEFAULTS` | `legacy` | 新建 bucket 的初始设置：`legacy` 或 `aws`，见[新建 bucket 的默认值](#新建-bucket-的默认值)。库里对应 `Config::bucket_defaults`（`BucketDefaults::Legacy` / `Aws`） |
 
 **内存上限**：fakes3 统计所有对象数据实际占用的内存（堆上的小对象、memfd 里的大对象、尚未 Complete 的分段上传的 part），
 超出上限的写入会被拒绝，而不是让进程被 OOM killer 杀掉。
@@ -256,6 +258,55 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
   不用 503 SlowDown 是因为 SDK 会对它退避重试，只会把失败拖慢；不用 400 EntityTooLarge 是因为它表示单个对象太大。
   各主流 SDK 的默认重试策略都不会重试 507（MinIO 的磁盘满也是 507）。
 
+## 新建 bucket 的默认值
+
+AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认**保留旧的行为**（`--bucket-defaults legacy`），这样“先给 bucket 挂一个公开 policy，再匿名读取”之类的测试准备步骤开箱即用；
+需要和今天的 AWS 一致时用 `--bucket-defaults aws`（或 `FAKES3_BUCKET_DEFAULTS=aws`、`Config { bucket_defaults: BucketDefaults::Aws, .. }`、Node 的 `start({ bucketDefaults: "aws" })`）。
+
+| | `legacy`（默认） | `aws` |
+|---|---|---|
+| Object Ownership | 未配置，ACL 可用；`GetBucketOwnershipControls` 返回 `OwnershipControlsNotFoundError` | `BucketOwnerEnforced`，ACL 被禁用；`GetBucketOwnershipControls` 返回 `BucketOwnerEnforced` |
+| Block Public Access | 未配置；`GetPublicAccessBlock` 返回 `NoSuchPublicAccessBlockConfiguration` | 四项全开（`BlockPublicAcls`、`IgnorePublicAcls`、`BlockPublicPolicy`、`RestrictPublicBuckets` 均为 `true`） |
+| 默认加密（SSE-S3） | 无：`GetBucketEncryption` 返回 `ServerSideEncryptionConfigurationNotFoundError`，PUT / GET / HEAD 不带 `x-amz-server-side-encryption`（显式要求 SSE 时照常） | `GetBucketEncryption` 返回 `AES256`，新对象的 PUT / GET / HEAD 带 `x-amz-server-side-encryption: AES256`；`DeleteBucketEncryption` 之后回到 SSE-S3 |
+| 默认禁用 SSE-C | 允许 | 禁用（2026 年 4 月起）：`GetBucketEncryption` 带 `BlockedEncryptionTypes` = `SSE-C`；要求 SSE-C 的 `PutObject`、`CopyObject`、分段上传返回 403 `AccessDenied`，已有的 SSE-C 对象仍可带 key 读取 |
+
+`aws` 模式下具体的行为都有 AWS 文档依据（文档只写明了显式设置 `BucketOwnerEnforced` 时 `CreateBucket` 的错误码；没带 `x-amz-object-ownership` 的默认情况沿用同一个错误码）：
+
+- `CreateBucket` 带 `x-amz-acl`（`public-read` 等）或 `x-amz-grant-*` 头，又没有显式设置 `x-amz-object-ownership` 时失败，
+  返回 400 `InvalidBucketAclWithObjectOwnership`，bucket 不会被创建。只给 owner 完全控制的 ACL（`x-amz-acl: private`）可以通过。
+  要在创建时设置 ACL，必须同时带 `x-amz-object-ownership: ObjectWriter` 或 `BucketOwnerPreferred`；
+  如果 ACL 是公开的，仍然会失败（403 `AccessDenied`，因为 Block Public Access 是开着的）。
+- 显式的 `x-amz-object-ownership` 按请求为准（`BucketOwnerEnforced`、`BucketOwnerPreferred`、`ObjectWriter`），Block Public Access 仍然全开。
+- ACL 被禁用时：`PutBucketAcl` / `PutObjectAcl` / 带 ACL 头的 `PutObject` 返回 400 `AccessControlListNotSupported`（只接受 `bucket-owner-full-control` 或不带 ACL），读 ACL 永远只显示 owner 的完全控制。
+- Block Public Access 全开时：公开的 bucket policy 在 `PutBucketPolicy` 时被拒绝（403 `AccessDenied`），公开的 ACL 被拒绝，匿名请求得不到访问。
+- 想要匿名访问，需要明确放开：`DeletePublicAccessBlock`（或 `PutPublicAccessBlock` 关掉相应的项），再用 policy 授权；
+  走 ACL 的话还要 `DeleteBucketOwnershipControls` 或 `PutBucketOwnershipControls` 改成 `ObjectWriter` / `BucketOwnerPreferred`。
+  这和 AWS 文档里的做法一致。
+
+默认值只在创建 bucket 的那一刻生效。已有的 bucket、快照和 `restore` 都保持各自当前的设置，`reset` 之后新建的 bucket 按当前模式重新开始。
+当前模式可以在 `fakes3 ctl status` / `GET /_fakes3` 里看到（`bucket_defaults`）。
+
+- 要在 `aws` 模式的 bucket 里用 SSE-C，先 `PutBucketEncryption`，在规则里写 `BlockedEncryptionTypes` = `NONE`（只有这一项的规则也可以，默认加密保持 SSE-S3）；
+  写 `SSE-C` 则再次禁用。没有写 `BlockedEncryptionTypes` 的 `PutBucketEncryption` 按字面处理，即不禁用任何类型（文档没有说明省略时的行为）。
+  `DeleteBucketEncryption` 回到默认配置，也就是重新禁用 SSE-C。表单上传（POST policy）目前不处理 SSE 字段，所以没有对应的检查。
+
+`aws` 模式只包含上面有文档依据的默认值，没有按日期划分的“兼容版本”，因为 AWS 没有发布精确的行为变更记录。
+
+来源：
+
+- [S3 Document history](https://docs.aws.amazon.com/AmazonS3/latest/userguide/WhatsNew.html)：2023-04-27 “Amazon S3 now automatically enables S3 Block Public Access and disables S3 access control lists (ACLs) for all new S3 buckets in all AWS Regions”，
+  [公告](https://aws.amazon.com/about-aws/whats-new/2023/04/amazon-s3-security-best-practices-buckets-default)
+- [Controlling ownership of objects and disabling ACLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html)、
+  [Troubleshooting](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-ownership-error-responses.html)（`AccessControlListNotSupported`、`InvalidBucketAclWithObjectOwnership`）
+- [Blocking public access to your Amazon S3 storage](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html)
+- [CreateBucket API](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html)：`x-amz-object-ownership` 默认 `BucketOwnerEnforced`；
+  “To set an ACL on a bucket as part of a CreateBucket request, you must explicitly set S3 Object Ownership for the bucket to a different value than the default”
+- [Default encryption FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-encryption-faq.html)、[GetBucketEncryption](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html)：
+  2023-01-05 起所有新对象默认 SSE-S3，响应头 `x-amz-server-side-encryption`
+- [Default SSE-C setting for new buckets FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-s3-c-encryption-setting-faq.html)、
+  [Blocking or unblocking SSE-C](https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html)、
+  [BlockedEncryptionTypes](https://docs.aws.amazon.com/AmazonS3/latest/API/API_BlockedEncryptionTypes.html)：2026 年 4 月起新的通用 bucket 默认禁用 SSE-C
+
 ## 支持的功能
 
 - Bucket：创建、删除、HeadBucket、ListBuckets、GetBucketLocation、Bucket 标签
@@ -264,7 +315,7 @@ CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并�
 - 分段上传：Create、UploadPart、UploadPartCopy、ListParts、Complete、Abort；GET/HEAD 支持 `?partNumber=`
 - 版本控制：Enabled / Suspended、删除标记、null version、按 VersionId 读取和删除、MFA Delete 头校验
 - Object Lock：保留期（GOVERNANCE / COMPLIANCE）、Legal Hold、bucket 默认保留期、`x-amz-bypass-governance-retention`，到期时间按服务端时钟判断
-- 加密：SSE-C（校验算法和 key MD5，GET/HEAD/Copy 必须带同一个 key）、SSE-S3 / SSE-KMS 头回显、bucket 默认加密；数据本身不加密
+- 加密：SSE-C（校验算法和 key MD5，GET/HEAD/Copy 必须带同一个 key）、SSE-S3 / SSE-KMS 头回显、bucket 默认加密（`--bucket-defaults aws` 时每个新 bucket 默认 SSE-S3）；数据本身不加密
 - 对象属性：GetObjectAttributes、storage class 和 `x-amz-website-redirect-location` 的写入与回显
 - 条件请求：If-Match、If-None-Match（包括条件写入）、If-Modified-Since、If-Unmodified-Since、CopySource 的条件头
 - 校验和：CRC32、CRC32C、CRC64NVME、SHA1、SHA256 等，支持 header 和 aws-chunked trailer 两种方式；

@@ -239,9 +239,13 @@ impl FakeS3 {
             return Err(s3_error!(MalformedXML));
         }
         let rule = rules.remove(0);
+        // A rule that only sets BlockedEncryptionTypes (how SSE-C is blocked or unblocked) keeps SSE-S3.
         let by_default = rule
             .apply_server_side_encryption_by_default
-            .ok_or_else(|| s3_error!(MalformedXML))?;
+            .unwrap_or_else(|| ServerSideEncryptionByDefault {
+                sse_algorithm: ServerSideEncryption::from_static(ServerSideEncryption::AES256),
+                kms_master_key_id: None,
+            });
         let algorithm = by_default.sse_algorithm;
         let kms = match algorithm.as_str() {
             ServerSideEncryption::AES256 => false,
@@ -265,24 +269,22 @@ impl FakeS3 {
         req: S3Request<GetBucketEncryptionInput>,
     ) -> S3Result<S3Response<GetBucketEncryptionOutput>> {
         let b = self.bucket(&req.input.bucket)?;
-        // Every bucket encrypts with SSE-S3 unless told otherwise.
-        let rule = match b.cfg.encryption() {
-            Some(r) => ServerSideEncryptionRule {
-                apply_server_side_encryption_by_default: Some(ServerSideEncryptionByDefault {
-                    sse_algorithm: r.algorithm,
-                    kms_master_key_id: r.kms_key_id,
-                }),
-                bucket_key_enabled: r.bucket_key,
-                blocked_encryption_types: r.blocked,
-            },
-            None => ServerSideEncryptionRule {
-                apply_server_side_encryption_by_default: Some(ServerSideEncryptionByDefault {
-                    sse_algorithm: ServerSideEncryption::from_static(ServerSideEncryption::AES256),
-                    kms_master_key_id: None,
-                }),
-                bucket_key_enabled: Some(false),
-                blocked_encryption_types: None,
-            },
+        // Pre-2023 behaviour: a bucket without default encryption (`--bucket-defaults legacy`).
+        let r = b.cfg.encryption().ok_or_else(|| {
+            let mut e = s3_error!(
+                ServerSideEncryptionConfigurationNotFoundError,
+                "The server side encryption configuration was not found"
+            );
+            e.set_status_code(http::StatusCode::NOT_FOUND);
+            e
+        })?;
+        let rule = ServerSideEncryptionRule {
+            apply_server_side_encryption_by_default: Some(ServerSideEncryptionByDefault {
+                sse_algorithm: r.algorithm,
+                kms_master_key_id: r.kms_key_id,
+            }),
+            bucket_key_enabled: r.bucket_key,
+            blocked_encryption_types: r.blocked,
         };
         Ok(S3Response::new(GetBucketEncryptionOutput {
             server_side_encryption_configuration: Some(ServerSideEncryptionConfiguration { rules: vec![rule] }),
@@ -293,7 +295,10 @@ impl FakeS3 {
         &self,
         req: S3Request<DeleteBucketEncryptionInput>,
     ) -> S3Result<S3Response<DeleteBucketEncryptionOutput>> {
-        self.bucket(&req.input.bucket)?.cfg.set_encryption(None);
+        // AWS no longer lets a bucket go without default encryption: deleting it restores SSE-S3.
+        self.bucket(&req.input.bucket)?
+            .cfg
+            .set_encryption(self.defaults.default_encryption());
         Ok(S3Response::new(DeleteBucketEncryptionOutput {}))
     }
 

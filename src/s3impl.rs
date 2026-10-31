@@ -12,6 +12,7 @@ use s3s::{S3, S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 
 use crate::acl;
 use crate::bucket_config::Ownership;
+use crate::bucket_defaults::BucketDefaults;
 use crate::clock::Clock;
 use crate::digest;
 use crate::memory::{LimitExceeded, MemoryTracker};
@@ -27,6 +28,7 @@ pub struct FakeS3 {
     pub inline_threshold: usize,
     pub memory: Arc<MemoryTracker>,
     pub clock: Arc<Clock>,
+    pub defaults: BucketDefaults,
 }
 
 impl FakeS3 {
@@ -738,6 +740,8 @@ impl S3 for FakeS3 {
         let input = req.input;
         let name = input.bucket.clone();
         let bucket = StoreBucket::new(self.clock.now());
+        self.defaults.apply(&bucket.config);
+        bucket.cfg.set_encryption(self.defaults.default_encryption());
         if let Some(o) = &input.object_ownership {
             let o = Ownership::parse(o.as_str()).ok_or_else(|| s3_error!(InvalidArgument, "Invalid x-amz-object-ownership"))?;
             *bucket.config.ownership.write() = Some(o);

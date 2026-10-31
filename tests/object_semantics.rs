@@ -3,7 +3,7 @@
 
 use std::time::{Duration, UNIX_EPOCH};
 
-use fakes3::{Config, Server};
+use fakes3::{BucketDefaults, Config, Server};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -111,8 +111,13 @@ fn dechunk(mut b: &[u8]) -> Vec<u8> {
 }
 
 async fn start() -> (Server, Client) {
+    start_with(BucketDefaults::Legacy).await
+}
+
+async fn start_with(bucket_defaults: BucketDefaults) -> (Server, Client) {
     let server = Server::start(Config {
         auth: false,
+        bucket_defaults,
         ..Config::default()
     })
     .await
@@ -508,9 +513,9 @@ async fn sse_c_requires_the_same_key() {
 
 #[tokio::test]
 async fn sse_s3_kms_and_default_encryption() {
-    let (_server, c) = start().await;
+    let (_server, c) = start_with(BucketDefaults::Aws).await;
     c.put("/bkt", &[], "").await;
-    // Everything is SSE-S3 unless said otherwise.
+    // With the AWS defaults everything is SSE-S3 unless said otherwise.
     let r = c.put("/bkt/k", &[], "x").await;
     assert_eq!(r.header("x-amz-server-side-encryption"), Some("AES256"));
     assert_eq!(c.head("/bkt/k", &[]).await.header("x-amz-server-side-encryption"), Some("AES256"));
