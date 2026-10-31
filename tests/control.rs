@@ -435,7 +435,10 @@ async fn cli_drives_the_api() {
     put_object(&s, "bkt", "k", "v").await;
 
     let (ok, out, _) = run(&["status"]).await;
-    assert!(ok && out.contains("1 buckets, 1 objects"), "{out}");
+    assert!(
+        ok && out.contains("1 buckets, 1 objects") && out.contains("legacy defaults"),
+        "{out}"
+    );
 
     let (ok, out, _) = run(&["snapshot", "create", "base"]).await;
     assert!(ok && out.starts_with("created base"), "{out}");

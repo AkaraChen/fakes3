@@ -252,7 +252,7 @@ $ curl localhost:9000/_fakes3/stats
 ```
 
 `memory.used` 是服务器持有的对象数据字节数（含分段上传的 part，以及仍被快照或进行中的读取引用的数据），`limit` 是
-`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本和时钟，`fakes3 ctl status` 显示的就是它。
+`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本、时钟和 `bucket_defaults`（`"legacy"` 或 `"aws"`，见 [README](../README.md#新建-bucket-的默认值)），`fakes3 ctl status` 显示的就是它。
 
 **内存与重置、快照的关系。** 数据缓冲区按引用计数在最后一个引用消失时释放并归还额度，所以：
 
