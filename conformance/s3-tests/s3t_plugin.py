@@ -92,4 +92,13 @@ def pytest_runtest_makereport(item, call):
             rec["where"] = f"{os.path.relpath(crash.path)}:{crash.lineno}"
         if call.excinfo is not None:
             rec["exc"] = call.excinfo.typename
+            # The innermost frame in a test module: the assertion's own line, not assert_raises' helper.
+            for entry in reversed(call.excinfo.traceback):
+                if os.path.basename(str(entry.path)).startswith("test_"):
+                    rec["test_line"] = f"{os.path.basename(str(entry.path))}:{entry.lineno + 1}"
+                    try:
+                        rec["test_src"] = str(entry.statement).strip()[:300]
+                    except Exception:  # noqa: BLE001 - source may be unavailable
+                        pass
+                    break
     _out.write(json.dumps(rec) + "\n")

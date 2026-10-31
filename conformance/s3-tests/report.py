@@ -44,7 +44,8 @@ def load(server_dir):
                 st = "fail" if r["when"] == "call" else "error"
                 if t["status"] in ("pass", "skip") or st == "fail":
                     t.update(status=st, message=r.get("message", ""), where=r.get("where", ""),
-                             exc=r.get("exc", ""), phase=r["when"])
+                             exc=r.get("exc", ""), phase=r["when"], test_line=r.get("test_line", ""),
+                             test_src=r.get("test_src", ""))
             elif r["outcome"] == "skipped" and t["status"] == "pass" and r["when"] != "teardown":
                 t.update(status="skip", message=r.get("message", ""))
     junit = os.path.join(server_dir, "junit.xml")
