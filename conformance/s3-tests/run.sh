@@ -11,6 +11,7 @@
 #   S3T_TIMEOUT   per-test timeout in seconds (default 180)
 #   S3T_OUT       result directory (default conformance/s3-tests/results/<server>)
 #   S3T_WORK      checkout and venv directory (default conformance/s3-tests/.work)
+#   S3T_LENIENT_CLEANUP  1 (default) = bucket cleanup errors are logged, not raised (see s3t_plugin.py)
 #   S3T_NO_SERVER set to test a server that is already running (needs S3T_PORT)
 #
 # Writes junit.xml, phases.*.jsonl (one line per test phase, with markers; see s3t_plugin.py) and
