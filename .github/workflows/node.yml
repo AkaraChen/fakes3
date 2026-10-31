@@ -8,7 +8,7 @@ name: node
 # layout without uploading anything. Without an NPM_TOKEN secret it falls back to the dry run too.
 on:
   push:
-    branches: [main, feat/distribution] # feat/distribution is TEMPORARY
+    branches: [main]
     tags: ["v*"]
     paths: &paths
       - "bindings/node/**"
