@@ -47,6 +47,8 @@ s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3:latest
 ```
 
+> 镜像和 npm 包在第一个版本（`v0.1.0`）发布后才可用；在那之前请用 `docker build -t fakes3 .` 或从源码编译。
+
 - 平台：`linux/amd64` 和 `linux/arm64`，同一个 tag 自动选择；镜像基于 Alpine，里面只有一个静态链接的 musl 二进制，压缩后约 7 MB。
 - tag：`latest`、完整版本（`0.1.0`）、`主版本.次版本`（`0.1`），以及提交的短 sha（`sha-abc1234`）。
 - 镜像里默认监听 `0.0.0.0:9000`，配置项见下面的[配置](#配置)，用环境变量（`FAKES3_*`）或命令行参数都可以。
@@ -156,10 +158,14 @@ let endpoint = server.endpoint();
 ## Node.js 绑定
 
 [bindings/node/](bindings/node/) 是一个 [napi-rs](https://napi.rs) 插件，在 Node 进程里直接运行服务（不起子进程、不需要 Docker），
-包名 `fakes3`（**尚未发布到 npm**，名字见 [bindings/node/package.json](bindings/node/package.json)）。
+npm 包名是 `fakes3-sdk`：
+
+```bash
+npm install --save-dev fakes3-sdk
+```
 
 ```ts
-import { start } from "fakes3";
+import { start } from "fakes3-sdk";
 import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
 
 const server = await start(); // 默认监听 127.0.0.1 的随机端口
@@ -225,6 +231,18 @@ npm test                  # 用 @aws-sdk/client-s3 跑一遍
 
 CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并各自跑一遍测试；
 发布到 npm 只在推送 `v*` tag 或手动触发且 `publish: true` 时发生，其余情况只做 `npm publish --dry-run`。
+
+## 安全提示
+
+fakes3 是给测试用的，**不要把它暴露在不可信的网络上，也不要拿它存真实数据**：
+
+- **默认不校验签名**：任意凭证都能读写（见[认证模式](#认证模式)）。即使加了 `--auth`，凭证也是明文配置的测试凭证。
+- **控制面没有认证**：`/_fakes3/*`（reset、快照、虚拟时钟、请求日志）对能连上端口的任何人开放，
+  可以清空全部数据或读到请求日志。它只拒绝浏览器发起的跨域写请求（带 `Origin` 的非 GET 请求）。
+- **监听地址**：二进制默认只监听 `127.0.0.1`，**Docker 镜像默认监听 `0.0.0.0`**。在共享机器或 CI 上用 `-p 127.0.0.1:9000:9000`
+  这样的方式只映射到本机，或者放在内部网络里。
+- **没有持久化**：进程退出数据就没了；内存上限默认是容器或机器内存的 75%，超出时写请求返回 507。
+- SSE-C、SSE-S3、KMS 只模拟了 S3 的行为，数据**不会真的加密**。
 
 ## 配置
 
@@ -468,6 +486,19 @@ fakes3 ctl requests list --op PutObject       # 请求日志：按 bucket、操�
 
 fakes3 剩下的 8 个失败全部是 SDK 自身的 bug（minio-dotnet 有 6 个，minio-java 和 obstore 处理不了 `a//b` 这种 key），换哪个服务都会失败。
 
+另外用独立的一致性测试集 [ceph/s3-tests](https://github.com/ceph/s3-tests)（约 1000 个用例）衡量。下面只统计 AWS 本身能通过、且属于 S3 范围的 684 个用例，
+IAM、STS、SNS、S3 Control 属于其他 AWS 服务，不计入：
+
+| 实现 | 通过 | 通过率 |
+|---|---:|---:|
+| **fakes3** | **587** | **85.8%** |
+| LocalStack 4.14 | 404 | 59.1% |
+| MinIO | 356 | 52.0% |
+
+fakes3 剩下的 94 个失败里，82 个是测试本身不兼容 AWS（只符合 Ceph RGW 的行为，或者 boto3 测不出来），
+5 个是没有实现的 bucket 访问日志，3 个在 s3s 内部，4 个的 AWS 行为没有文档可查。
+逐条分类见 [conformance/S3-TESTS.md](conformance/S3-TESTS.md)，可以用 `s3-tests` workflow 重新跑。
+
 fakes3 在 s3s 之上绕开了几处和 AWS 不一致的行为（SigV2 的日期和 bucket 级签名、POST policy 的错误码等），见 [docs/s3s-workarounds.md](docs/s3s-workarounds.md)。
 
 覆盖的 SDK：
@@ -484,32 +515,44 @@ fakes3 在 s3s 之上绕开了几处和 AWS 不一致的行为（SigV2 的日期
 
 所有实现都跑在 Docker 里，使用 host 网络，数据目录放在 tmpfs 上，每项测量都用一个新启动的容器。
 下面的数据来自 GitHub Actions 上的一次运行（4 核托管 runner），完整报告在
-[这次运行的 job summary](https://github.com/AkaraChen/fakes3/actions/runs/41174196107) 里。
+[这次运行的 job summary](https://github.com/AkaraChen/fakes3/actions/runs/41259060444) 里，可以用 `bench` workflow 重新跑。
 
 **启动和空闲内存**
 
 | | fakes3 | MinIO | JuiceFS | moto | S3Mock | LocalStack |
 |---|---:|---:|---:|---:|---:|---:|
-| 容器启动后到就绪 | 约 1 ms | 215 ms | 162 ms | 885 ms | 3.4 s | 11.0 s |
-| 空闲内存 | 9.2 MiB | 50 MiB | 68 MiB | 68 MiB | 271 MiB | 156 MiB |
+| 容器启动后到就绪 | 约 1 ms | 243 ms | 169 ms | 880 ms | 3.8 s | 10.9 s |
+| 空闲内存 | 9.2 MiB | 51 MiB | 68 MiB | 69 MiB | 233 MiB | 156 MiB |
 
-不经过 Docker 直接启动进程，fakes3 从启动到第一个 ListBuckets 返回只要 2 ms，MinIO 是 201 ms。
+不经过 Docker 直接启动进程，fakes3 从启动到第一个 ListBuckets 返回约 4 ms，MinIO 是 234 ms。
 
 **模拟测试套件**：100 个测试，共 6,500 个串行请求（建 bucket、读写小对象、List、Copy、删除）
 
 | | 总耗时 | 每请求 |
 |---|---:|---:|
-| **fakes3** | **0.88 s** | **135 µs** |
-| MinIO | 3.0 s | 459 µs |
-| LocalStack | 5.7 s | 871 µs |
-| S3Mock | 6.6 s | 1,015 µs |
-| moto | 13.8 s | 2,120 µs |
+| **fakes3** | **0.93 s** | **143 µs** |
+| MinIO | 3.4 s | 526 µs |
+| S3Mock | 7.1 s | 1,092 µs |
+| LocalStack | 7.7 s | 1,180 µs |
+| moto | 12.9 s | 1,983 µs |
 
-**吞吐**（用 MinIO 的 [warp](https://github.com/minio/warp) 压测）：4 KiB 的 GET、PUT、HEAD、List 都是 MinIO 的
-3.6～3.9 倍，是 LocalStack 和 moto 的 18～97 倍；64 MiB GET 约 9.3 GB/s，是 MinIO 的 1.8 倍。
-64 MiB 大对象 PUT 目前和 MinIO 基本持平，瓶颈在计算 ETag 用的 MD5。
+**吞吐**（用 MinIO 的 [warp](https://github.com/minio/warp) 压测，数字是 fakes3 相对对方的倍数）
 
-**内存**：写入同样 551 MiB 的数据后，fakes3 的额外开销是 50 MiB，MinIO 是 329 MiB。
+| 负载 | fakes3 | MinIO | LocalStack | moto | S3Mock | JuiceFS |
+|---|---:|---:|---:|---:|---:|---:|
+| 4 KiB GET | 30,045 ops/s | 3.6× | 32× | 56× | 15× | 12× |
+| 4 KiB PUT | 18,068 ops/s | 3.7× | 19× | 37× | 55× | 24× |
+| HEAD | 40,333 ops/s | 3.6× | 39× | 73× | 18× | 13× |
+| ListObjects | 1,380 ops/s | 2.7× | 10× | 32× | 4.3× | 9.6× |
+| 64 MiB GET | 6.1 GB/s | 1.3× | 9.0× | 2.0× | 2.1× | 2.1× |
+| 64 MiB PUT | 1.0 GB/s | 1.1× | 1.6× | 3.6× | 1.0× | 1.1× |
+
+- 大对象 PUT 的瓶颈是计算 ETag 用的 MD5（已经用了 OpenSSL 的汇编实现，并和接收数据流水线并行）。
+- ListObjects 每个 key 都返回 `Owner`，响应比不返回时大约 30%，这是按 AWS 的规定保留的字段。
+
+**内存**：写入同样 551 MiB 的数据后，fakes3 的额外开销约 100 MiB，MinIO 是 344 MiB，S3Mock 是 3.5 GiB。
+
+每个请求的 CPU 开销从哪里来、哪些优化试过但无效，见 [docs/perf-attribution.md](docs/perf-attribution.md)。
 
 ## 设计
 
@@ -523,16 +566,25 @@ fakes3 在 s3s 之上绕开了几处和 AWS 不一致的行为（SigV2 的日期
 ## 开发
 
 ```bash
-cargo test                 # 单元测试
-cargo clippy --all-targets
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 ```
 
-两个用 `workflow_dispatch` 手动触发的 GitHub Actions workflow：
+**每次 push 和 PR** 都会自动跑 [ci](.github/workflows/ci.yml)：格式、clippy（警告即失败）、全部 Rust 测试、
+Node binding 的编译，以及 workflow 文件的 actionlint 检查。
+
+比较慢的检查用 `workflow_dispatch` 手动触发：
 
 - **matrix**：先跑单元测试，再对选定的服务跑 SDK 兼容矩阵，报告显示在 job summary 里。
+- **s3-tests**：用 ceph/s3-tests 衡量一致性，和 main 逐个用例对比。
 - **bench**：对选定的服务跑启动、模拟测试套件、内存占用和 warp 压测。
+- **ab**：在同一台 runner 上交替压测两个版本（`base` / `head`），用来判断一个改动对性能的影响。
+  托管 runner 之间速度能差 2 倍，所以比较两个版本时只能用这个，不能拿两次独立的 bench 结果比。
+- **node**：构建 Node 插件并测试；推送 `v*` tag 时通过 npm 可信发布上传（见 [bindings/node/PUBLISHING.md](bindings/node/PUBLISHING.md)）。
+- **release**：推送 `v*` tag 时发布 GHCR 镜像和静态二进制。
 
-本地也可以跑，前提是装好 Docker 和各语言的工具链：
+本地也可以跑兼容矩阵和性能测试，前提是装好 Docker 和各语言的工具链：
 
 ```bash
 bench/setup.sh && uv run bench/run.py      # 性能测试，结果写到 bench/RESULTS.md
@@ -540,3 +592,7 @@ SERVERS="fakes3 minio" matrix/run.sh && python3 matrix/report.py   # 兼容矩�
 ```
 
 `bench/servers.sh` 负责以相同条件启动所有被测实现，也可以单独用来起一个竞品做对比。
+
+## 许可证
+
+[MIT](LICENSE)
