@@ -1,41 +1,13 @@
 {
  "groups": [
   {
-   "id": "list-delimiter-prefix-truncation",
-   "category": "bug",
-   "title": "ListObjects with delimiter + prefix + max-keys reports the wrong IsTruncated / paging",
-   "why": "`assert response['IsTruncated'] == is_truncated` (`assert True == False`) in the paged walk over keys with `_` / common prefixes. The v2 variants pass on MinIO and LocalStack.",
-   "tests": [
-    "test_bucket_list_delimiter_prefix",
-    "test_bucket_listv2_delimiter_prefix",
-    "test_bucket_list_delimiter_prefix_underscore",
-    "test_bucket_listv2_delimiter_prefix_underscore"
-   ],
-   "cost": "medium"
-  },
-  {
    "id": "list-prefix-newline",
-   "category": "bug",
-   "title": "ListObjects `Prefix` echo of a control character is URL-encoded in the wrong place",
-   "why": "Prefix `\\n` comes back as `%0A` after boto3 decoding (`assert '%0A' == '\\n'`), i.e. the value is encoded although the request did not ask for `encoding-type=url`, or encoded twice. Fails on MinIO and LocalStack too, so the exact AWS behaviour is unconfirmed.",
+   "category": "test-defect",
+   "title": "ListObjects (v1) `Prefix` echo: botocore does not URL-decode it, the test expects it decoded",
+   "why": "botocore adds `encoding-type=url` to every ListObjects call and decodes the response in `decode_list_object`, whose top-level keys are `Delimiter`, `Marker`, `NextMarker` but not `Prefix` (the v2 and versions decoders do include it; botocore 1.43.123 `handlers.py`). The ListObjects reference lists `Prefix` among the elements returned encoded, and fakes3 encodes it once (`<Prefix>%0A</Prefix>`), so `response['Prefix']` is `%0A` for any server that follows the documentation. Fails on MinIO and LocalStack too.",
    "tests": [
     "test_bucket_list_prefix_unreadable"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "policy-status",
-   "category": "bug",
-   "title": "GetBucketPolicyStatus returns NoSuchBucketPolicy for buckets without a policy",
-   "why": "The five `*_bucket_policy_status` tests compute `IsPublic` from ACL / policy; fakes3 returns 404 `NoSuchBucketPolicy` whenever no policy document exists, so public-ACL buckets cannot be reported. MinIO passes two of the five.",
-   "tests": [
-    "test_get_bucket_policy_status",
-    "test_get_public_acl_bucket_policy_status",
-    "test_get_authpublic_acl_bucket_policy_status",
-    "test_get_publicpolicy_acl_bucket_policy_status",
-    "test_get_nonpublicpolicy_acl_bucket_policy_status"
-   ],
-   "cost": "medium"
+   ]
   },
   {
    "id": "sse-c-part-key",
@@ -51,26 +23,12 @@
   },
   {
    "id": "cors-wildcard-origin",
-   "category": "bug",
-   "title": "CORS: wildcard origins (`*.suffix`) do not match",
-   "why": "`access-control-allow-origin` missing for `Origin: foo.suffix` against a rule with `AllowedOrigins: ['*.suffix']`. AWS allows a single `*` anywhere in the origin.",
+   "category": "test-defect",
+   "title": "CORS: the test expects a non-preflight request to be matched on `Access-Control-Request-Method` (RGW)",
+   "why": "Wildcard origins (`*suffix`, `start*end`, `prefix*`) match; the failing step is a `PUT` that carries `Origin` and `Access-Control-Request-Method: GET` and expects the rule that allows `GET` to answer it. AWS evaluates an actual request with its own method and uses the `Access-Control-Request-Method` header only for a preflight `OPTIONS` ('How does Amazon S3 evaluate the CORS configuration'), so the PUT is not matched by the GET-only rule.",
    "tests": [
     "test_cors_origin_response"
-   ],
-   "cost": "medium"
-  },
-  {
-   "id": "post-policy-extras",
-   "category": "bug",
-   "title": "POST policy uploads: invalid expiration format accepted, redirect Location not URL-encoded, `tagging` form field ignored, checksum fields rejected",
-   "why": "`test_post_object_invalid_date_format` gets 204 instead of 400; `success_action_redirect` Location ends in `etag=\"…\"` while AWS encodes the quotes as `%22`; the `tagging` form field is not applied (`assert [] == [{'Key': '0', …}]`); `x-amz-checksum-*` form fields give 403 instead of 204.",
-   "tests": [
-    "test_post_object_invalid_date_format",
-    "test_post_object_success_redirect_action",
-    "test_post_object_tags_anonymous_request",
-    "test_post_object_upload_checksum"
-   ],
-   "cost": "medium"
+   ]
   },
   {
    "id": "invalid-utf8-key",
@@ -83,32 +41,12 @@
    "cost": "unconfirmed"
   },
   {
-   "id": "content-encoding-format",
-   "category": "bug",
-   "title": "Content-Encoding list re-serialised without the space (`deflate,gzip`)",
-   "why": "Stored as `deflate, gzip` with `aws-chunked`; fakes3 returns `deflate,gzip`. AWS returns the header the client sent minus `aws-chunked`. Unconfirmed against AWS; fails on MinIO and LocalStack too.",
-   "tests": [
-    "test_object_content_encoding_aws_chunked"
-   ],
-   "cost": "cheap"
-  },
-  {
    "id": "delete-marker-header",
-   "category": "bug",
-   "title": "HEAD of a deleted key in an unversioned bucket has no `x-amz-delete-marker: false`",
-   "why": "`KeyError: 'x-amz-delete-marker'` on the 404. The test expects the header; whether AWS sends it for unversioned buckets is unconfirmed (MinIO and LocalStack fail too).",
+   "category": "test-defect",
+   "title": "HEAD of a deleted key in an unversioned bucket expected to carry `x-amz-delete-marker: false`",
+   "why": "The HeadObject / GetObject reference says of `x-amz-delete-marker`: 'Specifies whether the object retrieved was (true) or was not (false) a Delete Marker. If false, this response header does not appear in the response.' fakes3 sends it only for delete markers, as documented; MinIO and LocalStack fail the same way.",
    "tests": [
     "test_delete_marker_nonversioned"
-   ],
-   "cost": "cheap"
-  },
-  {
-   "id": "v2-put-contentlength",
-   "category": "bug",
-   "title": "SigV2 PutObject with a truncated Content-Length answers 403 instead of 400 BadDigest",
-   "why": "`assert 403 == 400`; root cause not isolated (probably the same signature path as the SigV2 group, but PutObject paths sign correctly, so it may be a fakes3 body-length check).",
-   "tests": [
-    "test_object_create_bad_contentlength_mismatch_below_aws2"
    ]
   },
   {
@@ -127,21 +65,11 @@
   },
   {
    "id": "list-buckets-pagination",
-   "category": "unimplemented",
-   "title": "ListBuckets `MaxBuckets` / `ContinuationToken`",
-   "why": "`list_buckets(MaxBuckets=1)` returns every bucket in the account (`assert 5 == 0` on the first call). The test also assumes an empty account, but the naming tests leave buckets such as `foo-.bar` behind (their names do not carry the test prefix, so the suite's cleanup skips them); it fails the same way in a serial run.",
+   "category": "test-defect",
+   "title": "ListBuckets pagination: the test assumes an account without other buckets",
+   "why": "`list_buckets(MaxBuckets=1)` is paged as AWS documents (`max-buckets`, `continuation-token`, `prefix`, `bucket-region`), but the test asserts that the first page is empty, i.e. that the account owns no bucket. The suite's naming tests leave buckets such as `foo-.bar` behind (their names do not carry the test prefix, so the cleanup skips them), so it cannot pass on a shared server run.",
    "tests": [
     "test_list_buckets_paginated"
-   ],
-   "cost": "medium"
-  },
-  {
-   "id": "torrent",
-   "category": "unimplemented",
-   "title": "GetObjectTorrent (`?torrent`)",
-   "why": "`assert 501 == 404`: fakes3 answers NotImplemented; AWS answers 404 NoSuchKey for a missing key and has deprecated the API for new buckets.",
-   "tests": [
-    "test_get_object_torrent"
    ]
   },
   {
@@ -324,6 +252,18 @@
    ]
   },
   {
+   "id": "post-policy-s3s-fields",
+   "category": "s3s",
+   "title": "POST policy uploads: lenient expiration parsing, `tagging` form field ignored, `x-amz-checksum-*` fields refused (s3s)",
+   "why": "All three live in s3s before fakes3 sees the request. `PostPolicy::from_json` parses `expiration` with the `time` crate's RFC 3339 parser, which accepts the space-separated `2026-10-31 12:00:00+00:00` the test sends (AWS: 400 for an expiration that is not ISO 8601). `PutObject::deserialize_http_multipart` reads the tagging form field as `x-amz-tagging` only, while the POST Object reference documents `tagging` (XML). `validate_conditions_only` refuses any form field without a policy condition (`x-amz-checksum-sha256` is not exempt), so a documented checksum field gives 403. The fourth POST test of the old group, the redirect `Location` with the quoted ETag (`etag=%22…%22`), is fixed in fakes3.",
+   "tests": [
+    "test_post_object_invalid_date_format",
+    "test_post_object_tags_anonymous_request",
+    "test_post_object_upload_checksum"
+   ],
+   "cost": "large"
+  },
+  {
    "id": "select-json-output-shape",
    "category": "test-defect",
    "title": "S3 Select with JSON output: the tests int() the whole result, AWS answers `{\"_1\":N}`",
@@ -389,5 +329,40 @@
     "test_bucket_policy_put_obj_request_obj_tag"
    ]
   }
- ]
+ ],
+ "out_of_scope": {
+  "why": "Other AWS services, not S3: IAM, STS and SNS need their own endpoints and a multi-account setup; S3 Control is served from a different endpoint. run.sh does not run them (set S3T_ALL=1 to run everything).",
+  "files": [
+   "test_iam.py",
+   "test_sts.py",
+   "test_sns.py",
+   "test_s3control.py"
+  ],
+  "markers": [
+   "iam_account",
+   "iam_cross_account",
+   "iam_role",
+   "iam_tenant",
+   "iam_user",
+   "role_policy",
+   "user_policy",
+   "group",
+   "group_policy",
+   "test_of_sts",
+   "webidentity_test",
+   "abac_test",
+   "session_policy",
+   "token_claims_trust_policy_test",
+   "token_principal_tag_role_policy_test",
+   "token_request_tag_trust_policy_test",
+   "token_resource_tags_test",
+   "token_role_tags_test",
+   "token_tag_keys_test",
+   "sns",
+   "s3control"
+  ],
+  "tests": [
+   "test_bucket_logging_requester_assumed_role"
+  ]
+ }
 }

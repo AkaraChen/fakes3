@@ -880,3 +880,232 @@ async fn lifecycle_follows_the_control_plane_clock() {
     assert_eq!(r.status, 200, "{}", r.body);
     assert_eq!(send(a, req("GET", "/bkt/k")).await.status, 404);
 }
+
+fn tag<'a>(body: &'a str, name: &str) -> Option<&'a str> {
+    body.split(&format!("<{name}>")).nth(1)?.split(&format!("</{name}>")).next()
+}
+
+fn all<'a>(body: &'a str, name: &str) -> Vec<&'a str> {
+    body.split(&format!("<{name}>"))
+        .skip(1)
+        .filter_map(|s| s.split(&format!("</{name}>")).next())
+        .collect()
+}
+
+#[tokio::test]
+async fn policy_status_reports_acl_and_policy_publicity() {
+    let (_s, a) = start().await;
+    let status = |a| async move { send(a, req("GET", "/bkt").query("policyStatus")).await };
+    assert_eq!(send(a, req("GET", "/nope").query("policyStatus")).await.code(), "NoSuchBucket");
+    make_bucket(a, "bkt").await;
+    // A bucket with neither a policy nor a public ACL is not public (and has no NoSuchBucketPolicy).
+    let r = status(a).await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert_eq!(tag(&r.body, "IsPublic"), Some("false"), "{}", r.body);
+
+    for (acl, public) in [("public-read", true), ("authenticated-read", true), ("private", false)] {
+        send(a, req("PUT", "/bkt").query("acl").header("x-amz-acl", acl)).await;
+        assert_eq!(
+            tag(&status(a).await.body, "IsPublic"),
+            Some(if public { "true" } else { "false" }),
+            "{acl}"
+        );
+    }
+
+    let policy = |cond: &str| {
+        format!(
+            r#"{{"Version":"2012-10-17","Statement":[{{"Effect":"Allow","Principal":{{"AWS":"*"}},"Action":"s3:ListBucket","Resource":["arn:aws:s3:::bkt","arn:aws:s3:::bkt/*"]{cond}}}]}}"#
+        )
+    };
+    let put_policy = |body: String| async move { send(a, req("PUT", "/bkt").query("policy").body(body.as_bytes())).await };
+    // A condition on a fixed source address makes the policy non-public.
+    assert_eq!(
+        put_policy(policy(r#","Condition":{"IpAddress":{"aws:SourceIp":"10.0.0.0/32"}}"#))
+            .await
+            .status,
+        204
+    );
+    assert_eq!(tag(&status(a).await.body, "IsPublic"), Some("false"));
+    assert_eq!(put_policy(policy("")).await.status, 204);
+    assert_eq!(tag(&status(a).await.body, "IsPublic"), Some("true"));
+    // A public policy and a private ACL: the policy decides.
+    send(a, req("DELETE", "/bkt").query("policy")).await;
+    assert_eq!(tag(&status(a).await.body, "IsPublic"), Some("false"));
+}
+
+#[tokio::test]
+async fn delimiter_paging_does_not_repeat_the_common_prefix() {
+    let (_s, a) = start().await;
+    make_bucket(a, "bkt").await;
+    for k in ["asdf", "boo/bar", "boo/baz/xyzzy", "cquux/thud", "cquux/bla"] {
+        put(a, &format!("/bkt/{k}"), b"x").await;
+    }
+    let page = |marker: &str, max: &str| {
+        let q = format!("delimiter=%2F&marker={marker}&max-keys={max}");
+        async move { send(a, req("GET", "/bkt").query(&q)).await }
+    };
+    let r = page("", "1").await;
+    assert_eq!(
+        (tag(&r.body, "IsTruncated"), tag(&r.body, "NextMarker")),
+        (Some("true"), Some("asdf")),
+        "{}",
+        r.body
+    );
+    let r = page("asdf", "1").await;
+    assert_eq!(all(&r.body, "Prefix"), ["", "boo/"], "{}", r.body);
+    assert_eq!(
+        (tag(&r.body, "IsTruncated"), tag(&r.body, "NextMarker")),
+        (Some("true"), Some("boo/")),
+        "{}",
+        r.body
+    );
+    // The marker is the common prefix just returned: continue after it.
+    let r = page("boo%2F", "1").await;
+    assert_eq!(all(&r.body, "Prefix"), ["", "cquux/"], "{}", r.body);
+    assert_eq!(tag(&r.body, "IsTruncated"), Some("false"), "{}", r.body);
+    assert!(!r.body.contains("NextMarker"), "{}", r.body);
+
+    // The same walk with ListObjectsV2 continuation tokens.
+    let v2 = |token: &str| {
+        let q = if token.is_empty() {
+            "list-type=2&delimiter=%2F&max-keys=1&start-after=asdf".to_owned()
+        } else {
+            format!("list-type=2&delimiter=%2F&max-keys=1&continuation-token={token}")
+        };
+        async move { send(a, req("GET", "/bkt").query(&q)).await }
+    };
+    let r = v2("").await;
+    assert_eq!(all(&r.body, "Prefix"), ["", "boo/"], "{}", r.body);
+    let token = tag(&r.body, "NextContinuationToken").unwrap().to_owned();
+    let r = v2(&token).await;
+    assert_eq!(all(&r.body, "Prefix"), ["", "cquux/"], "{}", r.body);
+    assert_eq!(tag(&r.body, "IsTruncated"), Some("false"), "{}", r.body);
+}
+
+#[tokio::test]
+async fn content_encoding_is_kept_as_sent_minus_aws_chunked() {
+    let (_s, a) = start().await;
+    make_bucket(a, "bkt").await;
+    for (sent, stored) in [
+        ("gzip", Some("gzip")),
+        ("deflate, gzip", Some("deflate, gzip")),
+        ("deflate,gzip", Some("deflate,gzip")),
+        ("gzip, aws-chunked", Some("gzip")),
+        ("aws-chunked, gzip", Some("gzip")),
+        ("aws-chunked", None),
+    ] {
+        send(a, req("PUT", "/bkt/enc").header("content-encoding", sent).body(b"x")).await;
+        let r = send(a, req("HEAD", "/bkt/enc")).await;
+        assert_eq!(r.header("content-encoding"), stored, "sent {sent:?}");
+    }
+}
+
+#[tokio::test]
+async fn post_redirect_carries_the_quoted_etag() {
+    let (_s, a) = start().await;
+    make_bucket(a, "bkt").await;
+    send(a, req("PUT", "/bkt").query("acl").header("x-amz-acl", "public-read-write")).await;
+    let boundary = "XBOUNDARYX";
+    let body = multipart(
+        boundary,
+        &[("key", "foo.txt"), ("success_action_redirect", "http://example.test/done?x=1")],
+        b"bar",
+    );
+    let ct = format!("multipart/form-data; boundary={boundary}");
+    let r = send(a, req("POST", "/bkt").anon().header("content-type", &ct).body(&body)).await;
+    assert_eq!(r.status, 303, "{}", r.body);
+    let etag = send(a, req("HEAD", "/bkt/foo.txt")).await.header("etag").unwrap().to_owned();
+    assert_eq!(
+        r.header("location"),
+        Some(
+            format!(
+                "http://example.test/done?x=1&bucket=bkt&key=foo.txt&etag=%22{}%22",
+                etag.trim_matches('"')
+            )
+            .as_str()
+        )
+    );
+}
+
+#[tokio::test]
+async fn list_buckets_paginates() {
+    let (_s, a) = start().await;
+    for b in ["pg-aaa", "pg-bbb", "pg-ccc", "other"] {
+        make_bucket(a, b).await;
+    }
+    let names = |r: &Resp| all(&r.body, "Name").into_iter().map(str::to_owned).collect::<Vec<_>>();
+    let list = |q: String| async move { send(a, req("GET", "/").query(&q)).await };
+
+    let r = list(String::new()).await;
+    assert_eq!(names(&r), ["other", "pg-aaa", "pg-bbb", "pg-ccc"]);
+    assert!(tag(&r.body, "ContinuationToken").is_none(), "{}", r.body);
+
+    let r = list("max-buckets=3".into()).await;
+    assert_eq!(names(&r), ["other", "pg-aaa", "pg-bbb"]);
+    let token = tag(&r.body, "ContinuationToken").expect(&r.body).to_owned();
+    let r = list(format!("max-buckets=3&continuation-token={token}")).await;
+    assert_eq!(names(&r), ["pg-ccc"]);
+    assert!(tag(&r.body, "ContinuationToken").is_none(), "{}", r.body);
+    // The last page being exactly full does not produce a token.
+    assert!(tag(&list("max-buckets=4".into()).await.body, "ContinuationToken").is_none());
+
+    let r = list("prefix=pg-&max-buckets=1".into()).await;
+    assert_eq!(
+        (names(&r), tag(&r.body, "Prefix")),
+        (vec!["pg-aaa".to_owned()], Some("pg-")),
+        "{}",
+        r.body
+    );
+    assert!(tag(&r.body, "ContinuationToken").is_some());
+    assert_eq!(names(&list("prefix=pg-".into()).await), ["pg-aaa", "pg-bbb", "pg-ccc"]);
+    assert_eq!(names(&list("bucket-region=us-east-1&prefix=oth".into()).await), ["other"]);
+    assert!(names(&list("bucket-region=eu-west-1".into()).await).is_empty());
+
+    for bad in ["max-buckets=0", "max-buckets=10001", "continuation-token=zz"] {
+        let r = list(bad.into()).await;
+        assert_eq!((r.status, r.code()), (400, "InvalidArgument"), "{bad}: {}", r.body);
+    }
+}
+
+#[tokio::test]
+async fn get_object_torrent_is_retired() {
+    let (_s, a) = start().await;
+    make_bucket(a, "bkt").await;
+    put(a, "/bkt/Avatar.mpg", &[b'A'; 4096]).await;
+    // BitTorrent is retired on S3: a missing key and an existing one both answer NoSuchKey.
+    for key in ["missing", "Avatar.mpg"] {
+        let r = send(a, req("GET", &format!("/bkt/{key}")).query("torrent")).await;
+        assert_eq!((r.status, r.code()), (404, "NoSuchKey"), "{key}: {}", r.body);
+    }
+    assert_eq!(send(a, req("GET", "/nope/k").query("torrent")).await.code(), "NoSuchBucket");
+    // The object itself is untouched.
+    assert_eq!(send(a, req("GET", "/bkt/Avatar.mpg")).await.status, 200);
+}
+
+#[tokio::test]
+async fn a_body_that_fails_its_digest_closes_the_connection() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let (_s, a) = start().await;
+    make_bucket(a, "bkt").await;
+    // Content-Length 2 for a 3-byte body whose CRC32 is declared: the server reads "ba", fails the
+    // checksum with BadDigest, and must not treat the stray "r" as the start of the next request.
+    let mut conn = tokio::net::TcpStream::connect(a).await.unwrap();
+    let head = format!(
+        "PUT /bkt/k HTTP/1.1\r\nHost: {a}\r\nAuthorization: {}\r\nContent-Length: 2\r\nx-amz-checksum-crc32: dv+Mqg==\r\n\r\nbar",
+        common::UNVERIFIED_AUTH
+    );
+    conn.write_all(head.as_bytes()).await.unwrap();
+    let mut out = Vec::new();
+    tokio::time::timeout(std::time::Duration::from_secs(5), conn.read_to_end(&mut out))
+        .await
+        .expect("the server keeps the connection open")
+        .unwrap();
+    let text = String::from_utf8_lossy(&out).to_lowercase();
+    assert!(text.starts_with("http/1.1 400"), "{text}");
+    assert!(
+        text.contains("connection: close") && text.contains("<code>baddigest</code>"),
+        "{text}"
+    );
+    assert!(text.contains("content-type: application/xml"), "{text}");
+    assert_eq!(send(a, req("GET", "/bkt/k")).await.status, 404);
+}

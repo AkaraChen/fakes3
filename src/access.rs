@@ -126,7 +126,9 @@ fn action_of(op: &str, version: bool) -> String {
         "ListMultipartUploads" => "s3:ListBucketMultipartUploads".into(),
         "ListParts" => "s3:ListMultipartUploadParts".into(),
         "ListBuckets" => "s3:ListAllMyBuckets".into(),
-        "GetObject" | "HeadObject" | "GetObjectAttributes" | "SelectObjectContent" => v("GetObject", "GetObjectVersion"),
+        "GetObject" | "HeadObject" | "GetObjectAttributes" | "SelectObjectContent" | "GetObjectTorrent" => {
+            v("GetObject", "GetObjectVersion")
+        }
         "GetObjectLockConfiguration" => "s3:GetBucketObjectLockConfiguration".into(),
         "PutObjectLockConfiguration" => "s3:PutBucketObjectLockConfiguration".into(),
         "GetBucketEncryption" => "s3:GetEncryptionConfiguration".into(),
@@ -175,7 +177,7 @@ enum Scope {
 /// The ACL permission that lets an anonymous caller perform `op`.
 fn acl_need(op: &str) -> Option<(Scope, Perm)> {
     Some(match op {
-        "GetObject" | "HeadObject" | "GetObjectAttributes" | "SelectObjectContent" => (Scope::Object, Perm::Read),
+        "GetObject" | "HeadObject" | "GetObjectAttributes" | "SelectObjectContent" | "GetObjectTorrent" => (Scope::Object, Perm::Read),
         "GetObjectAcl" => (Scope::Object, Perm::ReadAcp),
         "PutObjectAcl" => (Scope::Object, Perm::WriteAcp),
         "ListObjects" | "ListObjectsV2" | "ListObjectVersions" | "ListMultipartUploads" | "HeadBucket" => (Scope::Bucket, Perm::Read),

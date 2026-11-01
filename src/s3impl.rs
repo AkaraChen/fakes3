@@ -244,13 +244,25 @@ fn verify_checksums(expected: &Checksum, actual: &Checksum) -> S3Result<()> {
         if let Some(want) = slot(expected, i)
             && slot(actual, i).as_deref() != Some(want.as_str())
         {
-            return Err(s3_error!(
-                BadDigest,
+            return Err(bad_body_digest(format!(
                 "The {header} you specified did not match the calculated checksum."
-            ));
+            )));
         }
     }
     Ok(())
+}
+
+/// BadDigest for a body that does not match what the client declared. A body that is not the
+/// declared length (a short `Content-Length`) leaves stray bytes on the connection that would
+/// corrupt the next request on it (`rPUT /k`), so, like S3, the connection is closed after the error.
+fn bad_body_digest(message: String) -> S3Error {
+    let mut e = S3Error::with_message(S3ErrorCode::BadDigest, message);
+    let mut h = http::HeaderMap::new();
+    h.insert(http::header::CONNECTION, http::HeaderValue::from_static("close"));
+    // Headers set on an error replace the ones s3s would add, the content type among them.
+    h.insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("application/xml"));
+    e.set_headers(h);
+    e
 }
 
 fn checksum_type(t: &'static str) -> ChecksumType {
@@ -321,9 +333,8 @@ async fn ingest(
     if let Some(want) = want_md5
         && want != md5
     {
-        return Err(s3_error!(
-            BadDigest,
-            "The Content-MD5 you specified did not match what we received."
+        return Err(bad_body_digest(
+            "The Content-MD5 you specified did not match what we received.".to_owned(),
         ));
     }
 
@@ -524,15 +535,18 @@ fn multipart_checksum(alg_idx: usize, ty: &ChecksumType, parts: &[(&Checksum, u6
     out
 }
 
-/// `aws-chunked` describes the request framing, not the object; S3 never stores it.
+/// `aws-chunked` describes the request framing, not the object; S3 never stores it. The rest of the
+/// client's value is returned as sent, spacing included (`deflate, gzip` stays `deflate, gzip`).
 fn strip_aws_chunked(ce: Option<String>) -> Option<String> {
     let ce = ce?;
-    let kept: Vec<&str> = ce
-        .split(',')
-        .map(str::trim)
-        .filter(|t| !t.is_empty() && !t.eq_ignore_ascii_case("aws-chunked"))
-        .collect();
-    (!kept.is_empty()).then(|| kept.join(","))
+    let framing = |t: &str| t.trim().eq_ignore_ascii_case("aws-chunked");
+    if !ce.split(',').any(framing) {
+        return (!ce.trim().is_empty()).then_some(ce);
+    }
+    let kept: Vec<&str> = ce.split(',').filter(|t| !framing(t) && !t.trim().is_empty()).collect();
+    let kept = kept.join(",");
+    let kept = kept.trim();
+    (!kept.is_empty()).then(|| kept.to_owned())
 }
 
 fn meta_from(
@@ -742,6 +756,17 @@ where
     let mut skip = String::new();
     let mut folded = false;
     let delimiter = delimiter.filter(|d| !d.is_empty());
+    // A marker that is itself a common prefix (the NextMarker / continuation token of a page that
+    // ended on one) resumes after every key under it, so the prefix is not listed twice.
+    if let (Some(a), Some(d)) = (after, delimiter)
+        && a.len() > prefix.len()
+        && a.starts_with(prefix)
+        && a[prefix.len()..].find(d).is_some_and(|p| p + d.len() == a.len() - prefix.len())
+    {
+        skip.push_str(a);
+        skip.push(char::MAX);
+        folded = true;
+    }
     'outer: loop {
         let from = if folded { Bound::Excluded(skip.as_str()) } else { first };
         for (key, entry) in objects.range::<str, _>((from, Bound::Unbounded)) {
@@ -1040,12 +1065,43 @@ impl S3 for FakeS3 {
     async fn list_buckets(&self, req: S3Request<ListBucketsInput>) -> S3Result<S3Response<ListBucketsOutput>> {
         // Only the caller's own buckets.
         let me = self.who(&req).user().unwrap_or(UserId::DEFAULT);
-        let buckets = self
-            .store
-            .buckets
-            .read()
-            .iter()
-            .filter(|(_, b)| b.owner == me)
+        let input = req.input;
+        // Without max-buckets the page is the whole account, unless one of the other parameters
+        // asks for pagination, which then has AWS's default page size.
+        let paginated =
+            input.max_buckets.is_some() || input.continuation_token.is_some() || input.bucket_region.is_some() || input.prefix.is_some();
+        let limit = match input.max_buckets {
+            Some(n) if !(1..=10_000).contains(&n) => {
+                return Err(s3_error!(
+                    InvalidArgument,
+                    "Argument max-buckets must be an integer between 1 and 10000"
+                ));
+            }
+            Some(n) => n as usize,
+            None if paginated => 10_000,
+            None => usize::MAX,
+        };
+        // The token is the name of the last bucket of the previous page, hex-encoded to look opaque.
+        let after = match &input.continuation_token {
+            Some(t) => Some(
+                hex::decode(t)
+                    .ok()
+                    .and_then(|b| String::from_utf8(b).ok())
+                    .ok_or_else(|| s3_error!(InvalidArgument, "The continuation token provided is incorrect"))?,
+            ),
+            None => None,
+        };
+        let prefix = input.prefix.as_deref().unwrap_or("");
+        // Every bucket lives in us-east-1.
+        let region_matches = input.bucket_region.as_deref().is_none_or(|r| r == "us-east-1");
+        let all = self.store.buckets.read();
+        let from = after.as_deref().map_or(Bound::Unbounded, Bound::Excluded);
+        let mut matching = all
+            .range::<str, _>((from, Bound::Unbounded))
+            .filter(|(name, b)| b.owner == me && region_matches && name.starts_with(prefix));
+        let buckets: Vec<Bucket> = matching
+            .by_ref()
+            .take(limit)
             .map(|(name, b)| Bucket {
                 name: Some(name.clone()),
                 creation_date: Some(ts(b.created)),
@@ -1053,11 +1109,23 @@ impl S3 for FakeS3 {
                 ..Default::default()
             })
             .collect();
+        let continuation_token = matching
+            .next()
+            .and_then(|_| buckets.last())
+            .and_then(|b| b.name.as_deref().map(hex::encode));
         Ok(S3Response::new(ListBucketsOutput {
             buckets: Some(buckets),
             owner: Some(self.users.owner(me)),
-            ..Default::default()
+            continuation_token,
+            prefix: input.prefix.filter(|p| !p.is_empty()),
         }))
+    }
+
+    /// S3 retired BitTorrent (new use ended in 2021) and answers `?torrent` with 404 NoSuchKey; the
+    /// bucket and the key are checked first, so a missing bucket is still NoSuchBucket.
+    async fn get_object_torrent(&self, req: S3Request<GetObjectTorrentInput>) -> S3Result<S3Response<GetObjectTorrentOutput>> {
+        self.version(&req.input.bucket, &req.input.key, None)?;
+        Err(s3_error!(NoSuchKey, "The specified key does not exist."))
     }
 
     async fn put_bucket_versioning(&self, req: S3Request<PutBucketVersioningInput>) -> S3Result<S3Response<PutBucketVersioningOutput>> {
@@ -2617,5 +2685,44 @@ mod tests {
         let rest = list(&m, "", None, page.next.as_deref(), 1, None);
         assert_eq!(rest.contents[0].key.as_deref(), Some("d"));
         assert!(!rest.truncated);
+    }
+
+    #[test]
+    fn a_marker_that_is_a_common_prefix_skips_everything_under_it() {
+        let mut m = BTreeMap::new();
+        for k in ["asdf", "boo/bar", "boo/baz/xyzzy", "cquux/bla", "cquux/thud"] {
+            m.insert(k.to_owned(), entry(vec![Some("x")]));
+        }
+        let page = |prefix: &str, after: Option<&str>, max| {
+            let l = list(&m, prefix, Some("/"), after, max, None);
+            let keys: Vec<_> = l.contents.iter().map(|o| o.key.clone().unwrap()).collect();
+            let prefixes: Vec<_> = l.prefixes.iter().map(|p| p.prefix.clone().unwrap()).collect();
+            (keys, prefixes, l.truncated, l.next)
+        };
+        let s = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(page("", None, 1), (s(&["asdf"]), s(&[]), true, Some("asdf".into())));
+        assert_eq!(page("", Some("asdf"), 1), (s(&[]), s(&["boo/"]), true, Some("boo/".into())));
+        // Resuming at "boo/" does not list "boo/" again, and the last page is not truncated.
+        assert_eq!(page("", Some("boo/"), 1), (s(&[]), s(&["cquux/"]), false, None));
+        assert_eq!(page("", Some("boo/"), 2), (s(&[]), s(&["cquux/"]), false, None));
+        // Under a prefix, the marker "boo/baz/" is itself a common prefix of the listing.
+        assert_eq!(page("boo/", None, 1), (s(&["boo/bar"]), s(&[]), true, Some("boo/bar".into())));
+        assert_eq!(page("boo/", Some("boo/bar"), 1), (s(&[]), s(&["boo/baz/"]), false, None));
+        assert_eq!(page("boo/", Some("boo/baz/"), 1), (s(&[]), s(&[]), false, None));
+        // A marker inside a prefix (not itself a prefix) still lists the prefix.
+        assert_eq!(page("", Some("boo/bar"), 5), (s(&[]), s(&["boo/", "cquux/"]), false, None));
+    }
+
+    #[test]
+    fn content_encoding_keeps_the_clients_spelling_minus_aws_chunked() {
+        let f = |v: &str| strip_aws_chunked(Some(v.to_owned()));
+        assert_eq!(f("deflate, gzip").as_deref(), Some("deflate, gzip"));
+        assert_eq!(f("deflate,gzip").as_deref(), Some("deflate,gzip"));
+        assert_eq!(f("gzip, aws-chunked").as_deref(), Some("gzip"));
+        assert_eq!(f("aws-chunked, gzip").as_deref(), Some("gzip"));
+        assert_eq!(f("deflate, AWS-Chunked, gzip").as_deref(), Some("deflate, gzip"));
+        assert_eq!(f("aws-chunked"), None);
+        assert_eq!(f("aws-chunked, aws-chunked"), None);
+        assert_eq!(strip_aws_chunked(None), None);
     }
 }

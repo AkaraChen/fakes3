@@ -281,9 +281,13 @@ impl FakeS3 {
     }
 
     pub(crate) fn do_get_bucket_policy_status(&self, req: S3Request<GetBucketPolicyStatusInput>) -> Out<GetBucketPolicyStatusOutput> {
-        let p = self.policy_of(&req.input.bucket)?;
+        // "The meaning of public": an ACL granting AllUsers / AuthenticatedUsers, or a bucket policy
+        // that is public. A bucket with neither is not public (there is no NoSuchBucketPolicy here).
+        let b = self.bucket(&req.input.bucket)?;
+        let public = b.config.policy.read().as_ref().is_some_and(|p| p.public)
+            || (b.config.acls_enabled() && b.config.acl.read().as_ref().is_some_and(Acl::is_public));
         Ok(S3Response::new(GetBucketPolicyStatusOutput {
-            policy_status: Some(PolicyStatus { is_public: Some(p.public) }),
+            policy_status: Some(PolicyStatus { is_public: Some(public) }),
         }))
     }
 
