@@ -10,6 +10,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 
+use crate::names;
+
 const GAMMA: u64 = 0x9E37_79B9_7F4A_7C15;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -69,16 +71,8 @@ impl RequestId {
     pub fn decorate(self, resp: &mut s3s::HttpResponse) {
         let host_id = self.host_id_bytes();
         let h = resp.headers_mut();
-        if !h.contains_key("x-amz-request-id")
-            && let Ok(v) = http::HeaderValue::from_bytes(&self.hex())
-        {
-            h.insert("x-amz-request-id", v);
-        }
-        if !h.contains_key("x-amz-id-2")
-            && let Ok(v) = http::HeaderValue::from_bytes(&host_id)
-        {
-            h.insert("x-amz-id-2", v);
-        }
+        set_if_absent(h, names::X_AMZ_REQUEST_ID, &self.hex());
+        set_if_absent(h, names::X_AMZ_ID_2, &host_id);
         if resp.status().as_u16() >= 400 {
             self.stamp_error_body(resp, &host_id);
         }
@@ -106,6 +100,15 @@ impl RequestId {
         if resp.headers().contains_key(http::header::CONTENT_LENGTH) {
             resp.headers_mut().insert(http::header::CONTENT_LENGTH, len.into());
         }
+    }
+}
+
+/// One lookup instead of `contains_key` + `insert`.
+fn set_if_absent(h: &mut http::HeaderMap, name: http::HeaderName, value: &[u8]) {
+    if let http::header::Entry::Vacant(e) = h.entry(name)
+        && let Ok(v) = http::HeaderValue::from_bytes(value)
+    {
+        e.insert(v);
     }
 }
 

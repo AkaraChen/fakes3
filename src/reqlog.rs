@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
 
+use crate::names;
 use crate::reqid::RequestId;
 
 /// One recorded request.
@@ -204,14 +205,16 @@ impl StatusFilter {
 }
 
 impl RequestFilter {
-    fn matches(&self, r: &RequestRecord) -> bool {
-        if self.after.is_some_and(|a| r.seq <= a)
+    /// The conditions that need nothing but the numbers a record stores, checked before a record
+    /// is turned into a [`RequestRecord`].
+    fn matches_cheap(&self, r: &Stored) -> bool {
+        !(self.after.is_some_and(|a| r.seq <= a)
             || self.since.is_some_and(|t| r.time < t)
             || self.method.as_ref().is_some_and(|m| *m != r.method)
-            || self.status.is_some_and(|s| !s.matches(r.status))
-        {
-            return false;
-        }
+            || self.status.is_some_and(|s| !s.matches(r.status)))
+    }
+
+    fn matches(&self, r: &RequestRecord) -> bool {
         if self.bucket.is_some() || self.key_prefix.is_some() {
             let (bucket, key) = r.bucket_key();
             if self.bucket.is_some() && self.bucket != bucket {
@@ -237,9 +240,72 @@ pub struct RequestLog {
 
 struct Inner {
     capacity: usize,
-    records: VecDeque<RequestRecord>,
+    records: VecDeque<Stored>,
     /// Records pushed out of the buffer because it was full.
     dropped: u64,
+}
+
+/// A string kept inline when it fits in `N` bytes (nearly all request targets and access keys do),
+/// so that recording a request allocates nothing, and dropping the oldest record frees nothing
+/// (that free would run on another thread than the allocation, the allocator's slow path).
+enum Text<const N: usize> {
+    Inline(u8, [u8; N]),
+    Heap(Box<str>),
+}
+
+impl<const N: usize> Text<N> {
+    fn new(s: &str) -> Self {
+        if s.len() > N.min(u8::MAX as usize) {
+            return Self::Heap(s.into());
+        }
+        let mut buf = [0; N];
+        buf[..s.len()].copy_from_slice(s.as_bytes());
+        Self::Inline(s.len() as u8, buf)
+    }
+
+    fn as_str(&self) -> &str {
+        match self {
+            // Built from a `&str`, so this is valid UTF-8.
+            Self::Inline(n, buf) => std::str::from_utf8(&buf[..*n as usize]).unwrap_or_default(),
+            Self::Heap(s) => s,
+        }
+    }
+}
+
+type Target = Text<94>;
+type AccessKey = Text<30>;
+
+/// A [`RequestRecord`] as the buffer keeps it.
+struct Stored {
+    seq: u64,
+    time: SystemTime,
+    method: http::Method,
+    target: Target,
+    status: u16,
+    latency: Duration,
+    bytes_in: u64,
+    bytes_out: u64,
+    copy: bool,
+    access_key: Option<AccessKey>,
+    id: RequestId,
+}
+
+impl Stored {
+    fn record(&self) -> RequestRecord {
+        RequestRecord {
+            seq: self.seq,
+            time: self.time,
+            method: self.method.clone(),
+            uri: self.target.as_str().to_owned(),
+            status: self.status,
+            latency: self.latency,
+            bytes_in: self.bytes_in,
+            bytes_out: self.bytes_out,
+            copy: self.copy,
+            access_key: self.access_key.as_ref().map(|k| k.as_str().to_owned()),
+            id: self.id,
+        }
+    }
 }
 
 /// Request data captured on arrival, completed by [`RequestLog::finish`].
@@ -247,16 +313,16 @@ pub struct Pending {
     time: SystemTime,
     start: std::time::Instant,
     method: http::Method,
-    uri: String,
+    target: Target,
     bytes_in: u64,
     copy: bool,
-    access_key: Option<String>,
+    access_key: Option<AccessKey>,
     id: RequestId,
 }
 
 impl Pending {
-    pub fn set_access_key(&mut self, key: String) {
-        self.access_key = Some(key);
+    pub fn set_access_key(&mut self, key: &str) {
+        self.access_key = Some(AccessKey::new(key));
     }
 }
 
@@ -301,17 +367,16 @@ impl RequestLog {
             return None;
         }
         let h = req.headers();
-        let len = |name: &str| h.get(name).and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok());
+        let len = |name: &http::HeaderName| h.get(name).and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok());
         Some(Pending {
             time: now(),
             start: std::time::Instant::now(),
             method: req.method().clone(),
-            uri: req
-                .uri()
-                .path_and_query()
-                .map_or_else(|| req.uri().path().to_owned(), |p| p.as_str().to_owned()),
-            bytes_in: len("x-amz-decoded-content-length").or_else(|| len("content-length")).unwrap_or(0),
-            copy: h.contains_key("x-amz-copy-source"),
+            target: Target::new(req.uri().path_and_query().map_or_else(|| req.uri().path(), |p| p.as_str())),
+            bytes_in: len(&names::X_AMZ_DECODED_CONTENT_LENGTH)
+                .or_else(|| len(&http::header::CONTENT_LENGTH))
+                .unwrap_or(0),
+            copy: h.contains_key(&names::X_AMZ_COPY_SOURCE),
             access_key: None,
             id,
         })
@@ -327,11 +392,11 @@ impl RequestLog {
             .unwrap_or(0);
         let latency = p.start.elapsed();
         let seq = self.next_seq.fetch_add(1, Ordering::Relaxed);
-        let record = RequestRecord {
+        let record = Stored {
             seq,
             time: p.time,
             method: p.method,
-            uri: p.uri,
+            target: p.target,
             status,
             latency,
             bytes_in: p.bytes_in,
@@ -353,7 +418,14 @@ impl RequestLog {
         let inner = self.inner.lock();
         // `seq` is increasing, so `after` can skip straight to the first candidate.
         let start = filter.after.map_or(0, |a| inner.records.partition_point(|r| r.seq <= a));
-        let mut matched: Vec<_> = inner.records.iter().skip(start).filter(|r| filter.matches(r)).cloned().collect();
+        let mut matched: Vec<_> = inner
+            .records
+            .iter()
+            .skip(start)
+            .filter(|s| filter.matches_cheap(s))
+            .map(Stored::record)
+            .filter(|r| filter.matches(r))
+            .collect();
         let total = matched.len();
         if let Some(limit) = filter.limit
             && total > limit

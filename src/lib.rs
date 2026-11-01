@@ -41,6 +41,7 @@ mod host;
 mod lifecycle;
 mod listxml;
 mod memory;
+mod names;
 mod noauth;
 mod objext;
 mod objops;
@@ -355,10 +356,8 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 } else if sh.auth {
                     call_verified(&sh.s3, req).await?
                 } else {
-                    if let (Some(key), Some(p)) = (
-                        noauth::accept_any(&mut req, &control.users).and_then(|s| s.access_key.clone()),
-                        logged.as_mut(),
-                    ) {
+                    let signed = noauth::accept_any(&mut req, &control.users);
+                    if let (Some(key), Some(p)) = (signed.and_then(|s| s.access_key.as_deref()), logged.as_mut()) {
                         p.set_access_key(key);
                     }
                     sh.s3.call(req).await?

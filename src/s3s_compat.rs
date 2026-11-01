@@ -76,7 +76,7 @@ pub fn is_unsized(headers: &http::HeaderMap) -> bool {
     headers.contains_key(http::header::TRANSFER_ENCODING)
         && !headers.contains_key(http::header::CONTENT_LENGTH)
         // aws-chunked bodies are decoded by length (`x-amz-decoded-content-length`) and stream.
-        && !headers.contains_key("x-amz-decoded-content-length")
+        && !headers.contains_key(&crate::names::X_AMZ_DECODED_CONTENT_LENGTH)
 }
 
 /// Reads `req`'s body and sets `Content-Length` to its size. A body over [`MAX_UNSIZED`] is

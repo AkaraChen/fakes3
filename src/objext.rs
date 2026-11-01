@@ -430,13 +430,18 @@ fn check_key(
 /// 400 (the GetObject reference: "you'll get an HTTP 400 Bad Request error"). SSE-C reads use
 /// their own headers and are checked by [`check_read_key`].
 pub fn reject_write_headers(headers: &http::HeaderMap, ext: Option<&ObjectExt>) -> S3Result<()> {
+    // All four share this prefix; one pass over the (few) request headers replaces four lookups
+    // that each case-fold a 28 to 47 byte name.
+    const PREFIX: &str = "x-amz-server-side-encryption";
     const HEADERS: [&str; 4] = [
         "x-amz-server-side-encryption",
         "x-amz-server-side-encryption-aws-kms-key-id",
         "x-amz-server-side-encryption-bucket-key-enabled",
         "x-amz-server-side-encryption-context",
     ];
-    if ext.and_then(ObjectExt::customer_key_md5).is_none() && HEADERS.iter().any(|h| headers.contains_key(*h)) {
+    if ext.and_then(ObjectExt::customer_key_md5).is_none()
+        && headers.keys().any(|k| k.as_str().starts_with(PREFIX) && HEADERS.contains(&k.as_str()))
+    {
         return Err(s3_error!(
             InvalidRequest,
             "Encryption request headers should not be sent for GET or HEAD requests; the object's encryption is applied when it is written."

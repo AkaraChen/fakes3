@@ -34,6 +34,7 @@ use s3s::{S3Error, S3ErrorCode, S3Request, S3Result};
 
 use crate::acl::Perm;
 use crate::clock::Clock;
+use crate::names::{X_AMZ_EXPECTED_BUCKET_OWNER as EXPECTED_OWNER, X_AMZ_SOURCE_EXPECTED_BUCKET_OWNER as SOURCE_EXPECTED_OWNER};
 use crate::noauth::Signed;
 use crate::policy::{Context, Verdict};
 use crate::store::{Bucket, Store};
@@ -114,8 +115,6 @@ pub fn denied() -> S3Error {
     S3Error::with_message(S3ErrorCode::AccessDenied, "Access Denied")
 }
 
-const EXPECTED_OWNER: &str = "x-amz-expected-bucket-owner";
-const SOURCE_EXPECTED_OWNER: &str = "x-amz-source-expected-bucket-owner";
 
 /// The IAM action a request needs, as bucket policies spell it.
 fn action_of(op: &str, version: bool) -> String {
@@ -364,7 +363,7 @@ impl Access {
 
     /// 403 when `header` names an account other than the one that owns `bucket`. A bucket that
     /// does not exist belongs to nobody, so only the requester's own account id passes.
-    fn expected_owner_ok(&self, headers: &http::HeaderMap, header: &str, owner: Option<UserId>, who: Identity) -> bool {
+    fn expected_owner_ok(&self, headers: &http::HeaderMap, header: &http::HeaderName, owner: Option<UserId>, who: Identity) -> bool {
         let Some(v) = headers.get(header) else { return true };
         let want = owner.or(who.user()).map(|id| self.users.get(id));
         want.is_some_and(|u| v.as_bytes() == u.account_id.as_bytes())
@@ -381,7 +380,7 @@ impl S3Access for Access {
             cx.extensions_mut(),
         );
         let signed = identity.signed();
-        let expected = cx.headers().contains_key(EXPECTED_OWNER) || cx.headers().contains_key(SOURCE_EXPECTED_OWNER);
+        let expected = cx.headers().contains_key(&EXPECTED_OWNER) || cx.headers().contains_key(&SOURCE_EXPECTED_OWNER);
         if signed && !expected && !self.users.multi() && !self.store.access.any_policy.load(Ordering::Relaxed) {
             return Ok(());
         }
@@ -393,7 +392,7 @@ impl S3Access for Access {
         };
         let op = cx.s3_op().name();
         let bucket = self.store.bucket(&name);
-        if !self.expected_owner_ok(cx.headers(), EXPECTED_OWNER, bucket.as_ref().map(|b| b.owner), identity) {
+        if !self.expected_owner_ok(cx.headers(), &EXPECTED_OWNER, bucket.as_ref().map(|b| b.owner), identity) {
             return Err(denied());
         }
         // The name is taken or free, whoever asks: the operation tells those apart.
@@ -431,7 +430,7 @@ impl S3Access for Access {
             }) = CopySource::parse(src)
         {
             let sb = self.store.bucket(&src_bucket);
-            if !self.expected_owner_ok(ctx.headers, SOURCE_EXPECTED_OWNER, sb.as_ref().map(|b| b.owner), identity) {
+            if !self.expected_owner_ok(ctx.headers, &SOURCE_EXPECTED_OWNER, sb.as_ref().map(|b| b.owner), identity) {
                 return Err(denied());
             }
             if let Some(sb) = sb
