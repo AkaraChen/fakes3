@@ -362,7 +362,13 @@ impl RequestLog {
     }
 
     /// Notes an arriving request, or returns `None` when logging is off.
-    pub fn start<B>(&self, req: &http::Request<B>, id: RequestId, now: impl FnOnce() -> SystemTime) -> Option<Pending> {
+    pub fn start<B>(
+        &self,
+        req: &http::Request<B>,
+        id: RequestId,
+        present: names::Present,
+        now: impl FnOnce() -> SystemTime,
+    ) -> Option<Pending> {
         if !self.is_enabled() {
             return None;
         }
@@ -373,10 +379,13 @@ impl RequestLog {
             start: std::time::Instant::now(),
             method: req.method().clone(),
             target: Target::new(req.uri().path_and_query().map_or_else(|| req.uri().path(), |p| p.as_str())),
-            bytes_in: len(&names::X_AMZ_DECODED_CONTENT_LENGTH)
+            bytes_in: present
+                .decoded_length
+                .then(|| len(&names::X_AMZ_DECODED_CONTENT_LENGTH))
+                .flatten()
                 .or_else(|| len(&http::header::CONTENT_LENGTH))
                 .unwrap_or(0),
-            copy: h.contains_key(&names::X_AMZ_COPY_SOURCE),
+            copy: present.copy_source,
             access_key: None,
             id,
         })
@@ -514,7 +523,7 @@ mod tests {
 
     fn push(log: &RequestLog, method: &str, uri: &str, status: u16) {
         let req = http::Request::builder().method(method).uri(uri).body(()).unwrap();
-        let p = log.start(&req, RequestId::next(), || SystemTime::UNIX_EPOCH).unwrap();
+        let p = log.start(&req, RequestId::next(), names::scan(req.headers()), || SystemTime::UNIX_EPOCH).unwrap();
         log.finish(p, &http::Response::builder().status(status).body(()).unwrap());
     }
 
@@ -565,7 +574,7 @@ mod tests {
         assert_eq!(log.list(&RequestFilter::default()).0[0].seq, 6);
         log.set_enabled(false);
         assert!(
-            log.start(&http::Request::new(()), RequestId::next(), || SystemTime::UNIX_EPOCH)
+            log.start(&http::Request::new(()), RequestId::next(), Default::default(), || SystemTime::UNIX_EPOCH)
                 .is_none()
         );
     }

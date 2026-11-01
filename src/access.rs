@@ -34,7 +34,7 @@ use s3s::{S3Error, S3ErrorCode, S3Request, S3Result};
 
 use crate::acl::Perm;
 use crate::clock::Clock;
-use crate::names::{X_AMZ_EXPECTED_BUCKET_OWNER as EXPECTED_OWNER, X_AMZ_SOURCE_EXPECTED_BUCKET_OWNER as SOURCE_EXPECTED_OWNER};
+use crate::names::{self, X_AMZ_EXPECTED_BUCKET_OWNER as EXPECTED_OWNER, X_AMZ_SOURCE_EXPECTED_BUCKET_OWNER as SOURCE_EXPECTED_OWNER};
 use crate::noauth::Signed;
 use crate::policy::{Context, Verdict};
 use crate::store::{Bucket, Store};
@@ -380,7 +380,8 @@ impl S3Access for Access {
             cx.extensions_mut(),
         );
         let signed = identity.signed();
-        let expected = cx.headers().contains_key(&EXPECTED_OWNER) || cx.headers().contains_key(&SOURCE_EXPECTED_OWNER);
+        let seen = names::scan(cx.headers());
+        let expected = seen.expected_owner || seen.source_expected_owner;
         if signed && !expected && !self.users.multi() && !self.store.access.any_policy.load(Ordering::Relaxed) {
             return Ok(());
         }
