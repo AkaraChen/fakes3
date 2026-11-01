@@ -452,7 +452,7 @@ async fn call_verified(s3: &s3s::service::S3Service, mut req: http::Request<s3s:
         if s3s_compat::is_unsized(req.headers()) {
             return match s3s_compat::with_length(req).await {
                 Ok(req) => s3.call(req).await,
-                Err(refused) => Ok(refused),
+                Err(refused) => Ok(*refused),
             };
         }
     }

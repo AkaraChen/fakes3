@@ -51,7 +51,7 @@ impl RequestId {
     fn host_id_bytes(self) -> [u8; 64] {
         let mut raw = [0u8; 48];
         let mut s = self.0;
-        for chunk in raw.chunks_exact_mut(8) {
+        for chunk in raw.as_chunks_mut::<8>().0 {
             s = s.wrapping_add(GAMMA);
             chunk.copy_from_slice(&mix(s).to_be_bytes());
         }

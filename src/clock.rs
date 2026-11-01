@@ -92,19 +92,18 @@ impl Clock {
     }
 
     fn update(&self, f: impl Fn(i64, bool) -> (i64, bool)) -> Result<(), OutOfRange> {
-        let mut result = Ok(());
-        let _ = self.state.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |state| {
+        // A plain CAS loop: `fetch_update` is deprecated on newer toolchains and its replacement
+        // (`try_update`) does not exist on older ones.
+        let mut state = self.state.load(Ordering::Relaxed);
+        loop {
             let (value, frozen) = unpack(state);
             let (value, frozen) = f(value, frozen);
-            match pack(value, frozen) {
-                Ok(next) => Some(next),
-                Err(e) => {
-                    result = Err(e);
-                    None
-                }
+            let next = pack(value, frozen)?;
+            match self.state.compare_exchange_weak(state, next, Ordering::Relaxed, Ordering::Relaxed) {
+                Ok(_) => return Ok(()),
+                Err(current) => state = current,
             }
-        });
-        result
+        }
     }
 }
 

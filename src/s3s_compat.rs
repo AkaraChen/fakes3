@@ -81,12 +81,14 @@ pub fn is_unsized(headers: &http::HeaderMap) -> bool {
 
 /// Reads `req`'s body and sets `Content-Length` to its size. A body over [`MAX_UNSIZED`] is
 /// refused as before: 411 `MissingContentLength`.
-pub async fn with_length(req: http::Request<s3s::Body>) -> Result<http::Request<s3s::Body>, s3s::HttpResponse> {
+pub async fn with_length(req: http::Request<s3s::Body>) -> Result<http::Request<s3s::Body>, Box<s3s::HttpResponse>> {
     let (mut parts, body) = req.into_parts();
     let refuse = || {
-        s3s::S3Error::with_message(s3s::S3ErrorCode::MissingContentLength, "missing header: content-length")
-            .to_http_response()
-            .unwrap_or_else(|_| s3s::HttpResponse::new(s3s::Body::empty()))
+        Box::new(
+            s3s::S3Error::with_message(s3s::S3ErrorCode::MissingContentLength, "missing header: content-length")
+                .to_http_response()
+                .unwrap_or_else(|_| s3s::HttpResponse::new(s3s::Body::empty())),
+        )
     };
     let body = Limited::new(body, MAX_UNSIZED).collect().await.map_err(|_| refuse())?.to_bytes();
     parts.headers.insert(http::header::CONTENT_LENGTH, body.len().into());
