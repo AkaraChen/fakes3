@@ -50,6 +50,11 @@ pub struct Req<'a> {
     pub body: &'a [u8],
     pub signed: bool,
     pub host: Option<String>,
+    /// Send the body with `Transfer-Encoding: chunked` and no `Content-Length`.
+    pub chunked: bool,
+    /// Sign with a `Date` header (RFC 1123) instead of `x-amz-date`, as botocore does when a
+    /// `Date` is set.
+    pub date_header: bool,
     /// The access key and secret the request is signed with.
     pub credentials: (&'a str, &'a str),
 }
@@ -63,6 +68,8 @@ pub fn req<'a>(method: &'a str, path: &'a str) -> Req<'a> {
         body: b"",
         signed: true,
         host: None,
+        chunked: false,
+        date_header: false,
         credentials: (ACCESS, SECRET),
     }
 }
@@ -88,6 +95,14 @@ impl<'a> Req<'a> {
     /// carries a signature nobody can verify.
     pub fn unverified(self) -> Self {
         self.anon().header("authorization", UNVERIFIED_AUTH)
+    }
+    pub fn date_header(mut self) -> Self {
+        self.date_header = true;
+        self
+    }
+    pub fn chunked(mut self) -> Self {
+        self.chunked = true;
+        self
     }
     /// Signed as another account (the access key picks the identity; with `auth` the secret must match).
     pub fn signed_by(mut self, access: &'a str, secret: &'a str) -> Self {
@@ -147,9 +162,17 @@ pub async fn send(addr: SocketAddr, r: Req<'_>) -> Resp {
     let date = amz_date(SystemTime::now());
     let mut headers: Vec<(String, String)> = r.headers.iter().map(|(k, v)| (k.to_ascii_lowercase(), (*v).to_owned())).collect();
     headers.push(("host".into(), host.clone()));
+    if r.chunked {
+        headers.push(("transfer-encoding".into(), "chunked".into()));
+    }
     if r.signed {
         headers.push(("x-amz-content-sha256".into(), payload_hash.clone()));
-        headers.push(("x-amz-date".into(), date.clone()));
+        if r.date_header {
+            // The zone as botocore writes it.
+            headers.push(("date".into(), http_date(SystemTime::now()).replace("GMT", "-0000")));
+        } else {
+            headers.push(("x-amz-date".into(), date.clone()));
+        }
         headers.sort();
         let signed_names: Vec<&str> = headers.iter().map(|(k, _)| k.as_str()).collect();
         let canonical_headers: String = headers.iter().map(|(k, v)| format!("{k}:{}\n", v.trim())).collect();
@@ -192,11 +215,30 @@ pub async fn send(addr: SocketAddr, r: Req<'_>) -> Resp {
     for (k, v) in &headers {
         raw.extend_from_slice(format!("{k}: {v}\r\n").as_bytes());
     }
-    raw.extend_from_slice(format!("content-length: {}\r\nconnection: close\r\n\r\n", r.body.len()).as_bytes());
-    raw.extend_from_slice(r.body);
+    if r.chunked {
+        raw.extend_from_slice(b"connection: close\r\n\r\n");
+        // Two chunks, to show the body is reassembled.
+        let (a, b) = r.body.split_at(r.body.len() / 2);
+        for part in [a, b] {
+            if !part.is_empty() {
+                raw.extend_from_slice(format!("{:x}\r\n", part.len()).as_bytes());
+                raw.extend_from_slice(part);
+                raw.extend_from_slice(b"\r\n");
+            }
+        }
+        raw.extend_from_slice(b"0\r\n\r\n");
+    } else {
+        raw.extend_from_slice(format!("content-length: {}\r\nconnection: close\r\n\r\n", r.body.len()).as_bytes());
+        raw.extend_from_slice(r.body);
+    }
 
+    send_raw(addr, &raw).await
+}
+
+/// Sends `raw` as it is (a complete request, `Connection: close`) and reads the response.
+pub async fn send_raw(addr: SocketAddr, raw: &[u8]) -> Resp {
     let mut s = TcpStream::connect(addr).await.unwrap();
-    s.write_all(&raw).await.unwrap();
+    s.write_all(raw).await.unwrap();
     let mut buf = Vec::new();
     s.read_to_end(&mut buf).await.unwrap();
     parse(&buf)
@@ -236,4 +278,59 @@ fn dechunk(mut b: &[u8]) -> Vec<u8> {
         out.extend_from_slice(&b[eol + 2..eol + 2 + n]);
         b = &b[eol + 2 + n + 2..];
     }
+}
+
+/// `Wed, 02 Jan 2030 03:04:05 GMT`.
+pub fn http_date(t: SystemTime) -> String {
+    let secs = t.duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let days = secs / 86400;
+    let iso = amz_date(t);
+    let month =
+        ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][iso[4..6].parse::<usize>().unwrap() - 1];
+    let weekday = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"][(days % 7) as usize];
+    format!(
+        "{weekday}, {} {month} {} {}:{}:{} GMT",
+        &iso[6..8],
+        &iso[0..4],
+        &iso[9..11],
+        &iso[11..13],
+        &iso[13..15]
+    )
+}
+
+/// Base64 HMAC-SHA1 of `data` under the default secret: a SigV2 signature.
+pub fn v2_signature(data: &str) -> String {
+    v2_signature_with(SECRET, data)
+}
+
+pub fn v2_signature_with(secret: &str, data: &str) -> String {
+    use hmac::{Hmac, KeyInit, Mac};
+    let mut m = Hmac::<sha1::Sha1>::new_from_slice(secret.as_bytes()).unwrap();
+    m.update(data.as_bytes());
+    base64_simd::STANDARD.encode_to_string(m.finalize().into_bytes())
+}
+
+/// The SigV2 `Authorization` header value for a request. `resource` is the CanonicalizedResource
+/// (`/bkt/`, `/bkt/key?acl`), `date` goes into the Date slot (empty when `x-amz-date` is sent) and
+/// `amz` are the `x-amz-*` headers sent, in any order.
+pub fn v2_authorization(method: &str, content_type: &str, date: &str, amz: &[(&str, &str)], resource: &str) -> String {
+    v2_authorization_as((ACCESS, SECRET), method, content_type, date, amz, resource)
+}
+
+/// [`v2_authorization`] for another account.
+pub fn v2_authorization_as(
+    (access, secret): (&str, &str),
+    method: &str,
+    content_type: &str,
+    date: &str,
+    amz: &[(&str, &str)],
+    resource: &str,
+) -> String {
+    let mut amz: Vec<_> = amz.iter().map(|(k, v)| (k.to_ascii_lowercase(), v.trim())).collect();
+    amz.sort();
+    let amz: String = amz.iter().map(|(k, v)| format!("{k}:{v}\n")).collect();
+    format!(
+        "AWS {access}:{}",
+        v2_signature_with(secret, &format!("{method}\n\n{content_type}\n{date}\n{amz}{resource}"))
+    )
 }

@@ -73,80 +73,10 @@
    ]
   },
   {
-   "id": "sigv2-bucket-resource",
-   "category": "s3s",
-   "title": "SigV2: bucket-level requests signed by botocore fail with SignatureDoesNotMatch",
-   "why": "botocore signs the CanonicalizedResource of a path-style bucket request as `/bucket/` (trailing slash) although the request line is `/bucket`; verified with a stub server and boto3 1.43.123 (`CreateBucket`, `ListObjects`, `HeadBucket` sign `/bkt/`, `PutObject` signs `/bkt/k`). s3s builds the StringToSign from `req_uri.path()` verbatim (`s3s-sigv2` `create_string_to_sign`, called from `ops/signature.rs` `v2_check_header_auth`), so the signatures differ. Every SigV2 bucket-level call from boto3 is affected, not only these tests.",
-   "tests": [
-    "test_bucket_create_bad_authorization_invalid_aws2",
-    "test_bucket_create_bad_date_none_aws2",
-    "test_bucket_create_bad_ua_empty_aws2",
-    "test_bucket_create_bad_ua_none_aws2",
-    "test_cors_presigned_get_object_v2",
-    "test_cors_presigned_put_object_v2",
-    "test_cors_presigned_get_object_tenant_v2",
-    "test_cors_presigned_put_object_tenant_v2"
-   ],
-   "cost": "medium"
-  },
-  {
-   "id": "sigv2-date",
-   "category": "s3s",
-   "title": "SigV2: bad `x-amz-date` / `Date` is 400 InvalidRequest, AWS says 403",
-   "why": "s3s `v2_check_header_auth` parses `x-amz-date` with the SigV4 ISO-8601 parser (`invalid x-amz-date`) and `Date` as HTTP-date (`invalid date`, `missing date`), all mapped to 400 `InvalidRequest`; AWS answers 403 `AccessDenied` / `RequestTimeTooSkewed` and accepts RFC 1123 in `x-amz-date` for SigV2.",
-   "tests": [
-    "test_bucket_create_bad_date_after_today_aws2",
-    "test_bucket_create_bad_date_before_epoch_aws2",
-    "test_bucket_create_bad_date_before_today_aws2",
-    "test_bucket_create_bad_date_empty_aws2",
-    "test_bucket_create_bad_date_invalid_aws2",
-    "test_object_create_bad_date_after_end_aws2",
-    "test_object_create_bad_date_before_epoch_aws2",
-    "test_object_create_bad_date_before_today_aws2",
-    "test_object_create_bad_date_empty_aws2",
-    "test_object_create_bad_date_invalid_aws2"
-   ],
-   "cost": "large"
-  },
-  {
-   "id": "sigv4-date-header",
-   "category": "s3s",
-   "title": "SigV4: RFC 1123 `X-Amz-Date` together with `Date` is reported as `missing header: x-amz-date`",
-   "why": "`extract_amz_date` in s3s `ops/signature.rs:750` raises `InvalidRequest: missing header: x-amz-date` when the header is not in the compact ISO-8601 form; LocalStack accepts the request.",
-   "tests": [
-    "test_object_create_date_and_amz_date",
-    "test_object_create_amz_date_and_no_date"
-   ],
-   "cost": "large"
-  },
-  {
-   "id": "chunked-transfer-encoding",
-   "category": "s3s",
-   "title": "PutObject with `Transfer-Encoding: chunked` (no Content-Length) is rejected",
-   "why": "`MissingContentLength: missing header: content-length`, raised in s3s `ops/signature.rs` (lines 709/875) before fakes3 sees the request. LocalStack accepts it.",
-   "tests": [
-    "test_object_write_with_chunked_transfer_encoding"
-   ],
-   "cost": "large"
-  },
-  {
-   "id": "post-policy-status",
-   "category": "s3s",
-   "title": "POST policy violations are 400 InvalidPolicyDocument, AWS says 403 AccessDenied",
-   "why": "Condition checks live in s3s `post_policy.rs` (`InvalidPolicyDocument`); AWS answers 403 `AccessDenied: Invalid according to Policy`. MinIO passes all four.",
-   "tests": [
-    "test_post_object_invalid_request_field_value",
-    "test_post_object_missing_policy_condition",
-    "test_post_object_request_missing_policy_specified_field",
-    "test_post_object_wrong_bucket"
-   ],
-   "cost": "large"
-  },
-  {
    "id": "header-overwritten",
    "category": "test-defect",
    "title": "Test mutates a header that boto3 re-signs afterwards (the request is valid)",
-   "why": "The tests add/remove `Authorization`, `Content-Length` or `x-amz-date` in a `before-call` hook, but botocore's signer rewrites those after the hook (checked with boto3 1.43.123 against a stub server: `Authorization` is replaced, `Content-Length` restored, `Date` re-added). The server correctly accepts the valid request, so `ClientError not raised`. They also fail on MinIO and LocalStack. Most are `fails_on_rgw` with a TODO saying so.",
+   "why": "The tests add/remove `Authorization`, `Content-Length` or `x-amz-date` in a `before-call` hook, but botocore's signer rewrites those after the hook (checked with boto3 1.43.123 against a stub server: `Authorization` is replaced, `Content-Length` restored, `Date` re-added). The server correctly accepts the valid request, so `ClientError not raised`. They also fail on MinIO and LocalStack. Most are `fails_on_rgw` with a TODO saying so. `test_bucket_create_bad_authorization_invalid_aws2` and `test_bucket_create_bad_date_none_aws2` looked like SigV2 bucket-resource failures until fakes3 worked around that (docs/s3s-workarounds.md): the signed request is then valid and accepted (`Authorization` is rewritten by the signer, there is no `x-amz-date` to remove), so `ClientError not raised`.",
    "tests": [
     "test_bucket_create_bad_authorization_empty",
     "test_bucket_create_bad_authorization_none",
@@ -155,7 +85,9 @@
     "test_object_create_bad_authorization_incorrect_aws2",
     "test_object_create_bad_authorization_invalid_aws2",
     "test_object_create_bad_contentlength_none",
-    "test_object_create_bad_date_none_aws2"
+    "test_object_create_bad_date_none_aws2",
+    "test_bucket_create_bad_authorization_invalid_aws2",
+    "test_bucket_create_bad_date_none_aws2"
    ]
   },
   {
