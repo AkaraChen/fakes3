@@ -5,7 +5,7 @@ name: node
 #
 # npm publishing only happens on an explicit trigger: a `v*` tag push, or a manual dispatch with
 # `publish: true`. Otherwise the publish job runs `npm publish --dry-run`, which checks the package
-# layout without uploading anything. Without an NPM_TOKEN secret it falls back to the dry run too.
+# layout without uploading anything. Publishing uses npm trusted publishing (OIDC); no token is stored.
 on:
   push:
     branches: [main]
@@ -151,15 +151,19 @@ jobs:
           npx napi artifacts -d artifacts
           find npm -name '*.node'
 
+      # npm trusted publishing (OIDC, no token): needs npm >= 11.5.1. Each of the five packages
+      # (fakes3-sdk and its four platform packages) must have this repository + `node.yml`
+      # registered as a trusted publisher on npmjs.com; see bindings/node/PUBLISHING.md.
+      - run: npm install -g npm@^11.5.1
+
       - name: Publish (or dry run)
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          REAL: ${{ (startsWith(github.ref, 'refs/tags/v') || inputs.publish) && secrets.NPM_TOKEN != '' }}
+          REAL: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish }}
         run: |
           flag=--dry-run
           if [ "$REAL" = true ]; then
             flag=
-            export NPM_CONFIG_PROVENANCE=true NPM_CONFIG_ACCESS=public
+            export NPM_CONFIG_ACCESS=public
           fi
           echo "publishing with flags: ${flag:-<none>}"
           # Platform packages first; this also pins them as optionalDependencies of the main one.
