@@ -440,7 +440,9 @@ pub fn reject_write_headers(headers: &http::HeaderMap, ext: Option<&ObjectExt>) 
         "x-amz-server-side-encryption-context",
     ];
     if ext.and_then(ObjectExt::customer_key_md5).is_none()
-        && headers.keys().any(|k| k.as_str().starts_with(PREFIX) && HEADERS.contains(&k.as_str()))
+        && headers
+            .keys()
+            .any(|k| k.as_str().starts_with(PREFIX) && HEADERS.contains(&k.as_str()))
     {
         return Err(s3_error!(
             InvalidRequest,

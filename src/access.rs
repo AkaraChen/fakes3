@@ -115,7 +115,6 @@ pub fn denied() -> S3Error {
     S3Error::with_message(S3ErrorCode::AccessDenied, "Access Denied")
 }
 
-
 /// The IAM action a request needs, as bucket policies spell it.
 fn action_of(op: &str, version: bool) -> String {
     let v = |plain: &str, versioned: &str| format!("s3:{}", if version { versioned } else { plain });

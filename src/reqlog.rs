@@ -523,7 +523,9 @@ mod tests {
 
     fn push(log: &RequestLog, method: &str, uri: &str, status: u16) {
         let req = http::Request::builder().method(method).uri(uri).body(()).unwrap();
-        let p = log.start(&req, RequestId::next(), names::scan(req.headers()), || SystemTime::UNIX_EPOCH).unwrap();
+        let p = log
+            .start(&req, RequestId::next(), names::scan(req.headers()), || SystemTime::UNIX_EPOCH)
+            .unwrap();
         log.finish(p, &http::Response::builder().status(status).body(()).unwrap());
     }
 
@@ -574,8 +576,10 @@ mod tests {
         assert_eq!(log.list(&RequestFilter::default()).0[0].seq, 6);
         log.set_enabled(false);
         assert!(
-            log.start(&http::Request::new(()), RequestId::next(), Default::default(), || SystemTime::UNIX_EPOCH)
-                .is_none()
+            log.start(&http::Request::new(()), RequestId::next(), Default::default(), || {
+                SystemTime::UNIX_EPOCH
+            })
+            .is_none()
         );
     }
 }

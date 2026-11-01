@@ -336,7 +336,9 @@ pub async fn start(options: Option<StartOptions>) -> Result<FakeS3Server> {
         },
         bucket_defaults: match options.bucket_defaults {
             None => defaults.bucket_defaults,
-            Some(s) => s.parse().map_err(|e| Error::new(Status::InvalidArg, format!("invalid bucketDefaults: {e}")))?,
+            Some(s) => s
+                .parse()
+                .map_err(|e| Error::new(Status::InvalidArg, format!("invalid bucketDefaults: {e}")))?,
         },
         fast_list: defaults.fast_list,
     };
