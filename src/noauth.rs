@@ -102,7 +102,7 @@ pub fn accept_any<'a>(req: &'a mut http::Request<s3s::Body>, users: &Users) -> O
     }
     let streaming = req
         .headers()
-        .get("x-amz-content-sha256")
+        .get(&crate::names::X_AMZ_CONTENT_SHA256)
         .is_some_and(|v| v.as_bytes().starts_with(b"STREAMING-"));
     if streaming {
         decode_aws_chunked(req);
@@ -154,7 +154,7 @@ fn strip_presigned(query: &str) -> Option<(String, Option<String>)> {
 fn decode_aws_chunked(req: &mut http::Request<s3s::Body>) {
     let declared = req
         .headers()
-        .get("x-amz-decoded-content-length")
+        .get(&crate::names::X_AMZ_DECODED_CONTENT_LENGTH)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<u64>().ok());
     match declared {

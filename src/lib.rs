@@ -41,6 +41,7 @@ mod host;
 mod lifecycle;
 mod listxml;
 mod memory;
+mod names;
 mod noauth;
 mod objext;
 mod objops;
@@ -329,7 +330,8 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 return Ok(control.handle(req).await);
             }
             let id = reqid::RequestId::next();
-            let mut logged = control.log.start(&req, id, || control.clock.now());
+            let present = names::scan(req.headers());
+            let mut logged = control.log.start(&req, id, present, || control.clock.now());
             merge_duplicate_headers(req.headers_mut());
             let mut resp = if req.method() == http::Method::OPTIONS {
                 // s3s does not route OPTIONS; preflights are answered from the bucket's CORS rules.
@@ -350,15 +352,13 @@ fn service(config: &Config, control: Arc<Control>) -> ServiceFn {
                 let expired = control.clock.is_virtual() && req.uri().query().is_some_and(|q| presign::is_expired(q, control.clock.now()));
                 let mut resp = if expired {
                     presign::expired_response()
-                } else if let Some(refused) = digest::empty_content_md5(req.headers()) {
+                } else if let Some(refused) = digest::empty_content_md5(req.headers(), present) {
                     refused
                 } else if sh.auth {
                     call_verified(&sh.s3, req).await?
                 } else {
-                    if let (Some(key), Some(p)) = (
-                        noauth::accept_any(&mut req, &control.users).and_then(|s| s.access_key.clone()),
-                        logged.as_mut(),
-                    ) {
+                    let signed = noauth::accept_any(&mut req, &control.users);
+                    if let (Some(key), Some(p)) = (signed.and_then(|s| s.access_key.as_deref()), logged.as_mut()) {
                         p.set_access_key(key);
                     }
                     sh.s3.call(req).await?
@@ -464,6 +464,20 @@ async fn call_verified(s3: &s3s::service::S3Service, mut req: http::Request<s3s:
 /// repeated headers, so signatures still verify. Some SDKs (aws-sdk-java-v2) send
 /// `Content-Encoding: gzip` and `Content-Encoding: aws-chunked` separately, which s3s rejects.
 fn merge_duplicate_headers(h: &mut http::HeaderMap) {
+    // `iter` yields the values of one name together, so a name that follows itself has several.
+    // Looking up every name to count its values (what the slow path does) hashes them all.
+    let mut prev: Option<&http::HeaderName> = None;
+    let mut repeated = false;
+    for (name, _) in h.iter() {
+        if prev == Some(name) && *name != http::header::HOST && *name != http::header::CONTENT_LENGTH {
+            repeated = true;
+            break;
+        }
+        prev = Some(name);
+    }
+    if !repeated {
+        return;
+    }
     let dups: Vec<http::HeaderName> = h
         .keys()
         .filter(|k| *k != http::header::HOST && *k != http::header::CONTENT_LENGTH && h.get_all(*k).iter().nth(1).is_some())
