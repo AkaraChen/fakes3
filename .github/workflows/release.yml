@@ -82,7 +82,8 @@ jobs:
             sleep 0.1
           done
           docker logs "$cid"
-          # Signed requests are required by default, so an anonymous ListBuckets is a 403 from s3s.
+          # Signatures are not verified by default, but an unsigned request is anonymous, and an
+          # anonymous ListBuckets is AccessDenied (403), as on AWS.
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9000/)
           docker rm -f "$cid" >/dev/null
           test "$code" = 403

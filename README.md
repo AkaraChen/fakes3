@@ -47,8 +47,6 @@ s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3:latest
 ```
 
-> 镜像和 npm 包在第一个版本（`v0.1.0`）发布后才可用；在那之前请用 `docker build -t fakes3 .` 或从源码编译。
-
 - 平台：`linux/amd64` 和 `linux/arm64`，同一个 tag 自动选择；镜像基于 Alpine，里面只有一个静态链接的 musl 二进制，压缩后约 7 MB。
 - tag：`latest`、完整版本（`0.1.0`）、`主版本.次版本`（`0.1`），以及提交的短 sha（`sha-abc1234`）。
 - 镜像里默认监听 `0.0.0.0:9000`，配置项见下面的[配置](#配置)，用环境变量（`FAKES3_*`）或命令行参数都可以。
@@ -220,7 +218,7 @@ server.requests.clear();                // configure({ enabled, capacity }) 开�
 和控制面一样，这些调用没有和进行中的请求同步，请在测试之间、没有未完成请求时使用。服务停止后调用会抛出 `server is stopped`。
 
 预编译产物覆盖 Linux 的 x64 / arm64，glibc 和 musl（Alpine）都有，通过 `optionalDependencies` 里的
-`fakes3-linux-x64-gnu` 等平台包分发；macOS 和 Windows 暂不支持（服务端依赖 Linux 的 `memfd`）。
+`fakes3-sdk-linux-x64-gnu` 等平台包分发；macOS 和 Windows 暂不支持（服务端依赖 Linux 的 `memfd`）。
 自己编译：
 
 ```bash
