@@ -10,7 +10,7 @@ npm 不能给还不存在的包配置可信发布者，所以每个包名的第�
 
 1. `npm login`
 2. `bindings/node/scripts/claim-npm-names.sh`：给 5 个包名各发一个空的 `0.0.0` 占位版本。
-3. 为这 5 个包分别添加可信发布者（需要 npm >= 11.10，已登录）：
+3. 为这 5 个包分别添加可信发布者（需要较新的 npm，在 11.19 上验证过；先登录）：
    ```bash
    for n in fakes3-sdk fakes3-sdk-linux-{x64,arm64}-{gnu,musl}; do
      npm trust github "$n" --file node.yml --repo AkaraChen/fakes3 --allow-publish -y
