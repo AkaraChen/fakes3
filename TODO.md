@@ -13,6 +13,7 @@
 - [x] 命令行 `fakes3 ctl` 和 Rust 进程内的 `Server` 方法
 - [x] Rust 进程内库模式（`Server::start` / `Server::start_blocking`）、Node.js 绑定（napi-rs）、GHCR 镜像
 - [x] testcontainers：不需要专门的模块，通用容器 + 日志等待即可（见 README）
+- [x] GitHub Action：[setup-fakes3](https://github.com/AkaraChen/setup-fakes3)，下载 release 里的静态二进制并在后台启动
 - [ ] 其余语言的框架集成（pytest fixture 等，基于 `fakes3 ctl` 或 HTTP API）
 - [x] 默认不校验签名（原 `--no-auth`，现在是默认行为，`--auth` 才严格校验）：任意 access key / secret 签名的请求都接受（SigV4 / SigV2 的头和 presigned URL、三种流式上传，trailer 校验和仍会校验），
       并且是 bucket 的 owner；不带签名的请求是匿名请求，照常走 ACL / Bucket Policy / Block Public Access。

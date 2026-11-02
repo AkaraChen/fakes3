@@ -24,7 +24,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
   fakes3 通过 85.8%，LocalStack 59.1%，MinIO 52.0%。
 - **为测试设计。** 测试之间重置状态、保存和回滚测试数据、拨动虚拟时钟让预签名 URL 过期或触发 Lifecycle 规则、
   用请求日志断言代码发了哪些请求。
-- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行，或者静态链接的 Linux 二进制。
+- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、静态链接的 Linux 二进制，或者 GitHub Action。
 
 | | fakes3 | MinIO | LocalStack | moto | S3Mock |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -170,6 +170,33 @@ c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRe
 host, _ := c.Host(ctx)
 port, _ := c.MappedPort(ctx, "9000")
 endpoint := fmt.Sprintf("http://%s:%s", host, port.Port())
+```
+
+## GitHub Actions
+
+[`setup-fakes3`](https://github.com/AkaraChen/setup-fakes3) 在 Linux runner 上安装 fakes3、在后台启动，并把 `fakes3 ctl` 放进 `PATH` 供后续步骤使用。
+它不需要 Docker，所以在 container job 里也能用：
+
+```yaml
+- uses: AkaraChen/setup-fakes3@v1
+  id: s3
+  with:
+    version: 0.1.0      # 默认 latest
+- run: pytest
+  env:
+    S3_ENDPOINT: ${{ steps.s3.outputs.endpoint }}   # http://127.0.0.1:9000
+```
+
+输入项和[配置](#配置)里的选项一一对应；`port: 0` 随机选一个空闲端口，`aws-env: true` 导出 `AWS_ENDPOINT_URL_S3` 和凭证，AWS CLI 和各语言 SDK 直接就能用。
+全部输入和输出见 [action 的 README](https://github.com/AkaraChen/setup-fakes3#readme)。
+
+也可以把 Docker 镜像作为 service container：
+
+```yaml
+services:
+  s3:
+    image: ghcr.io/akarachen/fakes3:0.1.0
+    ports: ["9000:9000"]
 ```
 
 ## 测试控制面

@@ -28,7 +28,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 - **Built for tests.** Reset state between tests, snapshot and restore fixtures, move a virtual clock to
   expire presigned URLs or run lifecycle rules, and assert on a log of the requests your code made.
 - **Runs where your tests run.** Use the Docker image (amd64 and arm64), the Node.js package in-process,
-  the Rust library in-process, or a static Linux binary.
+  the Rust library in-process, a static Linux binary, or the GitHub Action.
 
 |                                       | fakes3      | MinIO   | LocalStack | moto    | S3Mock  |
 | ------------------------------------- | ----------: | ------: | ---------: | ------: | ------: |
@@ -181,6 +181,35 @@ c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRe
 host, _ := c.Host(ctx)
 port, _ := c.MappedPort(ctx, "9000")
 endpoint := fmt.Sprintf("http://%s:%s", host, port.Port())
+```
+
+## GitHub Actions
+
+[`setup-fakes3`](https://github.com/AkaraChen/setup-fakes3) installs fakes3 on a Linux runner, starts it
+in the background, and puts `fakes3 ctl` on `PATH` for later steps. It needs no Docker, so it also works
+in container jobs:
+
+```yaml
+- uses: AkaraChen/setup-fakes3@v1
+  id: s3
+  with:
+    version: 0.1.0      # default: latest
+- run: pytest
+  env:
+    S3_ENDPOINT: ${{ steps.s3.outputs.endpoint }}   # http://127.0.0.1:9000
+```
+
+Inputs mirror the [configuration](#configuration) options; `port: 0` picks a free port, and
+`aws-env: true` exports `AWS_ENDPOINT_URL_S3` and credentials for the AWS CLI and SDKs. See the
+[action's README](https://github.com/AkaraChen/setup-fakes3#readme) for every input and output.
+
+The Docker image also works as a service container:
+
+```yaml
+services:
+  s3:
+    image: ghcr.io/akarachen/fakes3:0.1.0
+    ports: ["9000:9000"]
 ```
 
 ## Test control plane
