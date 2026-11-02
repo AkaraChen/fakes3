@@ -10,11 +10,14 @@ npm 不能给还不存在的包配置可信发布者，所以每个包名的第�
 
 1. `npm login`
 2. `bindings/node/scripts/claim-npm-names.sh`：给 5 个包名各发一个空的 `0.0.0` 占位版本。
-3. 在 npmjs.com 上为这 5 个包分别添加可信发布者（包页面 → Settings → Trusted publishing）：
-   - Organization / user：`AkaraChen`
-   - Repository：`fakes3`
-   - Workflow filename：`node.yml`
-   - Environment：留空
+3. 为这 5 个包分别添加可信发布者（需要 npm >= 11.10，已登录）：
+   ```bash
+   for n in fakes3-sdk fakes3-sdk-linux-{x64,arm64}-{gnu,musl}; do
+     npm trust github "$n" --file node.yml --repo AkaraChen/fakes3 --allow-publish -y
+   done
+   npm trust list fakes3-sdk   # 核对
+   ```
+   也可以在 npmjs.com 的包页面 → Settings → Trusted publishing 里手动添加（仓库 `AkaraChen/fakes3`，workflow `node.yml`，environment 留空）。
 4. 建议同时把每个包的发布权限改成「Require two-factor authentication and disallow tokens」。
 
 新配置的可信发布者必须在 2 天内完成一次成功的发布，否则会失效，所以第 3 步做完后尽快发一个正式版本。
