@@ -185,7 +185,7 @@ SigV2 的 `Expires`、POST policy 的 `expiration` 时，直接读取主机时�
 
 ### 用时钟推进归档对象
 
-没有后台任务：每次读取时拿记录下来的时间和服务器时钟比较，所以拨时钟就够了，不需要任何额外调用。恢复的完成时间是固定的（见 [README](../README.md#归档存储类)），例如：
+没有后台任务：每次读取时拿记录下来的时间和服务器时钟比较，所以拨时钟就够了，不需要任何额外调用。恢复的完成时间是固定的（见 [归档存储类](archive-storage.md)），例如：
 
 ```bash
 fakes3 ctl clock freeze 2030-01-01T10:30:00Z
@@ -267,7 +267,7 @@ $ curl localhost:9000/_fakes3/stats
 ```
 
 `memory.used` 是服务器持有的对象数据字节数（含分段上传的 part，以及仍被快照或进行中的读取引用的数据），`limit` 是
-`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本、时钟、`bucket_defaults`（`"legacy"` 或 `"aws"`，见 [README](../README.md#新建-bucket-的默认值)）和 `auth`（认证模式：`"any-credentials"` 是默认的不校验签名，`"strict"` 是 `--auth`，见 [README](../README.md#认证模式)）、`users`（账户列表：`name`、`access_key`、`account_id`、`canonical_id`，没有 secret，见 [多用户](multi-user.md)），`fakes3 ctl status` 显示的就是它。
+`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本、时钟、`bucket_defaults`（`"legacy"` 或 `"aws"`，见 [新建 bucket 的默认值](bucket-defaults.md)）和 `auth`（认证模式：`"any-credentials"` 是默认的不校验签名，`"strict"` 是 `--auth`，见 [认证模式](auth.md)）、`users`（账户列表：`name`、`access_key`、`account_id`、`canonical_id`，没有 secret，见 [多用户](multi-user.md)），`fakes3 ctl status` 显示的就是它。
 
 **内存与重置、快照的关系。** 数据缓冲区按引用计数在最后一个引用消失时释放并归还额度，所以：
 

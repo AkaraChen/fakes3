@@ -1,29 +1,59 @@
 # fakes3
 
-一个专门给测试用的 S3 服务：全内存、无持久化，启动只要几毫秒，请求延迟在百微秒级。
-协议层基于 [s3s](https://github.com/Nugine/s3s)，用 Rust 编写。
+[![ci](https://github.com/AkaraChen/fakes3/actions/workflows/ci.yml/badge.svg)](https://github.com/AkaraChen/fakes3/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/fakes3-sdk)](https://www.npmjs.com/package/fakes3-sdk)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-它放弃了测试用不到的东西（持久化、fsync、多节点、静态加密），换来启动速度和请求延迟；
-但在客户端看得到的地方，尽量和 AWS S3 保持一致：签名、错误码、ETag 规则、版本控制、条件请求、校验和等等。
+English | [简体中文](README.zh-CN.md)
 
-## 快速开始
+**An in-memory S3 server for tests.** It is ready in milliseconds, answers a request in about 150 µs,
+and behaves like AWS S3 wherever your client can tell the difference.
 
-用 Docker（镜像说明见[下面](#docker-镜像ghcr)）：
+fakes3 drops what tests never need (persistence, fsync, clustering, encryption at rest) and spends the
+savings on speed. What a client can observe follows AWS closely: signatures, error codes, ETag rules,
+versioning, conditional requests, checksums, ACLs and bucket policies. It is written in Rust on top of
+[s3s](https://github.com/Nugine/s3s).
 
 ```bash
 docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 ```
 
-在测试代码里直接内嵌：[Rust](#rust-库模式)、[Node.js](#nodejs-绑定)。
+## Why fakes3
 
-或者直接编译运行：
+- **Fast enough to start one per test.** A container is ready about 1 ms after it starts and idles at
+  9 MiB. A 6,500-request test suite runs in 0.93 s, against 3.4 s on MinIO and 7.7 s on LocalStack.
+- **Behaves like AWS.** It passes 99.1% of a 24-SDK compatibility matrix and 85.8% of the
+  [ceph/s3-tests](https://github.com/ceph/s3-tests) cases that AWS itself passes. LocalStack passes
+  59.1% of those, MinIO 52.0%.
+- **Built for tests.** Reset state between tests, snapshot and restore fixtures, move a virtual clock to
+  expire presigned URLs or run lifecycle rules, and assert on a log of the requests your code made.
+- **Runs where your tests run.** Use the Docker image (amd64 and arm64), the Node.js package in-process,
+  the Rust library in-process, or a static Linux binary.
+
+|                                       | fakes3      | MinIO   | LocalStack | moto    | S3Mock  |
+| ------------------------------------- | ----------: | ------: | ---------: | ------: | ------: |
+| Ready after container start           | **~1 ms**   | 243 ms  | 10.9 s     | 880 ms  | 3.8 s   |
+| Idle memory                           | **9.2 MiB** | 51 MiB  | 156 MiB    | 69 MiB  | 233 MiB |
+| 6,500-request test suite              | **0.93 s**  | 3.4 s   | 7.7 s      | 12.9 s  | 7.1 s   |
+| SDK matrix (24 SDKs × 43 scenarios)   | **99.1%**   | 96.4%   | 91.4%      | 87.9%   | 85.4%   |
+| ceph/s3-tests (684 AWS-passing cases) | **85.8%**   | 52.0%   | 59.1%      |         |         |
+
+Measured on a 4-core GitHub-hosted runner. Methodology, throughput numbers and the full results are in
+[docs/benchmarks.md](docs/benchmarks.md).
+
+## Quick start
+
+### Docker
 
 ```bash
-cargo build --release
-./target/release/fakes3 --port 0      # 0 表示随机选一个空闲端口，实际地址会打印到 stdout
+docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 ```
 
-客户端按 path-style 寻址连接。默认任意凭证都可以（不校验签名，见[认证模式](#认证模式)）；加 `--auth` 后必须用配置的凭证，默认是 `fakes3` / `fakes3secret`：
+The image is `ghcr.io/akarachen/fakes3` for `linux/amd64` and `linux/arm64`, tagged `latest`, `0.1.0`,
+`0.1` and `sha-<commit>`. It is Alpine plus a single static binary (about 7 MB compressed), listens on
+`0.0.0.0:9000`, and prints `http://0.0.0.0:9000` to stdout when it is ready.
+
+Point any S3 client at it with path-style addressing. Any credentials work:
 
 ```python
 import boto3
@@ -41,44 +71,85 @@ s3.create_bucket(Bucket="demo")
 s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 ```
 
-## Docker 镜像（GHCR）
+### Node.js, in-process
+
+[`fakes3-sdk`](https://www.npmjs.com/package/fakes3-sdk) runs the server inside your Node process.
+There is no child process and no Docker:
 
 ```bash
-docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3:latest
+npm install --save-dev fakes3-sdk
 ```
 
-- 平台：`linux/amd64` 和 `linux/arm64`，同一个 tag 自动选择；镜像基于 Alpine，里面只有一个静态链接的 musl 二进制，压缩后约 7 MB。
-- tag：`latest`、完整版本（`0.1.0`）、`主版本.次版本`（`0.1`），以及提交的短 sha（`sha-abc1234`）。
-- 镜像里默认监听 `0.0.0.0:9000`，配置项见下面的[配置](#配置)，用环境变量（`FAKES3_*`）或命令行参数都可以。
-  启动完成后在 stdout 打印一行 `http://0.0.0.0:9000`，可以作为就绪信号。
-- 不想用 Docker 的话，每个 [release](https://github.com/AkaraChen/fakes3/releases) 里也有静态链接的
-  `fakes3-x86_64-unknown-linux-musl.tar.gz` 和 `fakes3-aarch64-unknown-linux-musl.tar.gz`（附 sha256）。
-- 自己构建：`docker build -t fakes3 .`
+```ts
+import { start } from "fakes3-sdk";
+import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
 
-发布由 [release workflow](.github/workflows/release.yml) 完成：推送 `v*` tag 时构建两个架构（各用原生 runner）、
-推送镜像并把二进制挂到 GitHub release；手动触发时 `publish` 默认是 `false`，只构建和冒烟测试，不推送任何东西。
+const server = await start(); // 127.0.0.1, random free port
+const s3 = new S3Client({
+  endpoint: server.endpoint,
+  region: "us-east-1",
+  forcePathStyle: true,
+  credentials: { accessKeyId: server.accessKey, secretAccessKey: server.secretKey },
+});
+await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
+// ...
+await server.stop();
+```
 
-### 在 Testcontainers 里使用
+Prebuilt for Linux x64 and arm64, on both glibc and musl (Alpine), with Node.js 18 or later. Every option
+and method is documented in the [package README](bindings/node/README.md).
 
-不需要专门的 Testcontainers 模块：通用容器（generic container）加一个等待策略就够了。
-暴露 9000 端口，等 stdout 里出现 `http://`（或者等端口监听），然后用映射出来的主机和端口作为 endpoint。
-客户端用 path-style 寻址，凭证随意（默认不校验签名；设置环境变量 `FAKES3_AUTH=1` 后必须用 `fakes3` / `fakes3secret`，见[认证模式](#认证模式)）。
+### Rust, in-process
 
-Python（[testcontainers-python](https://github.com/testcontainers/testcontainers-python)）：
+The crate is not on crates.io yet, so add it as a git dependency:
+
+```toml
+[dev-dependencies]
+fakes3 = { git = "https://github.com/AkaraChen/fakes3", tag = "v0.1.0" }
+```
+
+```rust
+let server = fakes3::Server::start(fakes3::Config::default()).await?;
+let endpoint = server.endpoint(); // "http://127.0.0.1:<random port>"
+// build an S3 client for `endpoint` with path-style addressing
+server.shutdown().await;
+```
+
+For synchronous tests, `Server::start_blocking` runs the server on its own background runtime and stops it
+when the handle is dropped. `Config::default()` binds a random port, so parallel tests never collide, and
+each `Server` has its own data and clock. `shutdown()` returns once the port can be reused; connections
+that are already open keep being served until the client closes them. See
+[examples/aws_sdk.rs](examples/aws_sdk.rs) and [examples/blocking.rs](examples/blocking.rs).
+
+### Standalone binary
+
+Every [release](https://github.com/AkaraChen/fakes3/releases) ships static Linux binaries for x86_64 and
+aarch64, each with a SHA-256 checksum:
+
+```bash
+curl -L https://github.com/AkaraChen/fakes3/releases/latest/download/fakes3-x86_64-unknown-linux-musl.tar.gz | tar xz
+./fakes3-x86_64-unknown-linux-musl/fakes3 --port 0   # 0 picks a free port; the address is printed to stdout
+```
+
+To build from source, run `cargo build --release`. The build compiles OpenSSL, so it needs `perl` and `make`.
+
+## Testcontainers
+
+No dedicated module is needed: use a generic container, expose port 9000, and wait for `http://` in the
+logs. The container starts in milliseconds, so you can give each test class, or each test, its own.
 
 ```python
+# Python: testcontainers-python
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 
 with DockerContainer("ghcr.io/akarachen/fakes3:latest").with_exposed_ports(9000) as c:
     wait_for_logs(c, "http://")
     endpoint = f"http://{c.get_container_host_ip()}:{c.get_exposed_port(9000)}"
-    # boto3.client("s3", endpoint_url=endpoint, ...)
 ```
 
-Node.js / TypeScript（[testcontainers-node](https://github.com/testcontainers/testcontainers-node)）：
-
 ```ts
+// Node.js: testcontainers
 import { GenericContainer, Wait } from "testcontainers";
 
 const container = await new GenericContainer("ghcr.io/akarachen/fakes3:latest")
@@ -86,13 +157,10 @@ const container = await new GenericContainer("ghcr.io/akarachen/fakes3:latest")
   .withWaitStrategy(Wait.forLogMessage("http://"))
   .start();
 const endpoint = `http://${container.getHost()}:${container.getMappedPort(9000)}`;
-// ...
-await container.stop();
 ```
 
-Java（[Testcontainers for Java](https://java.testcontainers.org/)）：
-
 ```java
+// Java: Testcontainers for Java
 GenericContainer<?> s3 = new GenericContainer<>("ghcr.io/akarachen/fakes3:latest")
     .withExposedPorts(9000)
     .waitingFor(Wait.forLogMessage(".*http://.*\\n", 1));
@@ -100,9 +168,8 @@ s3.start();
 String endpoint = "http://" + s3.getHost() + ":" + s3.getMappedPort(9000);
 ```
 
-Go（[testcontainers-go](https://golang.testcontainers.org/)）：
-
 ```go
+// Go: testcontainers-go
 c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
     ContainerRequest: testcontainers.ContainerRequest{
         Image:        "ghcr.io/akarachen/fakes3:latest",
@@ -116,452 +183,171 @@ port, _ := c.MappedPort(ctx, "9000")
 endpoint := fmt.Sprintf("http://%s:%s", host, port.Port())
 ```
 
-其他语言（.NET、Rust、Ruby……）同理。容器启动只要几毫秒，所以可以每个测试类甚至每个测试起一个新的，不必共享。
+## Test control plane
 
-## Rust 库模式
-
-`fakes3` 同时是一个库：测试里直接在进程内启动服务，不需要 Docker，也不需要子进程。
-目前没有发布到 crates.io，用 git 依赖：
-
-```toml
-[dev-dependencies]
-fakes3 = { git = "https://github.com/AkaraChen/fakes3" }
-```
-
-异步测试：
-
-```rust
-let server = fakes3::Server::start(fakes3::Config::default()).await?;
-let endpoint = server.endpoint(); // "http://127.0.0.1:<随机端口>"
-// 用 endpoint 和 Config 里的凭证创建 S3 客户端，开启 path-style
-server.shutdown().await;
-```
-
-同步测试用 `Server::start_blocking`：服务跑在自己的后台 Tokio runtime 上，句柄 drop 时自动停止
-（可以在任何地方 drop，包括 async 代码里）：
-
-```rust
-let server = fakes3::Server::start_blocking(fakes3::Config::default())?;
-let endpoint = server.endpoint();
-// server 离开作用域时停止
-```
-
-- `Config::default()` 监听 `127.0.0.1` 的随机端口，所以并行的测试不会冲突；每个 `Server` 有独立的数据和虚拟时钟。
-- `Server::addr()` / `endpoint()` 返回实际绑定的地址；`shutdown()` 关闭监听并等待，端口随即可以复用。
-  已建立的连接会继续服务到客户端断开。
-- 完整例子：[examples/aws_sdk.rs](examples/aws_sdk.rs)（`cargo run --example aws_sdk`）、
-  [examples/blocking.rs](examples/blocking.rs)，用 `aws-sdk-s3` 的集成测试在 [tests/aws_sdk.rs](tests/aws_sdk.rs)。
-- 限制：只能在 Linux 上编译（大对象用 `memfd`）；编译时会从源码构建 OpenSSL，需要 `perl` 和 `make`。
-
-## Node.js 绑定
-
-[bindings/node/](bindings/node/) 是一个 [napi-rs](https://napi.rs) 插件，在 Node 进程里直接运行服务（不起子进程、不需要 Docker），
-npm 包名是 `fakes3-sdk`：
+The same port also serves a small JSON API under `/_fakes3/`. It doesn't clash with S3, because bucket
+names can't start with `_`. Use it to put the server in a known state and to inspect what your code did.
+`fakes3 ctl` is its command-line client:
 
 ```bash
-npm install --save-dev fakes3-sdk
+fakes3 ctl reset                              # drop all buckets, objects and uploads; clear the request log and clock
+fakes3 ctl snapshot create seeded             # save the current state (object data is shared, not copied)
+fakes3 ctl snapshot restore seeded            # roll back to it, as often as you like
+fakes3 ctl clock advance 31d                  # move server time; presigned URLs, lifecycle and Object Lock follow it
+fakes3 ctl requests list --op PutObject       # the request log: filter by bucket, operation, status, ...
 ```
 
-```ts
-import { start } from "fakes3-sdk";
-import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
+In-process, the same operations are methods on the server: `server.reset()`, `server.snapshot("seeded")`,
+`server.clock.advance("31d")` and `server.requests.list({ operation: "PutObject" })` in Node.js, and
+equivalents on `fakes3::Server` in Rust. Endpoints and semantics are covered in
+[docs/control-plane.md](docs/control-plane.md).
 
-const server = await start(); // 默认监听 127.0.0.1 的随机端口
-const s3 = new S3Client({
-  endpoint: server.endpoint,
-  region: "us-east-1",
-  forcePathStyle: true,
-  credentials: { accessKeyId: server.accessKey, secretAccessKey: server.secretKey },
-});
-await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
-// ...
-await server.stop();
-```
+## Configuration
 
-`start(options?)` 返回 `Promise<FakeS3Server>`，所有选项都可省略：
+Every option can be given as a flag or an environment variable:
 
-| 选项 | 默认值 | 说明 |
-|---|---|---|
-| `host` | `127.0.0.1` | 监听地址 |
-| `port` | `0` | 监听端口，`0` 表示随机端口 |
-| `accessKey` / `secretKey` | `fakes3` / `fakes3secret` | 访问凭证，只在 `auth: true` 时用于校验 |
-| `users` | 无 | 更多账户 `[{ name, accessKey, secretKey, accountId?, canonicalId? }]`，见[多用户](#多用户)；`server.users` 返回完整列表（含生成的 id） |
-| `auth` | `false` | 校验签名。默认不校验：任意 access key 和 secret 签名的请求都接受（身份由 access key 决定，没配置过的 key 是默认账户 `fakes3`，即 owner），未签名的是匿名请求（见[认证模式](#认证模式)）。原来的 `noAuth` 选项已删除，它现在就是默认行为 |
-| `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
-| `requestLog` / `requestLogCapacity` | `true` / `10000` | 是否记录 S3 请求（见下面的控制面），以及最多保留多少条 |
-| `domains` | 无 | 虚拟主机寻址的基础域名（`<bucket>.<domain>`），path-style 始终可用 |
-| `bucketDefaults` | `"legacy"` | 新建 bucket 的初始设置：`"legacy"` 或 `"aws"`，见[新建 bucket 的默认值](#新建-bucket-的默认值) |
-| `memoryLimit` | `"auto"` | 对象数据占用内存的上限：字节数，或 `"512MiB"`、`"2GiB"`、`"unlimited"`、`"auto"`；超出时写入返回 HTTP 507 |
+| Flag | Environment | Default | Description |
+| --- | --- | --- | --- |
+| `--host` | `FAKES3_HOST` | `127.0.0.1` (`0.0.0.0` in the image) | Address to listen on |
+| `--port` | `FAKES3_PORT` | `9000` | Port to listen on; `0` picks a free one |
+| `--access-key` / `--secret-key` | `FAKES3_ACCESS_KEY` / `FAKES3_SECRET_KEY` | `fakes3` / `fakes3secret` | Credentials of the default account, checked only with `--auth` |
+| `--auth` | `FAKES3_AUTH` | off | Verify SigV4 / SigV2 signatures (see [Authentication](#authentication)) |
+| `--user` | `FAKES3_USERS` | | Another account, `name:access-key:secret[:account-id[:canonical-id]]`; repeatable (comma-separated in the variable) |
+| `--domain` | `FAKES3_DOMAIN` | `localhost` | Base domain for virtual-host addressing (`<bucket>.<domain>`); repeatable; `""` turns it off |
+| `--bucket-defaults` | `FAKES3_BUCKET_DEFAULTS` | `legacy` | Settings new buckets start with: `legacy` or `aws` (see below) |
+| `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | Cap on object data: `512MiB`, `2GiB`, `unlimited`, or `auto` (75% of the container's or machine's memory) |
+| `--inline-threshold` | | `1048576` | Objects at or above this size live in a `memfd` instead of on the heap |
+| `--no-request-log` | | | Don't record requests for the control plane's request log |
+| `--request-log-capacity` | | `10000` | Requests kept in the log; the oldest are dropped first |
 
-`FakeS3Server` 有只读属性 `endpoint`、`host`、`port`、`accessKey`、`secretKey`，以及方法 `memory(): { used, limit }`（当前用量和上限，字节；无上限时没有 `limit` 字段），`stop(): Promise<void>`（可重复调用，调用后端口立即释放）。
-类型声明由 `napi build` 生成。
+### Authentication
 
-**测试控制面**：[控制面](docs/control-plane.md)的操作也有对应的方法，直接在进程内调用，不走 HTTP。时间一律用 JS 的 `Date`。
+By default fakes3 accepts any credentials, the way LocalStack and moto do, but authorization still
+applies:
 
-```ts
-server.reset();                         // 清空所有数据、请求日志和时钟；快照保留（reset({ snapshots: true }) 一并删除）
-server.snapshot("seeded");              // 保存当前状态 → { name, created, buckets, objects, uploads }
-server.restore("seeded");               // 回滚到快照（快照不会被消耗）；snapshots() 列出，deleteSnapshot(name) 删除
-server.memory();                        // { used, limit }
+- A **signed** request is accepted without checking the signature. It acts as the account its access key
+  belongs to, or as the default account (the owner of everything) if the key is unknown.
+- An **unsigned** request is anonymous. ACLs, bucket policies and Block Public Access decide what it may
+  do, as on AWS, so `curl` against a private bucket gets `403 AccessDenied`.
+- With **`--auth`**, signatures are verified against the configured credentials, and a bad one is a 403.
 
-server.clock.freeze(new Date("2030-01-02T03:04:05Z"));   // freeze() 不带参数则冻结在当前时间
-server.clock.advance("31d");            // 数字按毫秒，字符串如 "1h30m"、"-2w"；还有 set(date)、unfreeze()、reset()
-server.clock.now();                     // Date；isFrozen()、isShifted()
+Payload integrity is always checked, whichever mode is on: `Content-MD5`, `x-amz-checksum-*` and
+aws-chunked trailers. Details are in [docs/auth.md](docs/auth.md).
 
-server.requests.list({ operation: "PutObject", status: "error", limit: 10 }); // 过滤条件都可省略
-server.requests.count({ bucket: "demo" });   // 匹配的条数（忽略 limit）
-server.requests.clear();                // configure({ enabled, capacity }) 开关日志、改容量
-```
+### Multiple accounts
 
-`requests.list()` 返回按到达顺序排列的记录：`{ seq, time, method, path, bucket, key, operation, status, latencyUs, bytesIn, bytesOut }`。
-过滤条件：`bucket`、`keyPrefix`、`operation`、`method`、`status`（`404`、`"4xx"` 或 `"error"`）、`since`、`after`（`seq`）、`limit`（只保留最近的几条）。
-和控制面一样，这些调用没有和进行中的请求同步，请在测试之间、没有未完成请求时使用。服务停止后调用会抛出 `server is stopped`。
-
-预编译产物覆盖 Linux 的 x64 / arm64，glibc 和 musl（Alpine）都有，通过 `optionalDependencies` 里的
-`fakes3-sdk-linux-x64-gnu` 等平台包分发；macOS 和 Windows 暂不支持（服务端依赖 Linux 的 `memfd`）。
-自己编译：
+There is a single account by default. To test cross-account behaviour such as ACL grants, policy
+principals, object ownership and `x-amz-expected-bucket-owner`, add more with `--user`:
 
 ```bash
-cd bindings/node
-npm ci && npm run build   # 需要 Rust 工具链、perl 和 make
-npm test                  # 用 @aws-sdk/client-s3 跑一遍
+fakes3 --user alt:ALTKEY:ALTSECRET --user carol:CAROLKEY:CAROLSECRET:111122223333
 ```
 
-CI 在 [node workflow](.github/workflows/node.yml) 里构建这四个目标并各自跑一遍测试；
-发布到 npm 只在推送 `v*` tag 或手动触发且 `publish: true` 时发生，其余情况只做 `npm publish --dry-run`。
-
-## 安全提示
-
-fakes3 是给测试用的，**不要把它暴露在不可信的网络上，也不要拿它存真实数据**：
-
-- **默认不校验签名**：任意凭证都能读写（见[认证模式](#认证模式)）。即使加了 `--auth`，凭证也是明文配置的测试凭证。
-- **控制面没有认证**：`/_fakes3/*`（reset、快照、虚拟时钟、请求日志）对能连上端口的任何人开放，
-  可以清空全部数据或读到请求日志。它只拒绝浏览器发起的跨域写请求（带 `Origin` 的非 GET 请求）。
-- **监听地址**：二进制默认只监听 `127.0.0.1`，**Docker 镜像默认监听 `0.0.0.0`**。在共享机器或 CI 上用 `-p 127.0.0.1:9000:9000`
-  这样的方式只映射到本机，或者放在内部网络里。
-- **没有持久化**：进程退出数据就没了；内存上限默认是容器或机器内存的 75%，超出时写请求返回 507。
-- SSE-C、SSE-S3、KMS 只模拟了 S3 的行为，数据**不会真的加密**。
-
-## 配置
-
-| 参数 | 环境变量 | 默认值 | 说明 |
-|---|---|---|---|
-| `--host` | `FAKES3_HOST` | `127.0.0.1`（镜像里是 `0.0.0.0`） | 监听地址 |
-| `--port` | `FAKES3_PORT` | `9000` | 监听端口，`0` 表示随机端口 |
-| `--access-key` | `FAKES3_ACCESS_KEY` | `fakes3` | 访问凭证，`--auth` 时用于校验 |
-| `--secret-key` | `FAKES3_SECRET_KEY` | `fakes3secret` | 访问凭证，`--auth` 时用于校验 |
-| `--user` | `FAKES3_USERS` | 无 | 再配置一个账户：`name:access-key:secret[:account-id[:canonical-id]]`，可重复（环境变量用逗号分隔），见[多用户](#多用户) |
-| `--auth` | `FAKES3_AUTH` | 关 | 校验签名（SigV4 / SigV2），用 `--access-key` / `--secret-key` 和各个 `--user` 自己的 secret。默认不校验：任意凭证都可以，带签名的请求按 access key 选账户（没配置过的是默认账户，即 owner），未签名的是匿名请求（见[认证模式](#认证模式)） |
-| `--no-auth` | | | 已弃用，不起作用（不校验签名现在是默认行为）；不能和 `--auth` 同时用 |
-| `--domain` | `FAKES3_DOMAIN` | `localhost` | virtual-host 寻址的基础域名，可重复（或逗号分隔）；`<bucket>.<domain>` 选择 bucket，其它主机名仍按 path-style 处理；传空字符串关闭 |
-| `--inline-threshold` | | `1048576` | 达到这个大小的对象或 part 存进 memfd，小于它的放在堆上 |
-| `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | 对象数据占用内存的上限，见下文。可以写 `2GiB`、`512MiB`、`unlimited`、`auto` |
-| `--bucket-defaults` | `FAKES3_BUCKET_DEFAULTS` | `legacy` | 新建 bucket 的初始设置：`legacy` 或 `aws`，见[新建 bucket 的默认值](#新建-bucket-的默认值)。库里对应 `Config::bucket_defaults`（`BucketDefaults::Legacy` / `Aws`） |
-
-### 认证模式
-
-默认**不校验签名**（LocalStack / moto 式的“任意凭证都可以”），但授权照常生效；`--auth` 才严格校验签名。
-
-| | 默认 | `--auth` |
-|---|---|---|
-| 配置 | `Config { auth: false, .. }`（Node：`auth: false`） | `--auth` 或 `FAKES3_AUTH=1`；`Config { auth: true, .. }`；Node：`auth: true` |
-| 带签名的请求 | 不验签，任意 access key 和 secret 都接受；access key 属于某个 `--user` 时是那个账户，否则是默认账户（`fakes3`，没配置多用户时它就是 owner） | 用配置的 access key / secret（默认凭证和每个 `--user` 各自的）校验 SigV4 / SigV2，错误返回 403（`SignatureDoesNotMatch`、`NotSignedUp`） |
-| 不带签名的请求 | **匿名**，走正常的匿名授权：ACL、Bucket Policy、Block Public Access、OwnershipControls | 同左 |
-| 授权（含显式 Deny） | 生效 | 生效 |
-
-也就是说，两种模式下授权的行为完全一样，差别只在“带签名”是否要验证：默认模式下，任何带了签名的请求都是 owner，
-所以 `PutBucketPolicy`、`PutBucketAcl` 等 owner 才能做的操作用任意凭证即可；而不带签名的请求在私有 bucket 上会得到 403 `AccessDenied`，
-要在 policy 或公开 ACL 允许之后才能访问。需要“请求没有签名”时，用不带 `Authorization` 头、也不是 presigned URL 的请求就行
-（比如 `curl`、浏览器直接访问）。
-
-默认模式覆盖 SigV4 的 `Authorization` 头和 presigned URL、SigV2 的头和 presigned URL，以及流式上传
-（`STREAMING-AWS4-HMAC-SHA256-PAYLOAD`、`STREAMING-UNSIGNED-PAYLOAD-TRAILER`、`STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`）。几点说明：
-
-- **完整性校验仍然生效**：aws-chunked 的分块照常解码，trailer 里的校验和（`x-amz-checksum-*`）仍会和数据比对，不一致返回 400 `BadDigest`；
-  `Content-MD5`、header 里的校验和、`x-amz-decoded-content-length` 也一样。不再检查的是签名本身以及由它派生的东西：
-  时钟偏差、`x-amz-content-sha256` 里的负载哈希、signed headers 列表。
-- **presigned URL 的过期**：只在使用虚拟时钟（`/_fakes3/clock`）时判断，真实时钟下不检查。
-- 请求日志的 `access_key` 字段在默认模式下记录请求用的 access key（未签名的请求为 `null`）；`--auth` 时它永远是配置的那一个，所以不记录。
-- Bucket Policy 的 `aws:PrincipalType`、`s3:authType` 等条件对带签名的请求按 owner 求值，presigned URL 的 `s3:authType` 是 `REST-QUERY-STRING`。
-- 带签名的 POST 表单上传（表单里有 `x-amz-signature` / `signature` 字段）仍由 s3s 校验，所以必须用配置的 access key / secret 签名（任意凭证不行）；不带签名的表单是匿名请求。
-- **从旧版本升级**：以前默认校验签名，现在不校验；要保持原样，加 `--auth`（Node：`auth: true`，库：`Config { auth: true, .. }`）。
-  `--no-auth` 以前还会跳过全部授权，现在它只是一个已弃用、不起作用的别名（默认就不校验签名），启动时会在 stderr 提示；
-  依赖“未签名请求等同 owner”的测试需要改为带上任意签名（例如任何 SDK 的随机凭证）。
-- 多个账户用 `--user` 配置（见[多用户](#多用户)）：默认模式下按请求里的 access key 选账户、不校验 secret，`--auth` 下校验该账户自己的 secret；
-  “带签名的请求是谁”的判断集中在 `src/access.rs` 的 `identify`。
-
-### 多用户
-
-默认只有一个账户（canonical id 和 DisplayName 是 `fakes3`，账户 id `000000000000`），它拥有所有 bucket 和对象。要测试跨账户的行为
-（把 ACL 授权给别的账户、bucket policy 里指定 Principal、对象归属、列举结果里的 Owner、跨账户拷贝、`x-amz-expected-bucket-owner`），
-再配置几个账户：
-
-```bash
-fakes3 --user alt:ALTKEY:ALTSECRET --user carol:CAROLKEY:CAROLSECRET:111122223333:79a59df900b949e55d96a1e698fbacedfd6e09d98eacf8f8d5218e7cd47ef2be
-```
-
-`--user name:access-key:secret[:account-id[:canonical-id]]`：一个身份就是一个账户（fakes3 没有 IAM，S3 的 ACL 和 ownership 本来就是账户级别的）。
-`--access-key` / `--secret-key` 仍是第 1 个账户 `fakes3`。省略的账户 id 依次是 `000000000001`、`000000000002`……，canonical id 由账户 id 确定性地生成（64 位十六进制），
-所以每次启动都一样，`fakes3 ctl status` 和 Node 的 `server.users` 都能看到。库里用 `Config { users: vec![UserConfig { .. }] }`（或 `"name:key:secret".parse()`）。
-
-- bucket 的 owner 是创建它的账户，对象的 owner 由 bucket 的 Object Ownership 决定（`ObjectWriter` 或没配置：上传者；`BucketOwnerPreferred`：带 `bucket-owner-full-control` 时是 bucket owner；
-  `BucketOwnerEnforced`：永远是 bucket owner）。bucket owner **读不了**别的账户上传的、没有给它授权的对象（但能列出和删除），这和 AWS 一致，也是 `bucket-owner-full-control` 的用途。
-- ACL 授权给某个账户的 canonical id 只对那个账户生效；`AuthenticatedUsers` 是任何带签名的请求；Bucket Policy 的 Principal 可以写 `arn:aws:iam::<账户 id>:root`、账户 id、`user/<name>` 或 `CanonicalUser`。
-- ListBuckets 只列自己的 bucket；别人占用的 bucket 名返回 409 `BucketAlreadyExists`；`x-amz-expected-bucket-owner` 要等于 bucket owner 的账户 id。
-- 只配置一个账户时行为和性能都和以前一样。完整的模型、授权规则和取舍见 [docs/multi-user.md](docs/multi-user.md)。
-
-**内存上限**：fakes3 统计所有对象数据实际占用的内存（堆上的小对象、memfd 里的大对象、尚未 Complete 的分段上传的 part），
-超出上限的写入会被拒绝，而不是让进程被 OOM killer 杀掉。
-
-- 默认值 `auto` 是容器 cgroup 内存限制和物理内存中较小者的 75%（读不到时不限制）。memfd 的页面算在 cgroup 的内存里，
-  不设上限的话，容器超限时进程会被直接杀掉，没有任何报错；留 25% 给元数据、连接缓冲区和测试进程自己。
-  机器上跑多个 fakes3 或其他大内存进程时，每个实例各自按这个比例计算，需要的话用 `--memory-limit` 显式指定。
-  设成 `unlimited`（或 `0`）取消限制。作为库使用时对应 `Config::memory_limit`（`MemoryLimit::Auto` / `Unlimited` / `Bytes(n)`），
-  当前用量和上限可以用 `Server::memory()` 读取；用量超过 90% 时会打印一条 warning（默认日志级别就是 `warn`）。
-- 统计的是数据 buffer 本身，不含元数据、key 和分配器开销。同一个 buffer 被多个对象、版本、CopyObject、UploadPartCopy、
-  CompleteMultipartUpload 共享时只算一次，最后一个引用释放时才归还；覆盖、删除、删除版本、Abort 都会释放。
-  因此删掉一个仍被副本引用的对象，内存不会下降。
-- 写入时先按 `Content-Length` 一次性预留，放不下就在读取请求体**之前**拒绝（带 `Expect: 100-continue` 的客户端根本不会发送请求体）；
-  没有长度的请求体（chunked）边读边计，越线立刻失败并释放已缓冲的部分。拒绝前会把剩余请求体读掉丢弃，
-  这样客户端收到的是明确的错误响应，而不是连接被重置。
-- 覆盖同一个 key 时，新对象写完前旧对象仍可读，所以瞬时需要同时容纳新旧两份。
-- 超限时返回 **HTTP 507 Insufficient Storage**，错误码 `XFakeS3MemoryLimitExceeded`，消息写明已用量、上限和调大的方法。
-  不用 503 SlowDown 是因为 SDK 会对它退避重试，只会把失败拖慢；不用 400 EntityTooLarge 是因为它表示单个对象太大。
-  各主流 SDK 的默认重试策略都不会重试 507（MinIO 的磁盘满也是 507）。
-
-## 新建 bucket 的默认值
-
-AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认**保留旧的行为**（`--bucket-defaults legacy`），这样“先给 bucket 挂一个公开 policy，再匿名读取”之类的测试准备步骤开箱即用；
-需要和今天的 AWS 一致时用 `--bucket-defaults aws`（或 `FAKES3_BUCKET_DEFAULTS=aws`、`Config { bucket_defaults: BucketDefaults::Aws, .. }`、Node 的 `start({ bucketDefaults: "aws" })`）。
-
-| | `legacy`（默认） | `aws` |
-|---|---|---|
-| Object Ownership | 未配置，ACL 可用；`GetBucketOwnershipControls` 返回 `OwnershipControlsNotFoundError` | `BucketOwnerEnforced`，ACL 被禁用；`GetBucketOwnershipControls` 返回 `BucketOwnerEnforced` |
-| Block Public Access | 未配置；`GetPublicAccessBlock` 返回 `NoSuchPublicAccessBlockConfiguration` | 四项全开（`BlockPublicAcls`、`IgnorePublicAcls`、`BlockPublicPolicy`、`RestrictPublicBuckets` 均为 `true`） |
-| 默认加密（SSE-S3） | 无：`GetBucketEncryption` 返回 `ServerSideEncryptionConfigurationNotFoundError`，PUT / GET / HEAD 不带 `x-amz-server-side-encryption`（显式要求 SSE 时照常） | `GetBucketEncryption` 返回 `AES256`，新对象的 PUT / GET / HEAD 带 `x-amz-server-side-encryption: AES256`；`DeleteBucketEncryption` 之后回到 SSE-S3 |
-| 默认禁用 SSE-C | 允许 | 禁用（2026 年 4 月起）：`GetBucketEncryption` 带 `BlockedEncryptionTypes` = `SSE-C`；要求 SSE-C 的 `PutObject`、`CopyObject`、分段上传返回 403 `AccessDenied`，已有的 SSE-C 对象仍可带 key 读取 |
-
-`aws` 模式下具体的行为都有 AWS 文档依据（文档只写明了显式设置 `BucketOwnerEnforced` 时 `CreateBucket` 的错误码；没带 `x-amz-object-ownership` 的默认情况沿用同一个错误码）：
-
-- `CreateBucket` 带 `x-amz-acl`（`public-read` 等）或 `x-amz-grant-*` 头，又没有显式设置 `x-amz-object-ownership` 时失败，
-  返回 400 `InvalidBucketAclWithObjectOwnership`，bucket 不会被创建。只给 owner 完全控制的 ACL（`x-amz-acl: private`）可以通过。
-  要在创建时设置 ACL，必须同时带 `x-amz-object-ownership: ObjectWriter` 或 `BucketOwnerPreferred`；
-  如果 ACL 是公开的，仍然会失败（403 `AccessDenied`，因为 Block Public Access 是开着的）。
-- 显式的 `x-amz-object-ownership` 按请求为准（`BucketOwnerEnforced`、`BucketOwnerPreferred`、`ObjectWriter`），Block Public Access 仍然全开。
-- ACL 被禁用时：`PutBucketAcl` / `PutObjectAcl` / 带 ACL 头的 `PutObject` 返回 400 `AccessControlListNotSupported`（只接受 `bucket-owner-full-control` 或不带 ACL），读 ACL 永远只显示 owner 的完全控制。
-- Block Public Access 全开时：公开的 bucket policy 在 `PutBucketPolicy` 时被拒绝（403 `AccessDenied`），公开的 ACL 被拒绝，匿名请求得不到访问。
-- 想要匿名访问，需要明确放开：`DeletePublicAccessBlock`（或 `PutPublicAccessBlock` 关掉相应的项），再用 policy 授权；
-  走 ACL 的话还要 `DeleteBucketOwnershipControls` 或 `PutBucketOwnershipControls` 改成 `ObjectWriter` / `BucketOwnerPreferred`。
-  这和 AWS 文档里的做法一致。
-
-默认值只在创建 bucket 的那一刻生效。已有的 bucket、快照和 `restore` 都保持各自当前的设置，`reset` 之后新建的 bucket 按当前模式重新开始。
-当前模式可以在 `fakes3 ctl status` / `GET /_fakes3` 里看到（`bucket_defaults`）。
-
-- 要在 `aws` 模式的 bucket 里用 SSE-C，先 `PutBucketEncryption`，在规则里写 `BlockedEncryptionTypes` = `NONE`（只有这一项的规则也可以，默认加密保持 SSE-S3）；
-  写 `SSE-C` 则再次禁用。没有写 `BlockedEncryptionTypes` 的 `PutBucketEncryption` 按字面处理，即不禁用任何类型（文档没有说明省略时的行为）。
-  `DeleteBucketEncryption` 回到默认配置，也就是重新禁用 SSE-C。表单上传（POST policy）目前不处理 SSE 字段，所以没有对应的检查。
-
-`aws` 模式只包含上面有文档依据的默认值，没有按日期划分的“兼容版本”，因为 AWS 没有发布精确的行为变更记录。
-
-来源：
-
-- [S3 Document history](https://docs.aws.amazon.com/AmazonS3/latest/userguide/WhatsNew.html)：2023-04-27 “Amazon S3 now automatically enables S3 Block Public Access and disables S3 access control lists (ACLs) for all new S3 buckets in all AWS Regions”，
-  [公告](https://aws.amazon.com/about-aws/whats-new/2023/04/amazon-s3-security-best-practices-buckets-default)
-- [Controlling ownership of objects and disabling ACLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html)、
-  [Troubleshooting](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-ownership-error-responses.html)（`AccessControlListNotSupported`、`InvalidBucketAclWithObjectOwnership`）
-- [Blocking public access to your Amazon S3 storage](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html)
-- [CreateBucket API](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html)：`x-amz-object-ownership` 默认 `BucketOwnerEnforced`；
-  “To set an ACL on a bucket as part of a CreateBucket request, you must explicitly set S3 Object Ownership for the bucket to a different value than the default”
-- [Default encryption FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-encryption-faq.html)、[GetBucketEncryption](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html)：
-  2023-01-05 起所有新对象默认 SSE-S3，响应头 `x-amz-server-side-encryption`
-- [Default SSE-C setting for new buckets FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-s3-c-encryption-setting-faq.html)、
-  [Blocking or unblocking SSE-C](https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html)、
-  [BlockedEncryptionTypes](https://docs.aws.amazon.com/AmazonS3/latest/API/API_BlockedEncryptionTypes.html)：2026 年 4 月起新的通用 bucket 默认禁用 SSE-C
-
-## 支持的功能
-
-- Bucket：创建、删除、HeadBucket、ListBuckets、GetBucketLocation、Bucket 标签
-- 对象：PUT、GET、HEAD、DELETE、DeleteObjects、CopyObject（支持替换元数据和标签）
-- 列举：ListObjectsV2、ListObjects（v1）、ListObjectVersions、ListMultipartUploads，支持 prefix、delimiter、分页、`encoding-type=url`
-- 分段上传：Create、UploadPart、UploadPartCopy、ListParts、Complete、Abort；GET/HEAD 支持 `?partNumber=`
-- 版本控制：Enabled / Suspended、删除标记、null version、按 VersionId 读取和删除、MFA Delete 头校验
-- Object Lock：保留期（GOVERNANCE / COMPLIANCE）、Legal Hold、bucket 默认保留期、`x-amz-bypass-governance-retention`，到期时间按服务端时钟判断
-- 加密：SSE-C（校验算法和 key MD5，GET/HEAD/Copy 必须带同一个 key）、SSE-S3 / SSE-KMS 头回显、bucket 默认加密（`--bucket-defaults aws` 时每个新 bucket 默认 SSE-S3）；数据本身不加密
-- 对象属性：GetObjectAttributes、storage class 和 `x-amz-website-redirect-location` 的写入与回显
-- 条件请求：If-Match、If-None-Match（包括条件写入）、If-Modified-Since、If-Unmodified-Since、CopySource 的条件头
-- 校验和：CRC32、CRC32C、CRC64NVME、SHA1、SHA256 等，支持 header 和 aws-chunked trailer 两种方式；
-  分段上传支持 COMPOSITE 和 FULL_OBJECT；没指定算法时默认计算 CRC64NVME，和现在的 AWS S3 一致
-- 认证：SigV4（包括 presigned URL 和带 trailer 的流式上传）、SigV2；默认接受任意凭证，`--auth` 时严格校验（见[认证模式](#认证模式)）
-- 对象标签、Range 读取、Content-MD5 校验
-- 请求 id：每个响应都带 `x-amz-request-id`（16 位大写十六进制）和 `x-amz-id-2`，错误响应体里有 `<RequestId>` / `<HostId>`；请求日志的 `request_id` 是同一个值，可用来对上客户端日志
-- `x-amz-expected-bucket-owner`：必须等于 bucket owner 的账户 id（默认只有一个账号 `000000000000`），否则 403 `AccessDenied`
-- 访问控制：Bucket/Object ACL（canned、grant 头、请求体）、OwnershipControls（BucketOwnerEnforced 时 ACL 被禁用）、
-  PublicAccessBlock、Bucket Policy（含 Condition，显式 Deny 对已签名请求也生效）；未签名的匿名请求在 policy 或公开 ACL 允许时放行
-  （两种认证模式下都一样，见[认证模式](#认证模式)）
-- CORS：预检 `OPTIONS` 和实际响应上的 CORS 头
-- Lifecycle：过期（含版本控制下的删除标记、非当前版本、`NewerNoncurrentVersions`）和清理未完成的分段上传，按服务端虚拟时钟在 UTC 日期变化后的第一次访问时执行；
-  没有规则的 bucket 零开销
-- 归档存储类：`GLACIER`、`DEEP_ARCHIVE` 和 Intelligent-Tiering 的 Archive Access / Deep Archive Access 层，GET / CopyObject 来源返回 403 `InvalidObjectState`，
-  `RestoreObject` 和 `x-amz-restore` 按服务端虚拟时钟推进；Lifecycle 的 Transition / NoncurrentVersionTransition 会真的改存储类（见[归档存储类](#归档存储类)）
-- S3 Select（`SelectObjectContent`）：CSV / JSON（`LINES`、`DOCUMENT`）输入，`SELECT ... FROM S3Object[路径] [WHERE] [LIMIT]`，算术、比较、`LIKE` / `IN` / `BETWEEN` / `CASE` / `CAST`、
-  常用字符串函数和聚合，CSV / JSON 输出，Records / Progress / Stats / End 事件，`ScanRange`；不支持压缩输入、Parquet、`GROUP BY`、日期函数（见 [docs/select.md](docs/select.md)）
-- Website、Notification 配置的存取（不提供网站端点，不投递事件）；POST policy 表单上传
-
-还没做的功能见 [TODO.md](TODO.md)，主要是 Website 端点，以及测试控制面里的故障注入。
-
-## 归档存储类
-
-用来测试“应用遇到已归档对象时怎么办”。对象带上 `GLACIER`（S3 Glacier Flexible Retrieval）或 `DEEP_ARCHIVE` 存储类写入（或被 Lifecycle 转过去）之后：
-
-- **读被拒绝**：GET（包括 Range、`?partNumber=`）、CopyObject 和 UploadPartCopy 的来源返回 `403 InvalidObjectState`，
-  直到有一份已恢复的副本；HEAD、标签、GetObjectAttributes 照常工作，HEAD 返回真实存储类。
-  `GLACIER_IR`（Instant Retrieval）和 `STANDARD_IA` 等不是归档，可以直接读。
-- **RestoreObject**：`Days`（必填）加 `Tier`（`Expedited` / `Standard` / `Bulk`，可放在 `GlacierJobParameters` 里也可放在顶层，默认 Standard）。
-  新请求返回 `202`，已恢复的对象返回 `200` 并从*现在*起重新计算保留天数，进行中返回 `409 RestoreAlreadyInProgress`
-  （发更快的 tier 算加速，返回 `202`）；对不是归档的对象返回 `403 ObjectAlreadyInActiveTierError`；
-  `Type=SELECT`、`SelectParameters`、`OutputLocation` 返回 `501 NotImplemented`（S3 Select 已不对新客户开放）；
-  Deep Archive 上的 `Expedited` 返回 `400 InvalidArgument`；不模拟 503 `GlacierExpeditedRetrievalNotAvailable`。支持 `?versionId=`。
-- **`x-amz-restore`**（GET / HEAD）：进行中是 `ongoing-request="true"`，完成后是 `ongoing-request="false", expiry-date="Sat, 05 Jan 2030 00:00:00 GMT"`；
-  没有恢复过则没有这个头。恢复出来的副本到期后对象重新变回不可读。ListObjectsV2 带 `x-amz-optional-object-attributes: RestoreStatus` 时返回 `RestoreStatus`
-  （`IsRestoreInProgress` 和 `RestoreExpiryDate`，没恢复过的对象没有）；ListObjectVersions 暂未返回。
-- **完成时间按服务端时钟，取 AWS 文档给出的范围的下界，所以是确定的**（`fakes3 ctl clock advance 3h` 就能让 Standard 恢复完成）：
-
-  | | Expedited | Standard | Bulk |
-  |---|---|---|---|
-  | `GLACIER`、IT Archive Access | 1 分钟 | 3 小时 | 5 小时 |
-  | `DEEP_ARCHIVE`、IT Deep Archive Access | 不支持 | 12 小时 | 48 小时 |
-
-  恢复副本的到期时间 = 完成时间 + `Days`，向上取整到 UTC 午夜（文档例子：10 月 15 日 10:30 恢复 3 天，10 月 19 日 00:00 到期）。
-- **Intelligent-Tiering 的归档层**：`PutBucketIntelligentTieringConfiguration`（及 Get / List / Delete）配置 `ARCHIVE_ACCESS`（≥ 90 天）和
-  `DEEP_ARCHIVE_ACCESS`（≥ 180 天，最长 730 天），可带 Prefix / Tag / And 过滤。`INTELLIGENT_TIERING` 对象从创建（或 Lifecycle 转入、上次恢复完成）起闲置达到天数，
-  就进入对应归档层：读返回 `InvalidObjectState`，HEAD 带 `x-amz-archive-status`。恢复不接受 `Days`（传了也忽略），完成后回到 Frequent Access（没有到期时间），闲置天数重新计数。
-  偏差：fakes3 不记录读取，所以“访问”不会重置闲置天数；错误体里没有 `StorageClass` / `AccessTier` 元素。
-- **Lifecycle 转换**：`Transition`（`Days` / `Date`）和 `NoncurrentVersionTransition`（`NoncurrentDays`、`NewerNoncurrentVersions`）在每天第一次访问 bucket 时的惰性清扫里执行，
-  到期时间同样向上取整到 UTC 午夜。只改存储类，数据、ETag、`Last-Modified` 不变，内存统计不变。遵循 S3 的瀑布模型（只能向下转：
-  STANDARD → STANDARD_IA → INTELLIGENT_TIERING → ONEZONE_IA → GLACIER_IR → GLACIER → DEEP_ARCHIVE），时钟一次拨得很远时直接落到最深的那个到期类；
-  小于 128 KB 的对象默认不转换，除非规则带 `ObjectSizeGreaterThan` / `ObjectSizeLessThan`，或者 `x-amz-transition-default-minimum-object-size: varies_by_storage_class`
-  （此时小对象只能转到 `GLACIER` / `DEEP_ARCHIVE`）。Object Lock 不阻止转换，转换后保留期照旧。
-  转换目标只能是 `STANDARD_IA`、`INTELLIGENT_TIERING`、`ONEZONE_IA`、`GLACIER_IR`、`GLACIER`、`DEEP_ARCHIVE`。
-  没有校验 AWS 对 Days 的大小关系要求（例如转到 IA 至少 30 天、过期天数要大于转换天数）。
-
-AWS 文档：[RestoreObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html)、
-[GetObject 的 InvalidObjectState](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)、
-[CopyObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html)、
-[Working with archived objects](https://docs.aws.amazon.com/AmazonS3/latest/userguide/archived-objects.html)、
-[Archive retrieval options](https://docs.aws.amazon.com/AmazonS3/latest/userguide/restoring-objects-retrieval-options.html)、
-[Lifecycle transitions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-transition-general-considerations.html)、
-[RestoreStatus](https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreStatus.html)。
-已知偏差：AWS 的 CopyObject 文档把来源归档的错误写成 `ObjectNotInActiveTierError`，但实际返回的是 `InvalidObjectState`（SDK 里常见的
-“Operation is not valid for the source object's storage class”），这里按后者实现。
-
-## 测试控制面
-
-同一个端口上的 `/_fakes3/` 前缀是一组 JSON HTTP API，`fakes3 ctl` 是它的命令行客户端，Rust 进程内使用时是 `fakes3::Server` 上的方法：
-
-```bash
-fakes3 ctl reset                              # 清空所有 bucket、对象和上传，同时清空请求日志和时钟
-fakes3 ctl snapshot create seeded             # 保存当前状态（不复制对象数据）
-fakes3 ctl snapshot restore seeded            # 回滚
-fakes3 ctl clock advance 31d                  # 推进服务器时间（也可以 freeze / set），预签名 URL 会跟着过期
-fakes3 ctl requests list --op PutObject       # 请求日志：按 bucket、操作、状态码等过滤，用来断言调用次数和顺序
-```
-
-端点、命令、各操作的语义和限制见 [docs/control-plane.md](docs/control-plane.md)。控制面没有认证，只适合在测试环境里使用。
-
-## 兼容性
-
-[matrix/](matrix/) 里有一个 SDK 兼容矩阵：**8 种语言、24 个 SDK，每个跑 43 个场景**，同时对 fakes3 和 5 个常见实现跑一遍。
-场景定义见 [matrix/SPEC.md](matrix/SPEC.md)，完整结果见 [matrix/MATRIX.md](matrix/MATRIX.md)。
-
-| 实现 | 通过率 |
-|---|---:|
-| **fakes3** | **99.1%** |
-| MinIO | 96.4% |
-| LocalStack | 91.4% |
-| moto | 87.9% |
-| S3Mock | 85.4% |
-| JuiceFS gateway | 69.3% |
-
-fakes3 剩下的 8 个失败全部是 SDK 自身的 bug（minio-dotnet 有 6 个，minio-java 和 obstore 处理不了 `a//b` 这种 key），换哪个服务都会失败。
-
-另外用独立的一致性测试集 [ceph/s3-tests](https://github.com/ceph/s3-tests)（约 1000 个用例）衡量。下面只统计 AWS 本身能通过、且属于 S3 范围的 684 个用例，
-IAM、STS、SNS、S3 Control 属于其他 AWS 服务，不计入：
-
-| 实现 | 通过 | 通过率 |
-|---|---:|---:|
-| **fakes3** | **587** | **85.8%** |
-| LocalStack 4.14 | 404 | 59.1% |
-| MinIO | 356 | 52.0% |
-
-fakes3 剩下的 94 个失败里，82 个是测试本身不兼容 AWS（只符合 Ceph RGW 的行为，或者 boto3 测不出来），
-5 个是没有实现的 bucket 访问日志，3 个在 s3s 内部，4 个的 AWS 行为没有文档可查。
-逐条分类见 [conformance/S3-TESTS.md](conformance/S3-TESTS.md)，可以用 `s3-tests` workflow 重新跑。
-
-fakes3 在 s3s 之上绕开了几处和 AWS 不一致的行为（SigV2 的日期和 bucket 级签名、POST policy 的错误码等），见 [docs/s3s-workarounds.md](docs/s3s-workarounds.md)。
-
-覆盖的 SDK：
-- Python：boto3、minio-py、s3fs、obstore
-- JavaScript：AWS SDK v3、AWS SDK v2、minio-js、Bun.S3Client
-- Go：aws-sdk-go-v2、aws-sdk-go、minio-go、gocloud.dev/blob
-- Rust：aws-sdk-s3、object_store、opendal、rust-s3
-- Java：AWS SDK v2、AWS SDK v2 CRT、AWS SDK v1、minio-java
-- .NET：AWSSDK.S3、Minio
-- Ruby：aws-sdk-s3
-- PHP：aws-sdk-php
-
-## 性能
-
-所有实现都跑在 Docker 里，使用 host 网络，数据目录放在 tmpfs 上，每项测量都用一个新启动的容器。
-下面的数据来自 GitHub Actions 上的一次运行（4 核托管 runner），完整报告在
-[这次运行的 job summary](https://github.com/AkaraChen/fakes3/actions/runs/41259060444) 里，可以用 `bench` workflow 重新跑。
-
-**启动和空闲内存**
-
-| | fakes3 | MinIO | JuiceFS | moto | S3Mock | LocalStack |
-|---|---:|---:|---:|---:|---:|---:|
-| 容器启动后到就绪 | 约 1 ms | 243 ms | 169 ms | 880 ms | 3.8 s | 10.9 s |
-| 空闲内存 | 9.2 MiB | 51 MiB | 68 MiB | 69 MiB | 233 MiB | 156 MiB |
-
-不经过 Docker 直接启动进程，fakes3 从启动到第一个 ListBuckets 返回约 4 ms，MinIO 是 234 ms。
-
-**模拟测试套件**：100 个测试，共 6,500 个串行请求（建 bucket、读写小对象、List、Copy、删除）
-
-| | 总耗时 | 每请求 |
-|---|---:|---:|
-| **fakes3** | **0.93 s** | **143 µs** |
-| MinIO | 3.4 s | 526 µs |
-| S3Mock | 7.1 s | 1,092 µs |
-| LocalStack | 7.7 s | 1,180 µs |
-| moto | 12.9 s | 1,983 µs |
-
-**吞吐**（用 MinIO 的 [warp](https://github.com/minio/warp) 压测，数字是 fakes3 相对对方的倍数）
-
-| 负载 | fakes3 | MinIO | LocalStack | moto | S3Mock | JuiceFS |
-|---|---:|---:|---:|---:|---:|---:|
-| 4 KiB GET | 30,045 ops/s | 3.6× | 32× | 56× | 15× | 12× |
-| 4 KiB PUT | 18,068 ops/s | 3.7× | 19× | 37× | 55× | 24× |
-| HEAD | 40,333 ops/s | 3.6× | 39× | 73× | 18× | 13× |
-| ListObjects | 1,380 ops/s | 2.7× | 10× | 32× | 4.3× | 9.6× |
-| 64 MiB GET | 6.1 GB/s | 1.3× | 9.0× | 2.0× | 2.1× | 2.1× |
-| 64 MiB PUT | 1.0 GB/s | 1.1× | 1.6× | 3.6× | 1.0× | 1.1× |
-
-- 大对象 PUT 的瓶颈是计算 ETag 用的 MD5（已经用了 OpenSSL 的汇编实现，并和接收数据流水线并行）。
-- ListObjects 每个 key 都返回 `Owner`，响应比不返回时大约 30%，这是按 AWS 的规定保留的字段。
-
-**内存**：写入同样 551 MiB 的数据后，fakes3 的额外开销约 100 MiB，MinIO 是 344 MiB，S3Mock 是 3.5 GiB。
-
-每个请求的 CPU 开销从哪里来、哪些优化试过但无效，见 [docs/perf-attribution.md](docs/perf-attribution.md)。
-
-## 设计
-
-- **元数据**全部在内存里：每个 bucket 一个有序 map（key → 版本链），列举就是有序遍历。
-- **对象数据**是一组不可变、带引用计数的 `Bytes` 分段。小对象放在堆上；大对象写进 `memfd`
-  （tmpfs 承载、不占用文件名、进程退出时自动释放），再通过只读 mmap 提供读取。
-- 因为数据不可变，GET、CopyObject、UploadPartCopy 和 CompleteMultipartUpload 都**不拷贝对象数据**，
-  只是拼接或切片分段、增加引用计数。
-- 协议层（路由、XML、SigV4、aws-chunked）由 s3s 负责；这个仓库实现的是存储引擎和 S3 语义。
-
-## 开发
+Account ids and canonical ids are derived deterministically, so tests can hard-code them. See
+[docs/multi-user.md](docs/multi-user.md).
+
+### New-bucket defaults
+
+In 2023 AWS changed what new buckets start with. fakes3 keeps the older behaviour by default
+(`legacy`), so setup steps like "attach a public policy, then read anonymously" work out of the box.
+`--bucket-defaults aws` matches AWS today: ACLs disabled (`BucketOwnerEnforced`), Block Public Access
+on, SSE-S3 default encryption, and SSE-C blocked. See [docs/bucket-defaults.md](docs/bucket-defaults.md).
+
+### Memory limit
+
+fakes3 keeps everything in memory, so it accounts for every byte of object data. A write that would
+go past the limit fails with `507 Insufficient Storage` instead of the container being OOM-killed
+halfway through a test. When the size is known up front, that happens before the body is read.
+No mainstream SDK retries a 507. See [docs/memory-limit.md](docs/memory-limit.md).
+
+## What's supported
+
+- **Buckets**: create, delete, head, list (paginated), location, tagging
+- **Objects**: PUT, GET, HEAD, DELETE, DeleteObjects, CopyObject (with metadata and tag replacement),
+  range reads, tagging, GetObjectAttributes
+- **Listing**: ListObjectsV2, ListObjects (v1), ListObjectVersions and ListMultipartUploads, with prefix,
+  delimiter, pagination and `encoding-type=url`
+- **Multipart uploads**: create, UploadPart, UploadPartCopy, ListParts, complete, abort, and
+  `?partNumber=` on GET and HEAD
+- **Versioning**: enabled and suspended, delete markers, null versions, per-version reads and deletes
+- **Object Lock**: GOVERNANCE and COMPLIANCE retention, legal hold, default retention, governance bypass
+- **Conditional requests**: `If-Match`, `If-None-Match` (including conditional writes),
+  `If-Modified-Since`, `If-Unmodified-Since`, and the copy-source variants
+- **Checksums**: CRC32, CRC32C, CRC64NVME, SHA-1 and SHA-256, in headers or aws-chunked trailers, with
+  COMPOSITE and FULL_OBJECT multipart checksums. CRC64NVME is the default, as on AWS today.
+- **Signatures**: SigV4 (headers, presigned URLs, streaming with trailers), SigV2, POST policy uploads
+- **Access control**: bucket and object ACLs, Object Ownership, Block Public Access, bucket policies with
+  conditions, anonymous access, multiple accounts
+- **Encryption**: SSE-C key checks, SSE-S3 and SSE-KMS headers, bucket default encryption. This is
+  behaviour only; data is not actually encrypted.
+- **CORS**: preflight and response headers
+- **Lifecycle**: expiration (including noncurrent versions and delete markers), abort of incomplete
+  uploads, and storage-class transitions, all driven by the virtual clock
+- **Archive storage classes**: `GLACIER`, `DEEP_ARCHIVE` and the Intelligent-Tiering archive tiers, with
+  `InvalidObjectState` on reads, `RestoreObject` and `x-amz-restore` timed by the virtual clock (see
+  [docs/archive-storage.md](docs/archive-storage.md))
+- **S3 Select**: SQL over CSV and JSON input (see [docs/select.md](docs/select.md))
+- **Request IDs**: `x-amz-request-id` and `x-amz-id-2` on every response, matching the request log
+
+Not supported: website endpoints, event notification delivery, server access logging, IAM, STS and
+S3 Control. Website and notification *configuration* can be stored and read back. Planned work is in
+[TODO.md](TODO.md).
+
+## Platforms
+
+| | Platforms |
+| --- | --- |
+| Docker image | `linux/amd64`, `linux/arm64` (also runs under Docker Desktop on macOS and Windows) |
+| Static binary | x86_64 and aarch64 Linux |
+| Node.js package | Linux x64 and arm64, glibc and musl, Node.js ≥ 18 |
+| Rust library | Linux |
+
+Running natively on macOS or Windows isn't supported, because large objects are stored in Linux
+`memfd`s. Use the Docker image there.
+
+## Security
+
+fakes3 is for tests. **Don't expose it to an untrusted network, and don't store real data in it.**
+
+- Signatures aren't verified by default, so anyone who can reach the port can read and write. With
+  `--auth`, the credentials are still plain-text test credentials.
+- The control plane (`/_fakes3/*`) has no authentication: anyone who can reach it can wipe all data or
+  read the request log. It does reject cross-origin writes from browsers.
+- The binary listens on `127.0.0.1` by default, but **the Docker image listens on `0.0.0.0`**. On shared
+  machines, publish the port to localhost only (`-p 127.0.0.1:9000:9000`) or keep it on an internal
+  network.
+- Nothing is persisted. Data is gone when the process exits.
+
+## How it works
+
+- **Metadata** lives in memory: one ordered map per bucket (key → version chain), so a listing is an
+  ordered walk.
+- **Object data** is immutable, reference-counted `Bytes` segments. Small objects sit on the heap; large
+  ones are written to a `memfd` (tmpfs-backed and anonymous, freed when the process exits) and served
+  through a read-only mmap.
+- Because data is immutable, GET, CopyObject, UploadPartCopy and CompleteMultipartUpload **never copy
+  object bytes**. They slice and splice segments and bump reference counts.
+- [s3s](https://github.com/Nugine/s3s) handles the protocol (routing, XML, SigV4, aws-chunked). This
+  repository implements the storage engine and S3 semantics.
+
+## Documentation
+
+Detailed documentation is in [docs/](docs/). Most of it is written in Chinese.
+
+| | |
+| --- | --- |
+| [docs/control-plane.md](docs/control-plane.md) | Reset, snapshots, virtual clock, request log: HTTP API, CLI, Rust API |
+| [docs/auth.md](docs/auth.md) | Authentication modes in detail |
+| [docs/multi-user.md](docs/multi-user.md) | Accounts, ownership and authorization across accounts |
+| [docs/bucket-defaults.md](docs/bucket-defaults.md) | `legacy` vs `aws` new-bucket settings, with AWS sources |
+| [docs/memory-limit.md](docs/memory-limit.md) | How memory is accounted and capped |
+| [docs/archive-storage.md](docs/archive-storage.md) | Glacier, Deep Archive, Intelligent-Tiering, restores, lifecycle transitions |
+| [docs/select.md](docs/select.md) | S3 Select coverage |
+| [docs/benchmarks.md](docs/benchmarks.md) | SDK matrix, ceph/s3-tests and performance results |
+| [docs/s3s-workarounds.md](docs/s3s-workarounds.md) | Where fakes3 corrects s3s to match AWS |
+| [docs/development.md](docs/development.md) | Building, testing, CI and releasing |
+
+## Contributing
 
 ```bash
 cargo fmt --check
@@ -569,28 +355,9 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-**每次 push 和 PR** 都会自动跑 [ci](.github/workflows/ci.yml)：格式、clippy（警告即失败）、全部 Rust 测试、
-Node binding 的编译，以及 workflow 文件的 actionlint 检查。
+CI runs these on every push and pull request. The SDK compatibility matrix, ceph/s3-tests and the
+benchmarks are run manually as GitHub Actions workflows; see [docs/development.md](docs/development.md).
 
-比较慢的检查用 `workflow_dispatch` 手动触发：
-
-- **matrix**：先跑单元测试，再对选定的服务跑 SDK 兼容矩阵，报告显示在 job summary 里。
-- **s3-tests**：用 ceph/s3-tests 衡量一致性，和 main 逐个用例对比。
-- **bench**：对选定的服务跑启动、模拟测试套件、内存占用和 warp 压测。
-- **ab**：在同一台 runner 上交替压测两个版本（`base` / `head`），用来判断一个改动对性能的影响。
-  托管 runner 之间速度能差 2 倍，所以比较两个版本时只能用这个，不能拿两次独立的 bench 结果比。
-- **node**：构建 Node 插件并测试；推送 `v*` tag 时通过 npm 可信发布上传（见 [bindings/node/PUBLISHING.md](bindings/node/PUBLISHING.md)）。
-- **release**：推送 `v*` tag 时发布 GHCR 镜像和静态二进制。
-
-本地也可以跑兼容矩阵和性能测试，前提是装好 Docker 和各语言的工具链：
-
-```bash
-bench/setup.sh && uv run bench/run.py      # 性能测试，结果写到 bench/RESULTS.md
-SERVERS="fakes3 minio" matrix/run.sh && python3 matrix/report.py   # 兼容矩阵
-```
-
-`bench/servers.sh` 负责以相同条件启动所有被测实现，也可以单独用来起一个竞品做对比。
-
-## 许可证
+## License
 
 [MIT](LICENSE)

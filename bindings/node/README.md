@@ -1,7 +1,10 @@
 # fakes3-sdk
 
-[fakes3](https://github.com/AkaraChen/fakes3) 的 Node.js 绑定：一个专门给测试用的 S3 服务，全内存、无持久化，
-直接跑在 Node 进程里（不起子进程、不需要 Docker）。
+English | [简体中文](https://github.com/AkaraChen/fakes3/blob/main/bindings/node/README.zh-CN.md)
+
+Node.js bindings for [fakes3](https://github.com/AkaraChen/fakes3), an in-memory S3 server for tests.
+The server runs inside your Node.js process, with no child process and no Docker. It starts in
+milliseconds and behaves like AWS S3 wherever your client can tell the difference.
 
 ```bash
 npm install --save-dev fakes3-sdk
@@ -11,7 +14,7 @@ npm install --save-dev fakes3-sdk
 import { start } from "fakes3-sdk";
 import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
 
-const server = await start(); // 默认监听 127.0.0.1 的随机端口
+const server = await start(); // 127.0.0.1, random free port
 const s3 = new S3Client({
   endpoint: server.endpoint,
   region: "us-east-1",
@@ -23,12 +26,99 @@ await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
 await server.stop();
 ```
 
-除了 S3 接口，`server` 上还有测试控制面：`reset()`、`snapshot()` / `restore()`、虚拟时钟 `server.clock`、
-请求日志 `server.requests`。完整的选项和方法见仓库 README 的
-[Node.js 绑定](https://github.com/AkaraChen/fakes3#nodejs-绑定)一节。
+Every server has its own data, clock and port, so parallel tests don't interfere with each other.
 
-预编译产物覆盖 Linux 的 x64 / arm64，glibc 和 musl（Alpine）都有；macOS 和 Windows 暂不支持（服务端依赖 Linux 的 `memfd`）。
+## `start(options?)`
 
-fakes3 是给测试用的，不要把它暴露在不可信的网络上，也不要拿它存真实数据。
+Returns `Promise<FakeS3Server>`. Every option is optional:
 
-MIT 许可。
+| Option | Default | Description |
+| --- | --- | --- |
+| `host` | `"127.0.0.1"` | Address to listen on |
+| `port` | `0` | Port to listen on; `0` picks a free one |
+| `accessKey` / `secretKey` | `"fakes3"` / `"fakes3secret"` | Credentials of the default account, checked only with `auth: true` |
+| `auth` | `false` | Verify signatures. By default any credentials work: a signed request acts as the account its access key belongs to (the default account if none does), and an unsigned request is anonymous, subject to ACLs, bucket policies and Block Public Access |
+| `users` | none | More accounts: `[{ name, accessKey, secretKey, accountId?, canonicalId? }]`. `server.users` lists them all, with generated ids |
+| `bucketDefaults` | `"legacy"` | Settings new buckets start with: `"legacy"`, or `"aws"` for what AWS applies today (ACLs disabled, Block Public Access on, SSE-S3, SSE-C blocked) |
+| `memoryLimit` | `"auto"` | Cap on object data: bytes, `"512MiB"`, `"2GiB"`, `"unlimited"`, or `"auto"` (75% of the container's or machine's memory). Writes past it fail with HTTP 507 |
+| `domains` | none | Base domains for virtual-host addressing (`<bucket>.<domain>`); path-style always works |
+| `inlineThreshold` | `1048576` | Objects at or above this many bytes are stored in a `memfd` instead of on the heap |
+| `requestLog` / `requestLogCapacity` | `true` / `10000` | Whether to record requests for `server.requests`, and how many to keep |
+
+## `FakeS3Server`
+
+| Member | Description |
+| --- | --- |
+| `endpoint`, `host`, `port` | Where the server listens. `endpoint` is `http://host:port`, ready for an S3 client |
+| `accessKey`, `secretKey`, `users` | The configured accounts |
+| `stop(): Promise<void>` | Stops the server and releases the port immediately. Safe to call more than once |
+| `memory(): { used, limit? }` | Object data held, in bytes, and the limit (omitted when unlimited) |
+| `reset(options?)` | Clears all buckets, objects and uploads, and by default the request log and clock. Pass `{ snapshots: true }` to delete snapshots too |
+| `snapshot(name?)`, `restore(name)`, `snapshots()`, `deleteSnapshot(name)` | Save the current state and roll back to it, as often as you like. Object data is shared, not copied |
+| `clock` | The server clock (below) |
+| `requests` | The request log (below) |
+
+### Virtual clock
+
+Every timestamp the server produces reads this clock, and so does everything that depends on time:
+presigned URL expiry, lifecycle rules, Object Lock retention and archive restores.
+
+```ts
+server.clock.freeze(new Date("2030-01-02T03:04:05Z")); // freeze() alone freezes at the current time
+server.clock.advance("31d");   // milliseconds, or a string such as "1h30m" or "-2w"
+server.clock.set(date);        // jump, keeping the frozen or running state
+server.clock.unfreeze();       // let time run again
+server.clock.reset();          // back to the host clock
+server.clock.now();            // Date; also isFrozen(), isShifted()
+```
+
+### Request log
+
+Assert on what your code actually sent:
+
+```ts
+server.requests.list({ operation: "PutObject", status: "error", limit: 10 });
+server.requests.count({ bucket: "demo" });   // matches, ignoring limit
+server.requests.clear();
+server.requests.configure({ enabled: true, capacity: 50_000 });
+```
+
+Records come in arrival order:
+`{ seq, time, method, path, bucket, key, operation, status, latencyUs, bytesIn, bytesOut, accessKey, requestId }`.
+Filters: `bucket`, `keyPrefix`, `operation`, `method`, `status` (`404`, `"4xx"` or `"error"`), `since`,
+`after` (a `seq`) and `limit` (keep only the most recent matches).
+
+Control calls are not synchronized with in-flight requests, so make them between tests, while no
+requests are pending. After `stop()`, they throw `server is stopped`.
+
+## Platforms
+
+Prebuilt binaries are published as optional dependencies, and npm installs the one that matches
+your system:
+
+| Package | Platform |
+| --- | --- |
+| `fakes3-sdk-linux-x64-gnu` | Linux x64, glibc ≥ 2.35 |
+| `fakes3-sdk-linux-arm64-gnu` | Linux arm64, glibc ≥ 2.35 |
+| `fakes3-sdk-linux-x64-musl` | Linux x64, musl (Alpine) |
+| `fakes3-sdk-linux-arm64-musl` | Linux arm64, musl (Alpine) |
+
+Node.js 18 or later. macOS and Windows aren't supported, because the server relies on Linux `memfd`.
+On those systems, use the Docker image `ghcr.io/akarachen/fakes3`.
+
+## Security
+
+fakes3 is for tests. Signatures aren't verified by default, so don't expose the server to an
+untrusted network or store real data in it. It listens on `127.0.0.1` unless you pass `host`.
+
+## Building from source
+
+```bash
+cd bindings/node
+npm ci && npm run build   # needs a Rust toolchain, perl and make
+npm test
+```
+
+## License
+
+MIT

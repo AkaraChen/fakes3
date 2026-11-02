@@ -42,7 +42,7 @@
       CORS 预检与响应头、Lifecycle（按服务端时钟惰性执行）、Website 与 Notification 的配置读写
 - [ ] Website 端点（按 index/error document 和 routing rules 提供静态网站）、Notification 实际投递
 - [x] 新建 bucket 的默认值可切换：默认 `legacy`（ACL 可用、无 Block Public Access、无默认加密、允许 SSE-C），`--bucket-defaults aws` 采用现在的 AWS 默认值
-      （BucketOwnerEnforced、Block Public Access 全开、默认 SSE-S3、默认禁用 SSE-C，见 [README](README.md#新建-bucket-的默认值) 里的 AWS 文档来源，
+      （BucketOwnerEnforced、Block Public Access 全开、默认 SSE-S3、默认禁用 SSE-C，见 [docs/bucket-defaults.md](docs/bucket-defaults.md) 里的 AWS 文档来源，
       含 [SSE-C FAQ](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-s3-c-encryption-setting-faq.html)）
 - [x] SSE-C（校验 key MD5）、SSE-S3/KMS header 回显、Put/Get/DeleteBucketEncryption 及默认加密
 - [x] POST policy 表单上传（条件校验由 s3s 完成；过期时间按宿主机时钟判断，不受虚拟时钟影响）
@@ -51,7 +51,7 @@
 - [x] GetObjectAttributes
 - [x] 回显 `storage_class`、`x-amz-website-redirect-location` 等剩余元数据
 - [x] Glacier / Deep Archive / Intelligent-Tiering 归档层：读返回 `InvalidObjectState`，RestoreObject（202 / 200 / 409、`x-amz-restore`、ListObjectsV2 的 `RestoreStatus`），
-      完成和到期按服务端时钟，见 [README](README.md#归档存储类)
+      完成和到期按服务端时钟，见 [docs/archive-storage.md](docs/archive-storage.md)
 - [x] Lifecycle 的 Transition / NoncurrentVersionTransition（瀑布模型、128 KB 默认下限、Object Lock 不阻止转换）
 - [ ] 归档相关的剩余差异：ListObjectVersions 不返回 `RestoreStatus`；SELECT 类型的 RestoreObject 返回 501；不模拟 `GlacierExpeditedRetrievalNotAvailable`；
       Intelligent-Tiering 不记录读取，访问不会重置闲置天数；不校验 Lifecycle 里 Days 的先后和最小值要求
