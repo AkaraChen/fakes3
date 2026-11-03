@@ -6,3 +6,5 @@
 /conformance/s3-tests/.work/
 /conformance/s3-tests/results/
 __pycache__/
+/conformance/opendal/.work/
+/conformance/opendal/results/
