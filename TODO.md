@@ -40,6 +40,13 @@
 - [x] GET/HEAD `?partNumber=`、HEAD 的 Range
 - [x] `encoding-type=url`
 - [x] 条件请求：If-Match / If-None-Match / If-Modified-Since / If-Unmodified-Since，CopySource 的条件头
+- [x] CopyObject 对目标对象的 If-Match / If-None-Match（和 PutObject 一样在写锁内检查）
+- [x] 追加写：PutObject 的 `x-amz-write-offset-bytes`。AWS 只在 S3 Express 目录 bucket 支持，fakes3 所有 bucket 都支持；
+      offset 必须等于当前大小（`InvalidWriteOffset`），每次追加算一个 part（上限 10000，`TooManyParts`），
+      ETag 是 `<摘要>-<part 数>`，FULL_OBJECT 的 CRC 会接着算，SHA 和 composite 校验和接不上就去掉；
+      保留原对象的元数据、标签、ACL、存储类型和加密方式，SSE-C 的 key 不一致返回 `EncryptionTypeMismatch`
+- [ ] HeadObject 的 `response-*` 覆盖参数（GetObject 已支持）；DeleteObjects 里 `<Object>` 的 `<ETag>` 条件
+      （DeleteObject 的 If-Match 已支持）。OpenDAL 的 behavior tests 还剩这 4 个失败
 - [x] 对象和 bucket 的 Tagging
 - [x] ACL（canned / grant / 请求体）、OwnershipControls、PublicAccessBlock、Bucket Policy 求值（匿名访问 + 显式 Deny）、
       CORS 预检与响应头、Lifecycle（按服务端时钟惰性执行）、Website 与 Notification 的配置读写

@@ -12,13 +12,13 @@ use s3s::{S3, S3Error, S3ErrorCode, S3Request, S3Response, S3Result, s3_error};
 
 use crate::access::{self, Identity};
 use crate::acl;
-use crate::bucket_config::Ownership;
+use crate::bucket_config::{Ownership, custom_error};
 use crate::bucket_defaults::BucketDefaults;
 use crate::clock::Clock;
 use crate::digest;
 use crate::memory::{LimitExceeded, MemoryTracker};
 use crate::noauth::Trailers;
-use crate::objext::{self, apply_ext, apply_sse, object_opts};
+use crate::objext::{self, ObjectExt, apply_ext, apply_sse, object_opts};
 use crate::objops;
 use crate::store::{
     BlobError, BlobWriter, Bucket as StoreBucket, Entry, Index, Object as StoreObject, ObjectData, ObjectMeta, Part, Store, Upload,
@@ -1002,6 +1002,91 @@ fn multipart_etag(md5s: &[[u8; 16]]) -> String {
     format!("{}-{}", hex::encode(digest::md5(md5s)), md5s.len())
 }
 
+/// The most parts an object can have, from multipart uploads and appends together.
+const MAX_PARTS: usize = 10_000;
+
+/// PutObject with `x-amz-write-offset-bytes`: `chunk`, the object the request would have written,
+/// appended to `old`, the key's current object. AWS offers this only in S3 Express One Zone
+/// directory buckets; fakes3 has none, so every bucket accepts it.
+///
+/// As on AWS, the offset has to be the current size (0 creates the object), and every append is a
+/// part: the result is shaped like a multipart object, with a `<digest>-<parts>` ETag (chained from
+/// the old ETag and the chunk's MD5) and `?partNumber=` reads. It keeps the old object's metadata,
+/// tags, ACL, storage class and encryption, and shares its data instead of copying it.
+fn append(old: Option<&StoreObject>, chunk: StoreObject, chunk_md5: &[u8; 16], offset: i64) -> S3Result<StoreObject> {
+    let size = old.map_or(0, |o| o.data.size);
+    if u64::try_from(offset).ok() != Some(size) {
+        return Err(custom_error(
+            "InvalidWriteOffset",
+            http::StatusCode::BAD_REQUEST,
+            "The write offset value that you specified does not match the current object size.",
+        ));
+    }
+    let Some(old) = old else { return Ok(chunk) };
+    let customer_key = |o: &StoreObject| o.ext.as_deref().and_then(ObjectExt::customer_key_md5).map(str::to_owned);
+    if customer_key(old) != customer_key(&chunk) {
+        return Err(custom_error(
+            "EncryptionTypeMismatch",
+            http::StatusCode::BAD_REQUEST,
+            "The existing object was created with a different encryption type. Subsequent write requests must include the appropriate encryption parameters in the request or while creating the session.",
+        ));
+    }
+    let parts = old.parts_count.map_or(1, |n| n as usize) + 1;
+    if parts > MAX_PARTS {
+        return Err(custom_error(
+            "TooManyParts",
+            http::StatusCode::BAD_REQUEST,
+            "You have attempted to add more parts than the maximum of 10000 that are allowed for this object.",
+        ));
+    }
+    let mut sizes = old.part_sizes.as_deref().map_or_else(|| vec![size], <[u64]>::to_vec);
+    sizes.push(chunk.data.size);
+    let segments = old.data.segments.iter().chain(chunk.data.segments.iter()).cloned().collect();
+    let (checksum, checksum_type) = appended_checksum(old, &chunk);
+    // A multipart object's per-part checksums no longer cover all of its parts.
+    let ext = match &old.ext {
+        Some(e) if e.part_checksums.is_some() => Some(Arc::new(ObjectExt {
+            part_checksums: None,
+            ..ObjectExt::clone(e)
+        })),
+        e => e.clone(),
+    };
+    Ok(StoreObject {
+        data: ObjectData::from_segments(segments),
+        meta: old.meta.clone(),
+        e_tag: format!("{}-{parts}", hex::encode(digest::md5([old.e_tag.as_bytes(), chunk_md5.as_slice()]))),
+        last_modified: chunk.last_modified,
+        checksum,
+        checksum_type,
+        parts_count: Some(parts as i32),
+        part_sizes: Some(sizes.into()),
+        tags: old.tags.clone(),
+        ext,
+        acl: old.acl.clone(),
+    })
+}
+
+/// The full-object CRC of `old` extended over `chunk`, in the algorithm `old` has. SHA checksums and
+/// composite (per-part) ones cannot be extended, and the appended object has none.
+fn appended_checksum(old: &StoreObject, chunk: &StoreObject) -> (Checksum, Option<ChecksumType>) {
+    let full = old.checksum_type.as_ref().filter(|t| t.as_str() == ChecksumType::FULL_OBJECT);
+    let crc = [CRC32, CRC32C, CRC64NVME].into_iter().find(|&i| slot(&old.checksum, i).is_some());
+    let (Some(ty), Some(alg)) = (full, crc) else {
+        return (Checksum::default(), None);
+    };
+    let mut part = chunk.checksum.clone();
+    if slot(&part, alg).is_none() {
+        let mut h = ChecksumHasher::default();
+        enable(&mut h, alg);
+        for s in chunk.data.segments.iter() {
+            h.update(s);
+        }
+        part = h.finalize();
+    }
+    let sum = multipart_checksum(alg, ty, &[(&old.checksum, old.data.size), (&part, chunk.data.size)]);
+    (sum, Some(ty.clone()))
+}
+
 #[async_trait::async_trait]
 impl S3 for FakeS3 {
     async fn create_bucket(&self, req: S3Request<CreateBucketInput>) -> S3Result<S3Response<CreateBucketOutput>> {
@@ -1342,7 +1427,7 @@ impl S3 for FakeS3 {
         let e_tag = objext::etag_for(&ing.md5, ext.as_ref());
         let last_modified = self.clock.now();
         let ext = objext::finish(ext, &bucket, last_modified);
-        let obj = StoreObject {
+        let mut obj = StoreObject {
             data: ObjectData::from_segments(vec![ing.data]),
             meta: meta_from(
                 input.content_type,
@@ -1363,20 +1448,47 @@ impl S3 for FakeS3 {
             ext: ext.clone(),
             acl,
         };
-        let expiration = self.expiration_header(&input.bucket, &input.key, &obj);
-        let version_id = {
+        let offset = input.write_offset_bytes;
+        // What an append stores is only known under the lock, and the expiration lookup takes the
+        // store's bucket lock, which must not be taken inside a bucket's object lock.
+        let (mut expiration, append_key) = match offset {
+            None => (self.expiration_header(&input.bucket, &input.key, &obj), None),
+            Some(_) => (None, Some(input.key.clone())),
+        };
+        let (version_id, appended) = {
             let mut objects = bucket.objects.write();
             check_write_conditions(objects.get(&input.key), input.if_match.as_ref(), input.if_none_match.as_ref())?;
-            bucket.put(&mut objects, input.key, obj, owner)
+            let appended = match offset {
+                Some(offset) => {
+                    obj = append(objects.get(&input.key).and_then(Entry::current), obj, &ing.md5, offset)?;
+                    Some(obj.clone())
+                }
+                None => None,
+            };
+            (bucket.put(&mut objects, input.key, obj, owner), appended)
+        };
+        let (e_tag, checksum, ctype, ext, size) = match (&appended, &append_key) {
+            (Some(o), Some(key)) => {
+                expiration = self.expiration_header(&input.bucket, key, o);
+                (
+                    o.e_tag.clone(),
+                    o.checksum.clone(),
+                    o.checksum_type.clone(),
+                    o.ext.clone(),
+                    Some(o.data.size as i64),
+                )
+            }
+            _ => (e_tag, ing.checksum, Some(checksum_type(ChecksumType::FULL_OBJECT)), ext, None),
         };
         let mut out = with_checksum!(
             PutObjectOutput {
                 e_tag: Some(ETag::Strong(e_tag)),
                 expiration: expiration,
                 version_id: version_id,
-                checksum_type: Some(checksum_type(ChecksumType::FULL_OBJECT)),
+                checksum_type: ctype,
+                size: size,
             },
-            ing.checksum
+            checksum
         );
         apply_sse!(out, objext::sse_out(ext.as_deref()));
         out.ssekms_encryption_context = objext::sse_context(ext.as_deref());
@@ -1742,6 +1854,8 @@ impl S3 for FakeS3 {
         };
         let version_id = {
             let mut objects = dst_bucket.objects.write();
+            // If-Match / If-None-Match apply to the destination, as on PutObject.
+            check_write_conditions(objects.get(&input.key), input.if_match.as_ref(), input.if_none_match.as_ref())?;
             dst_bucket.put(&mut objects, input.key, new, owner)
         };
         let mut out = CopyObjectOutput {
@@ -2603,6 +2717,86 @@ mod tests {
         assert_eq!(ty(Some(&alg("CRC64NVME")), None).unwrap(), "FULL_OBJECT");
         assert!(ty(Some(&alg("SHA256")), Some("FULL_OBJECT")).is_err());
         assert!(ty(Some(&alg("CRC64NVME")), Some("COMPOSITE")).is_err());
+    }
+
+    fn stored(data: &[u8], checksum: Checksum) -> StoreObject {
+        StoreObject {
+            data: ObjectData::from_segments(vec![Bytes::copy_from_slice(data)]),
+            meta: ObjectMeta::default(),
+            e_tag: hex::encode(digest::md5([data])),
+            last_modified: SystemTime::UNIX_EPOCH,
+            checksum,
+            checksum_type: Some(checksum_type(ChecksumType::FULL_OBJECT)),
+            parts_count: None,
+            part_sizes: None,
+            tags: Vec::new(),
+            ext: None,
+            acl: None,
+        }
+    }
+
+    #[test]
+    fn append_extends_data_parts_and_crc() {
+        let old = stored(b"hello ", crc_of(CRC64NVME, b"hello "));
+        // The chunk came with another algorithm; the object keeps its own.
+        let chunk = stored(b"world", crc_of(CRC32, b"world"));
+        let got = append(Some(&old), chunk, &digest::md5([b"world"]), 6).unwrap();
+        let data: Vec<u8> = got.data.segments.iter().flat_map(|s| s.iter().copied()).collect();
+        assert_eq!(data, b"hello world");
+        assert_eq!(got.parts_count, Some(2));
+        assert_eq!(got.part_sizes.as_deref(), Some(&[6, 5][..]));
+        assert!(got.e_tag.ends_with("-2"), "{}", got.e_tag);
+        assert_eq!(slot(&got.checksum, CRC64NVME), slot(&crc_of(CRC64NVME, b"hello world"), CRC64NVME));
+        assert!(got.checksum.checksum_crc32.is_none());
+
+        // A third append chains on: three parts, another ETag.
+        let third = append(Some(&got), stored(b"!", Checksum::default()), &digest::md5([b"!"]), 11).unwrap();
+        assert_eq!(third.part_sizes.as_deref(), Some(&[6, 5, 1][..]));
+        assert!(third.e_tag.ends_with("-3") && third.e_tag != got.e_tag);
+        assert_eq!(
+            slot(&third.checksum, CRC64NVME),
+            slot(&crc_of(CRC64NVME, b"hello world!"), CRC64NVME)
+        );
+    }
+
+    #[test]
+    fn append_drops_checksums_it_cannot_extend() {
+        let old = stored(b"abc", crc_of(3, b"abc"));
+        let got = append(Some(&old), stored(b"def", crc_of(CRC64NVME, b"def")), &digest::md5([b"def"]), 3).unwrap();
+        assert!((0..ALGS.len()).all(|i| slot(&got.checksum, i).is_none()));
+        assert!(got.checksum_type.is_none());
+    }
+
+    #[test]
+    fn append_rejections() {
+        let code = |r: S3Result<StoreObject>| r.err().map(|e| e.code().as_str().to_owned());
+        let chunk = || stored(b"x", Checksum::default());
+        let md5 = digest::md5([b"x"]);
+        let old = stored(b"abc", Checksum::default());
+        assert_eq!(code(append(Some(&old), chunk(), &md5, 2)).as_deref(), Some("InvalidWriteOffset"));
+        assert_eq!(code(append(Some(&old), chunk(), &md5, -1)).as_deref(), Some("InvalidWriteOffset"));
+        assert_eq!(code(append(None, chunk(), &md5, 1)).as_deref(), Some("InvalidWriteOffset"));
+        // Offset 0 on a missing key is a plain write.
+        let created = append(None, chunk(), &md5, 0).unwrap();
+        assert_eq!((created.parts_count, created.e_tag.as_str()), (None, hex::encode(md5).as_str()));
+
+        let full = StoreObject {
+            parts_count: Some(MAX_PARTS as i32),
+            ..stored(b"abc", Checksum::default())
+        };
+        assert_eq!(code(append(Some(&full), chunk(), &md5, 3)).as_deref(), Some("TooManyParts"));
+
+        let sse_c = StoreObject {
+            ext: Some(Arc::new(ObjectExt {
+                sse: Some(objext::Sse::Customer { key_md5: "k".into() }),
+                ..Default::default()
+            })),
+            ..stored(b"abc", Checksum::default())
+        };
+        assert_eq!(
+            code(append(Some(&sse_c), chunk(), &md5, 3)).as_deref(),
+            Some("EncryptionTypeMismatch")
+        );
     }
 
     #[test]
