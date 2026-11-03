@@ -1,0 +1,107 @@
+name: opendal
+
+# Tests the OpenDAL adapter (bindings/opendal, crate `fakes3-opendal`) against the library in this
+# repository. Runs on changes to the adapter or the library.
+#
+# The crate follows OpenDAL's releases, so it has its own version and its own tags:
+# `fakes3-opendal-v<version>`. Pushing one publishes it through crates.io trusted publishing (OIDC,
+# no token stored); a manual dispatch runs `cargo publish --dry-run`. Neither runs on ordinary
+# pushes: packaging resolves fakes3 from crates.io, so it fails whenever the adapter needs a fakes3
+# release that is not out yet.
+on:
+  push:
+    branches: [main]
+    tags: ["fakes3-opendal-v*"]
+    paths: &paths
+      - "bindings/opendal/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/opendal.yml"
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: bindings/opendal
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bindings/opendal
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
+  publish:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/fakes3-opendal-v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: bindings/opendal
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Only a tag publishes, and only once: re-running a release whose crate already went out must
+      # not fail on the upload.
+      - name: Decide whether to publish
+        id: mode
+        run: |
+          if [[ "$GITHUB_REF" != refs/tags/fakes3-opendal-v* ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version=${GITHUB_REF_NAME#fakes3-opendal-v}
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          if [ "$version" != "$crate" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $crate"
+            exit 1
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -A "fakes3 release workflow (https://github.com/$GITHUB_REPOSITORY)" \
+            "https://crates.io/api/v1/crates/fakes3-opendal/$version")
+          case "$code" in
+            200)
+              echo "fakes3-opendal $version is already on crates.io"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            404) echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::crates.io answered HTTP $code"
+              exit 1
+              ;;
+          esac
+
+      - name: Package and verify
+        if: steps.mode.outputs.publish != 'true'
+        run: cargo publish --dry-run --locked
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+        if: steps.mode.outputs.publish == 'true'
+
+      - name: Publish
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --locked
