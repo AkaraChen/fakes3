@@ -1,8 +1,9 @@
 //! Memory accounting for object data.
 //!
-//! Every byte of object data lives in a buffer (a heap `Vec` or a memfd mapping) that is wrapped in
-//! a [`Tracked`] owner. The owner holds a [`Reservation`] against the server's [`MemoryTracker`] and
-//! gives it back when the buffer is freed, i.e. when the last `Bytes` slice of it goes away. Blobs
+//! Every byte of object data lives in a buffer (a heap `Vec`, or on Linux a memfd mapping) that is
+//! wrapped in a [`Tracked`] owner. The owner holds a [`Reservation`] against the server's
+//! [`MemoryTracker`] and gives it back when the buffer is freed, i.e. when the last `Bytes` slice of
+//! it goes away. Blobs
 //! are shared between objects, versions, copies and multipart parts, so each buffer is counted
 //! exactly once and released exactly when nothing references it any more, whatever dropped the
 //! last reference (overwrite, delete, abort, a finished GET stream, a reset).
@@ -84,6 +85,7 @@ impl FromStr for MemoryLimit {
 }
 
 /// Physical memory, capped by the cgroup limit when running in a container.
+#[cfg(target_os = "linux")]
 fn available_memory() -> Option<u64> {
     let physical = std::fs::read_to_string("/proc/meminfo").ok().and_then(|s| {
         let line = s.lines().find(|l| l.starts_with("MemTotal:"))?;
@@ -98,6 +100,33 @@ fn available_memory() -> Option<u64> {
         (Some(p), Some(c)) => Some(p.min(c)),
         (p, c) => p.or(c),
     }
+}
+
+/// Physical memory.
+#[cfg(target_os = "macos")]
+fn available_memory() -> Option<u64> {
+    let mut bytes = 0u64;
+    let mut len = size_of::<u64>();
+    // SAFETY: `hw.memsize` is a u64 and `bytes` / `len` describe a buffer of exactly that size.
+    let r = unsafe { libc::sysctlbyname(c"hw.memsize".as_ptr(), (&raw mut bytes).cast(), &mut len, std::ptr::null_mut(), 0) };
+    (r == 0 && bytes > 0).then_some(bytes)
+}
+
+/// Physical memory.
+#[cfg(windows)]
+fn available_memory() -> Option<u64> {
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    // SAFETY: MEMORYSTATUSEX is plain data; all zeroes is a valid value.
+    let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+    status.dwLength = size_of::<MEMORYSTATUSEX>() as u32;
+    // SAFETY: `status` is a MEMORYSTATUSEX with `dwLength` set, as the call requires.
+    let ok = unsafe { GlobalMemoryStatusEx(&mut status) } != 0;
+    (ok && status.ullTotalPhys > 0).then_some(status.ullTotalPhys)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn available_memory() -> Option<u64> {
+    None
 }
 
 /// A point-in-time reading of the memory accounting.
@@ -399,6 +428,14 @@ mod tests {
             h.join().unwrap();
         }
         assert_eq!(used(&t), 0);
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+    fn auto_limit_is_a_share_of_the_machines_memory() {
+        let total = available_memory().unwrap();
+        assert!(total > 256 << 20, "{total}");
+        assert_eq!(MemoryLimit::Auto.resolve(), Some(total / 100 * AUTO_PERCENT));
     }
 
     #[test]

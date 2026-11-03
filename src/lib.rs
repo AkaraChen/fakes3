@@ -54,6 +54,7 @@ mod s3s_compat;
 mod select;
 mod sigv2;
 mod snapshot;
+mod spill;
 mod store;
 mod users;
 
