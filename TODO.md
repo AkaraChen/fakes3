@@ -38,6 +38,8 @@
 - [x] 未指定算法时默认计算 CRC64NVME（与 2024 年 12 月之后的 S3 一致）
 - [x] UploadPartCopy（零拷贝，共享源对象的 buffer）
 - [x] GET/HEAD `?partNumber=`、HEAD 的 Range
+- [x] HeadObject 的 `response-*` 覆盖参数（和 GetObject 一样；两者都支持 `response-expires`）
+- [x] DeleteObjects 里 `<Object>` 的 `<ETag>` 条件：不满足的那一项单独报 `PreconditionFailed` / `NoSuchKey`，其余照删
 - [x] `encoding-type=url`
 - [x] 条件请求：If-Match / If-None-Match / If-Modified-Since / If-Unmodified-Since，CopySource 的条件头
 - [x] CopyObject 对目标对象的 If-Match / If-None-Match（和 PutObject 一样在写锁内检查）

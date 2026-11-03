@@ -696,6 +696,22 @@ fn check_write_conditions(entry: Option<&Entry>, if_match: Option<&ETagCondition
     Ok(())
 }
 
+/// Checks a delete's If-Match (DeleteObject) or `<ETag>` (DeleteObjects) against the key's current
+/// object: a mismatch is PreconditionFailed, a missing object NoSuchKey.
+fn check_delete_condition(objects: &Index, key: &str, if_match: &ETagCondition) -> S3Result<()> {
+    match objects.get(key).and_then(Entry::current) {
+        Some(o) => check_conditions(o, Some(if_match), None, None, None),
+        None => Err(s3_error!(NoSuchKey)),
+    }
+}
+
+/// `response-expires` as the HTTP date the `Expires` header carries.
+fn response_expires(t: Option<Timestamp>) -> Option<String> {
+    let mut buf = Vec::new();
+    t?.format(TimestampFormat::HttpDate, &mut buf).ok()?;
+    String::from_utf8(buf).ok()
+}
+
 struct Listing {
     contents: Vec<Object>,
     prefixes: Vec<CommonPrefix>,
@@ -1558,7 +1574,7 @@ impl S3 for FakeS3 {
                 content_disposition: input.response_content_disposition.or_else(|| m.content_disposition.clone()),
                 content_language: input.response_content_language.or_else(|| m.content_language.clone()),
                 cache_control: input.response_cache_control.or_else(|| m.cache_control.clone()),
-                expires: m.expires.clone(),
+                expires: response_expires(input.response_expires).or_else(|| m.expires.clone()),
                 metadata: m.user_metadata.clone(),
                 parts_count: o.parts_count,
                 tag_count: tag_count(&o.tags),
@@ -1620,12 +1636,12 @@ impl S3 for FakeS3 {
                 accept_ranges: Some("bytes".into()),
                 e_tag: Some(ETag::Strong(o.e_tag.clone())),
                 last_modified: Some(ts(o.last_modified)),
-                content_type: content_type(m),
-                content_encoding: m.content_encoding.clone(),
-                content_disposition: m.content_disposition.clone(),
-                content_language: m.content_language.clone(),
-                cache_control: m.cache_control.clone(),
-                expires: m.expires.clone(),
+                content_type: input.response_content_type.or_else(|| content_type(m)),
+                content_encoding: input.response_content_encoding.or_else(|| m.content_encoding.clone()),
+                content_disposition: input.response_content_disposition.or_else(|| m.content_disposition.clone()),
+                content_language: input.response_content_language.or_else(|| m.content_language.clone()),
+                cache_control: input.response_cache_control.or_else(|| m.cache_control.clone()),
+                expires: response_expires(input.response_expires).or_else(|| m.expires.clone()),
                 metadata: m.user_metadata.clone(),
                 parts_count: o.parts_count,
                 tag_count: tag_count(&o.tags),
@@ -1660,10 +1676,7 @@ impl S3 for FakeS3 {
             }
         }
         if let Some(c) = &input.if_match {
-            match objects.get(&input.key).and_then(Entry::current) {
-                Some(o) => check_conditions(o, Some(c), None, None, None)?,
-                None => return Err(s3_error!(NoSuchKey)),
-            }
+            check_delete_condition(&objects, &input.key, c)?;
         }
         let out = match input.version_id {
             Some(id) => {
@@ -1714,6 +1727,14 @@ impl S3 for FakeS3 {
                         message: Some("Access Denied".into()),
                         version_id: id.version_id,
                     });
+                    continue;
+                }
+                // An `<ETag>` makes this entry conditional, like DeleteObject's If-Match; a failed
+                // condition fails only this entry.
+                if let Some(e_tag) = id.e_tag
+                    && let Err(e) = check_delete_condition(&objects, &id.key, &ETagCondition::ETag(e_tag))
+                {
+                    errors.push(delete_error(id.key, id.version_id, e));
                     continue;
                 }
                 let d = match id.version_id {
