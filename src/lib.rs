@@ -39,6 +39,7 @@ mod cors;
 mod digest;
 mod host;
 mod lifecycle;
+mod linger;
 mod listxml;
 mod memory;
 mod names;
@@ -193,7 +194,7 @@ impl Server {
                 let (socket, peer) = socket;
                 let _ = socket.set_nodelay(true);
                 let conn = http
-                    .serve_connection(TokioIo::new(socket), service.for_peer(peer.ip()))
+                    .serve_connection(TokioIo::new(linger::Lingering::new(socket)), service.for_peer(peer.ip()))
                     .into_owned();
                 tokio::spawn(async move {
                     let _ = conn.await;
