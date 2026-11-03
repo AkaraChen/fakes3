@@ -46,12 +46,7 @@ jobs:
           go-version: stable
           cache: false
       - uses: astral-sh/setup-uv@v10.3.3
-      # The vendored OpenSSL build needs a native Windows Perl, not the MSYS one that comes with Git,
-      # and NASM to build its assembly (MD5 included) rather than the plain C fallback.
-      - if: runner.os == 'Windows'
-        run: printf 'OPENSSL_SRC_PERL=%s\n' 'C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
-      - if: runner.os == 'Windows'
-        uses: ilammy/setup-nasm@v1
+      - uses: ./.github/actions/windows-openssl
       - name: Build A and B
         env:
           BASE: ${{ inputs.base }}

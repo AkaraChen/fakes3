@@ -67,8 +67,8 @@ server.requests.clear();                // configure({ enabled, capacity }) 开�
 ## 平台
 
 预编译产物覆盖 Linux 的 x64 / arm64，glibc（≥ 2.35）和 musl（Alpine）都有，通过 `optionalDependencies` 里的
-`fakes3-sdk-linux-x64-gnu` 等平台包分发，需要 Node.js 18 或更新版本。macOS 和 Windows 暂不支持（服务端依赖 Linux 的 `memfd`），
-在这些系统上请用 Docker 镜像 `ghcr.io/akarachen/fakes3`。
+`fakes3-sdk-linux-x64-gnu` 等平台包分发，需要 Node.js 18 或更新版本。macOS 和 Windows 还没有预编译包（fakes3 本身可以在这两个系统上运行），
+在这些系统上请启动[原生二进制](../../README.zh-CN.md#独立二进制)或者 Docker 镜像 `ghcr.io/akarachen/fakes3`。
 
 ## 安全提示
 

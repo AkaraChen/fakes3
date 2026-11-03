@@ -103,8 +103,9 @@ your system:
 | `fakes3-sdk-linux-x64-musl` | Linux x64, musl (Alpine) |
 | `fakes3-sdk-linux-arm64-musl` | Linux arm64, musl (Alpine) |
 
-Node.js 18 or later. macOS and Windows aren't supported, because the server relies on Linux `memfd`.
-On those systems, use the Docker image `ghcr.io/akarachen/fakes3`.
+Node.js 18 or later. There are no prebuilt packages for macOS and Windows yet (fakes3 itself runs there);
+on those systems, start the [native binary](../../README.md#standalone-binary) or the Docker image
+`ghcr.io/akarachen/fakes3` instead.
 
 ## Security
 

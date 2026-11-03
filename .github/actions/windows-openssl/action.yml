@@ -1,0 +1,13 @@
+name: Prepare the vendored OpenSSL build on Windows
+description: >
+  Points openssl-src at a native Windows Perl (not the MSYS one that comes with Git) and installs
+  NASM, so OpenSSL is built with its assembly (MD5 included) rather than the plain C fallback.
+  Does nothing on other systems.
+runs:
+  using: composite
+  steps:
+    - if: runner.os == 'Windows'
+      shell: bash
+      run: printf 'OPENSSL_SRC_PERL=%s\n' 'C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
+    - if: runner.os == 'Windows'
+      uses: ilammy/setup-nasm@v1

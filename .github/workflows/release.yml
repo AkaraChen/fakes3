@@ -183,14 +183,9 @@ jobs:
         with:
           targets: ${{ matrix.triple }}
 
-      # The vendored OpenSSL build needs a native Windows Perl, not the MSYS one that comes with Git,
-      # and NASM to build its assembly (MD5 included) rather than the plain C fallback.
+      - uses: ./.github/actions/windows-openssl
       - if: runner.os == 'Windows'
-        run: |
-          printf 'OPENSSL_SRC_PERL=%s\n' 'C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
-          echo "RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
-      - if: runner.os == 'Windows'
-        uses: ilammy/setup-nasm@v1
+        run: echo "RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
 
       - run: cargo build --release --locked --target "$TRIPLE"
 

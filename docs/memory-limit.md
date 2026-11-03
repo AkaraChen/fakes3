@@ -1,9 +1,9 @@
 # 内存上限
 
-fakes3 统计所有对象数据实际占用的内存（堆上的小对象、memfd 里的大对象、尚未 Complete 的分段上传的 part），
+fakes3 统计所有对象数据实际占用的内存（堆上的小对象，大对象（Linux 上在 memfd 里，其他系统上也在堆上），尚未 Complete 的分段上传的 part），
 超出上限的写入会被拒绝，而不是让进程被 OOM killer 杀掉。
 
-- 默认值 `auto` 是容器 cgroup 内存限制和物理内存中较小者的 75%（读不到时不限制）。memfd 的页面算在 cgroup 的内存里，
+- 默认值 `auto` 是容器 cgroup 内存限制和物理内存中较小者的 75%（读不到时不限制；cgroup 只在 Linux 上读，macOS 和 Windows 上就是物理内存的 75%）。memfd 的页面算在 cgroup 的内存里，
   不设上限的话，容器超限时进程会被直接杀掉，没有任何报错；留 25% 给元数据、连接缓冲区和测试进程自己。
   机器上跑多个 fakes3 或其他大内存进程时，每个实例各自按这个比例计算，需要的话用 `--memory-limit` 显式指定。
   设成 `unlimited`（或 `0`）取消限制。作为库使用时对应 `Config::memory_limit`（`MemoryLimit::Auto` / `Unlimited` / `Bytes(n)`），

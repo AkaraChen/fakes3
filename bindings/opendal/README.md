@@ -32,8 +32,8 @@ async fn writes_a_file() -> opendal::Result<()> {
 }
 ```
 
-Like fakes3 itself, it builds on Linux only, and the build compiles OpenSSL, so it needs `perl` and
-`make`.
+Like fakes3 itself, it builds on Linux, macOS and Windows, and the build compiles OpenSSL, so it needs
+`perl` and `make` (on Windows, a native Perl such as Strawberry Perl).
 
 ## Configure it like production
 
