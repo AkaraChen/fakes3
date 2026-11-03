@@ -7,8 +7,9 @@
 [fakes3](https://github.com/AkaraChen/fakes3) server, for tests.
 
 OpenDAL's `memory` service is the cheapest storage to test against, but it skips the S3 service
-entirely and is far more lenient than S3: it has no ETags, no versions, no multipart uploads and
-`if_not_exists` is its only conditional write. Code that passes on `memory` can still fail on S3.
+entirely and is far more lenient than S3: it has no ETags, no versions, no multipart uploads, no
+copy and no presigned URLs, and `if_not_exists` is its only conditional write. Code that passes on
+`memory` can still fail on S3.
 `fakes3-opendal` gives you an operator on OpenDAL's real S3 service, talking HTTP to a server that
 behaves like AWS, at almost the same cost: the server starts in about a millisecond, inside your
 test process.
@@ -33,6 +34,40 @@ async fn writes_a_file() -> opendal::Result<()> {
 
 Like fakes3 itself, it builds on Linux only, and the build compiles OpenSSL, so it needs `perl` and
 `make`.
+
+## Configure it like production
+
+Code under test usually builds its own operator from configuration. To OpenDAL the fixture is plain
+S3, so give that code the fixture's S3 settings in whatever form it reads them. It then runs exactly
+the path it runs in production, scheme `s3` included; only the endpoint differs.
+
+```rust
+let s3 = Fixture::start().await?;
+
+// A storage URI: "s3://test?endpoint=http%3A%2F%2F127.0.0.1%3A…&region=us-east-1&access_key_id=…"
+let op = opendal::Operator::from_uri(s3.uri())?;
+
+// Configuration keys: bucket, endpoint, region, access_key_id, secret_access_key, and
+// disable_config_load / disable_ec2_metadata, so nothing comes from the environment.
+let mut options = s3.options();
+options.push(("root".into(), "/app".into()));
+let op = opendal::Operator::via_iter("s3", options)?;
+
+// An S3 builder to extend.
+let op = opendal::Operator::new(s3.s3().root("/app"))?;
+
+// Or the pieces, for your own configuration struct.
+let config = AppConfig {
+    bucket: s3.bucket().into(),
+    endpoint: s3.endpoint().into(),
+    access_key_id: s3.access_key_id().into(),
+    secret_access_key: s3.secret_access_key().into(),
+};
+```
+
+These operators use OpenDAL's default HTTP transport, which the `opendal` crate installs with its
+default features, as in production. `s3.operator()` and `s3.operator_with(..)` carry their own
+transport and need nothing installed.
 
 ## What you get
 
@@ -93,7 +128,8 @@ The crate follows OpenDAL's releases, so its version moves independently of fake
 
 | fakes3-opendal | OpenDAL | fakes3 |
 | --- | --- | --- |
-| 0.1 | 0.59 | 0.1.1 or later |
+| 0.1.1 | 0.59 | 0.1.2 or later |
+| 0.1.0 | 0.59 | 0.1.1 or later |
 
 ## License
 

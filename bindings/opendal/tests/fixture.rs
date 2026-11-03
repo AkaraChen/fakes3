@@ -1,4 +1,7 @@
 //! The fixture against OpenDAL's S3 service, end to end over HTTP.
+//!
+//! This file does not use the `opendal` crate, so nothing installs OpenDAL's default HTTP
+//! transport here: the fixture's own operators have to work without it.
 
 use fakes3_opendal::{Fixture, fakes3};
 use opendal_core::{ErrorKind, Result};
@@ -6,8 +9,7 @@ use opendal_core::{ErrorKind, Result};
 #[tokio::test]
 async fn round_trip_through_the_s3_service() -> Result<()> {
     let s3 = Fixture::start().await?;
-    // The same type the `opendal` crate re-exports.
-    let op: opendal::Operator = s3.operator().clone();
+    let op = s3.operator();
     op.write("dir/hello.txt", "hi").await?;
     assert_eq!(op.read("dir/hello.txt").await?.to_vec(), b"hi");
     let meta = op.stat("dir/hello.txt").await?;
