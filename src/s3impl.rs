@@ -1008,9 +1008,7 @@ impl S3 for FakeS3 {
         let owner = self.who(&req).user().unwrap_or(UserId::DEFAULT);
         let input = req.input;
         let name = input.bucket.clone();
-        let bucket = StoreBucket::new(self.clock.now(), owner);
-        self.defaults.apply(&bucket.config);
-        bucket.cfg.set_encryption(self.defaults.default_encryption());
+        let bucket = self.defaults.new_bucket(self.clock.now(), owner);
         if let Some(o) = &input.object_ownership {
             let o = Ownership::parse(o.as_str()).ok_or_else(|| s3_error!(InvalidArgument, "Invalid x-amz-object-ownership"))?;
             *bucket.config.ownership.write() = Some(o);
@@ -1023,15 +1021,8 @@ impl S3 for FakeS3 {
             *bucket.versioning.write() = Versioning::Enabled;
             bucket.cfg.enable_lock();
         }
-        let mut buckets = self.store.buckets.write();
-        // us-east-1 answers 200 for a bucket the caller already owns and leaves it as it is (the
-        // legacy behaviour in the CreateBucket error list); other regions say BucketAlreadyOwnedByYou.
-        match buckets.entry(name.clone()) {
-            std::collections::btree_map::Entry::Occupied(e) if e.get().owner != owner => return Err(s3_error!(BucketAlreadyExists)),
-            std::collections::btree_map::Entry::Occupied(_) => {}
-            std::collections::btree_map::Entry::Vacant(e) => {
-                e.insert(Arc::new(bucket));
-            }
+        if !self.store.add_bucket(name.clone(), bucket) {
+            return Err(s3_error!(BucketAlreadyExists));
         }
         Ok(S3Response::new(CreateBucketOutput {
             location: Some(format!("/{name}")),

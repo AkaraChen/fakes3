@@ -173,6 +173,19 @@ impl Store {
     pub fn bucket(&self, name: &str) -> Option<Arc<Bucket>> {
         self.buckets.read().get(name).cloned()
     }
+
+    /// Adds `bucket` under `name`. A bucket its owner already has is left as it is, which is what
+    /// us-east-1 answers 200 for (the legacy behaviour in the CreateBucket error list; other
+    /// regions say BucketAlreadyOwnedByYou). Returns false when another account owns the name.
+    pub fn add_bucket(&self, name: String, bucket: Bucket) -> bool {
+        match self.buckets.write().entry(name) {
+            std::collections::btree_map::Entry::Occupied(e) => e.get().owner == bucket.owner,
+            std::collections::btree_map::Entry::Vacant(e) => {
+                e.insert(Arc::new(bucket));
+                true
+            }
+        }
+    }
 }
 
 impl Bucket {

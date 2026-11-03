@@ -242,6 +242,17 @@ impl Server {
         self.control.restore(name)
     }
 
+    /// Creates an empty bucket owned by the default account, as CreateBucket without options
+    /// would. For clients that cannot create buckets themselves, such as OpenDAL.
+    pub fn create_bucket(&self, name: &str) -> Result<(), ControlError> {
+        self.control.create_bucket(name)
+    }
+
+    /// Turns versioning on for a bucket.
+    pub fn enable_versioning(&self, bucket: &str) -> Result<(), ControlError> {
+        self.control.enable_versioning(bucket)
+    }
+
     /// Logged S3 requests matching `filter`, oldest first, and the match count before `limit`.
     pub fn requests(&self, filter: &RequestFilter) -> (Vec<RequestRecord>, usize) {
         self.control.requests(filter)

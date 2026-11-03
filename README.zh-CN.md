@@ -113,6 +113,16 @@ server.shutdown().await;
 所以并行的测试不会冲突；每个 `Server` 有独立的数据和时钟。`shutdown()` 返回时端口已经可以复用，已建立的连接会继续服务到客户端断开。例子见 [examples/aws_sdk.rs](examples/aws_sdk.rs) 和
 [examples/blocking.rs](examples/blocking.rs)。
 
+### OpenDAL
+
+[`fakes3-opendal`](bindings/opendal/README.md) 在进程内起一个服务器、建好 bucket，返回一个走 OpenDAL 真实 S3 服务的
+[OpenDAL](https://opendal.apache.org) `Operator`。和 OpenDAL 的 `memory` 服务不同，它有 ETag、版本、分段上传和 S3 的条件写：
+
+```rust
+let s3 = fakes3_opendal::Fixture::start().await?;
+s3.operator().write("hello.txt", "hi").await?;
+```
+
 ### 独立二进制
 
 每个 [release](https://github.com/AkaraChen/fakes3/releases) 都附带 x86_64 和 aarch64 的静态 Linux 二进制，各带 SHA-256 校验文件：

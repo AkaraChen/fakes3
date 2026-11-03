@@ -18,6 +18,7 @@ Node binding 的编译，以及 workflow 文件的 actionlint 检查。
   托管 runner 之间速度能差 2 倍，所以比较两个版本时只能用这个，不能拿两次独立的 bench 结果比。
 - **node**：构建 Node 插件并测试；推送 `v*` tag 时通过 npm 可信发布上传（见 [bindings/node/PUBLISHING.md](../bindings/node/PUBLISHING.md)）。
 - **release**：推送 `v*` tag 时发布 GHCR 镜像、静态二进制和 crates.io 上的 `fakes3` crate；其余情况只打包并校验 crate（`cargo publish --dry-run`）。
+- **opendal**：测试 OpenDAL 绑定；推送 `fakes3-opendal-v*` tag 时发布 `fakes3-opendal` crate（见[下文](#fakes3-opendal)）。
 
 本地也可以跑兼容矩阵和性能测试，前提是装好 Docker 和各语言的工具链：
 
@@ -38,6 +39,20 @@ npm test                  # 用 @aws-sdk/client-s3 跑一遍
 
 CI 在 [node workflow](../.github/workflows/node.yml) 里构建四个目标（x64 / arm64，glibc / musl）并各自跑一遍测试；
 发布到 npm 只在推送 `v*` tag 或手动触发且 `publish: true` 时发生，其余情况只做 `npm publish --dry-run`。
+
+## OpenDAL 绑定
+
+`bindings/opendal` 是 crate `fakes3-opendal`：在进程内起一个 fakes3，建好 bucket，返回一个走 OpenDAL S3 服务的
+`Operator`。它和 Node 绑定一样有自己的 lockfile 和 target 目录，通过路径依赖使用仓库里的 fakes3：
+
+```bash
+cd bindings/opendal
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+[opendal workflow](../.github/workflows/opendal.yml) 在绑定或库有改动时跑这三步。
 
 ## 发布
 
@@ -66,3 +81,20 @@ crates.io 只能给已经存在的 crate 添加可信发布者，所以第一个
 5. `cargo logout`，并在网页上撤销第 1 步的 token。
 
 之后每次推送 `v*` tag，release workflow 都会自动发布对应版本。
+
+### fakes3-opendal
+
+`fakes3-opendal` 跟着 OpenDAL 的版本走（OpenDAL 每出一个 0.x 新版本，它就要发一个不兼容版本），所以版本号和 tag 都独立于
+fakes3：
+
+1. 改 `bindings/opendal/Cargo.toml` 的 `version`（升级 OpenDAL 时顺便更新 [README](../bindings/opendal/README.md) 里的版本对照表），合入 main。
+2. 推送 tag：`git tag fakes3-opendal-v0.2.0 && git push origin fakes3-opendal-v0.2.0`。
+   [opendal workflow](../.github/workflows/opendal.yml) 先跑测试，再检查 tag 和版本号一致，然后通过可信发布上传；
+   这个版本已经在 crates.io 上时跳过上传。
+
+打包时 fakes3 从 crates.io 解析，不用仓库里的路径。所以绑定如果用到了 fakes3 的新接口，要先发布对应的 fakes3 版本，
+并把 `bindings/opendal/Cargo.toml` 里 fakes3 的版本要求提上去。手动触发 opendal workflow 会跑一遍 `cargo publish --dry-run`，
+可以先用它确认。
+
+一次性配置和 `fakes3` 一样：第一个版本用 API token 在 `bindings/opendal` 目录里手动 `cargo publish --locked`，
+token 的 crate 填 `fakes3-opendal`；然后在 crates.io 上给 `fakes3-opendal` 添加可信发布者，Workflow filename 填 `opendal.yml`。

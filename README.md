@@ -123,6 +123,17 @@ each `Server` has its own data and clock. `shutdown()` returns once the port can
 that are already open keep being served until the client closes them. See
 [examples/aws_sdk.rs](examples/aws_sdk.rs) and [examples/blocking.rs](examples/blocking.rs).
 
+### OpenDAL
+
+[`fakes3-opendal`](bindings/opendal/README.md) hands you an [OpenDAL](https://opendal.apache.org)
+`Operator` on OpenDAL's real S3 service, backed by an in-process server and a fresh bucket. Unlike
+OpenDAL's `memory` service, it has ETags, versions, multipart uploads and S3's conditional writes:
+
+```rust
+let s3 = fakes3_opendal::Fixture::start().await?;
+s3.operator().write("hello.txt", "hi").await?;
+```
+
 ### Standalone binary
 
 Every [release](https://github.com/AkaraChen/fakes3/releases) ships static Linux binaries for x86_64 and

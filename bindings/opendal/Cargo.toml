@@ -1,0 +1,29 @@
+[package]
+name = "fakes3-opendal"
+version = "0.1.0"
+edition = "2024"
+description = "OpenDAL operators backed by an in-process fakes3 server, for tests"
+license = "MIT"
+repository = "https://github.com/AkaraChen/fakes3"
+readme = "README.md"
+keywords = ["s3", "opendal", "fake", "testing", "in-memory"]
+categories = ["development-tools::testing"]
+include = ["/src", "/tests", "/README.md", "/LICENSE"]
+
+# Not part of the root package's build: it has its own lockfile and target directory.
+[workspace]
+
+# fakes3 stores large objects in Linux memfds, so this only builds on Linux.
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+fakes3 = { version = "0.1.1", path = "../.." }
+opendal-core = "0.59.5"
+opendal-service-s3 = "0.59.5"
+# The server is plain HTTP on localhost, so no TLS backend.
+opendal-http-transport-reqwest = { version = "0.59.5", default-features = false }
+
+[dev-dependencies]
+opendal = { version = "0.59.5", default-features = false }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
