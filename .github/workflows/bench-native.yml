@@ -56,12 +56,11 @@ jobs:
 
       - uses: astral-sh/setup-uv@v10.3.3
 
-      # The vendored OpenSSL build needs a native Windows Perl, not the MSYS one that comes with Git,
-      # and NASM to build its assembly (MD5 included) rather than the plain C fallback.
+      - uses: ./.github/actions/windows-openssl
+      # moto opens a connection per request, and the clients run out of Windows' default ephemeral
+      # range (16k ports, each held in TIME_WAIT for minutes) within a workload.
       - if: runner.os == 'Windows'
-        run: printf 'OPENSSL_SRC_PERL=%s\n' 'C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
-      - if: runner.os == 'Windows'
-        uses: ilammy/setup-nasm@v1
+        run: netsh int ipv4 set dynamicport tcp start=10000 num=55535
 
       - name: Prepare binaries
         run: bench/setup-native.sh

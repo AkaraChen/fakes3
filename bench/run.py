@@ -17,6 +17,7 @@ import datetime
 import http.client
 import json
 import os
+import socket
 import statistics
 import subprocess
 import sys
@@ -112,6 +113,10 @@ def wait_ok(probe, timeout=180.0, alive=None):
     while time.monotonic() < deadline:
         try:
             conn = http.client.HTTPConnection("127.0.0.1", p, timeout=2)
+            # Windows takes ~0.5 s to report a refused connection; give up on the connect after
+            # 2 ms instead and try again, so readiness is still seen within milliseconds.
+            conn.sock = socket.create_connection(("127.0.0.1", p), timeout=0.002)
+            conn.sock.settimeout(2)
             conn.request("GET", "/", headers=headers())
             r = conn.getresponse()
             r.read()
