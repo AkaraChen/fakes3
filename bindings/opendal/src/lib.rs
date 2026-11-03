@@ -20,6 +20,25 @@
 //! - brings its own HTTP transport, so it does not depend on the `opendal` crate installing a
 //!   default one.
 //!
+//! # Configure it like production
+//!
+//! Code under test usually builds its own operator from configuration rather than taking one.
+//! The fixture is plain S3 to OpenDAL, so hand that code the fixture's S3 settings, in whichever
+//! form it reads, and it runs the same path as in production with only the endpoint changed:
+//!
+//! ```no_run
+//! # async fn demo() -> opendal::Result<()> {
+//! let s3 = fakes3_opendal::Fixture::start().await?;
+//! let op = opendal::Operator::from_uri(s3.uri())?; // "s3://test?endpoint=http%3A%2F%2F127.0.0.1%3A…"
+//! let op = opendal::Operator::via_iter("s3", s3.options())?; // configuration keys
+//! let op = opendal::Operator::new(s3.s3().root("/app"))?; // an S3 builder to extend
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Operators built this way use OpenDAL's default HTTP transport, which the `opendal` crate
+//! installs with its default features, as in production.
+//!
 //! [`Fixture::server`] reaches what OpenDAL has no API for: snapshots, the virtual clock and the
 //! request log.
 //!
@@ -36,6 +55,9 @@ pub use fakes3;
 
 /// The bucket a [`Fixture`] creates unless told otherwise.
 pub const DEFAULT_BUCKET: &str = "test";
+
+/// The region the fixture's settings name. fakes3 accepts any.
+pub const REGION: &str = "us-east-1";
 
 /// A fakes3 server, a bucket on it, and an [`Operator`] for that bucket.
 ///
@@ -57,17 +79,36 @@ struct Connection {
 }
 
 impl Connection {
-    fn operator(&self, configure: impl FnOnce(S3) -> S3) -> Result<Operator> {
-        let s3 = S3::default()
-            .endpoint(&self.endpoint)
-            .region("us-east-1")
+    /// The settings as S3 configuration keys; `s3()` and `options()` must describe the same thing.
+    fn options(&self) -> Vec<(String, String)> {
+        [
+            ("bucket", self.bucket.as_str()),
+            ("endpoint", &self.endpoint),
+            ("region", REGION),
+            ("access_key_id", &self.access_key),
+            ("secret_access_key", &self.secret_key),
+            ("disable_config_load", "true"),
+            ("disable_ec2_metadata", "true"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+        .collect()
+    }
+
+    fn s3(&self) -> S3 {
+        S3::default()
             .bucket(&self.bucket)
+            .endpoint(&self.endpoint)
+            .region(REGION)
             .access_key_id(&self.access_key)
             .secret_access_key(&self.secret_key)
             .disable_config_load()
-            .disable_ec2_metadata();
+            .disable_ec2_metadata()
+    }
+
+    fn operator(&self, configure: impl FnOnce(S3) -> S3) -> Result<Operator> {
         let ctx = OperationContext::new().with_http_transport(self.transport.clone());
-        Ok(Operator::new(configure(s3))?.with_context(ctx))
+        Ok(Operator::new(configure(self.s3()))?.with_context(ctx))
     }
 }
 
@@ -102,6 +143,30 @@ impl Fixture {
         self.conn.operator(configure)
     }
 
+    /// An S3 builder with the fixture's settings, to extend and build the way production code
+    /// does: `Operator::new(s3.s3().root("/app"))`. The operator uses OpenDAL's default HTTP
+    /// transport.
+    pub fn s3(&self) -> S3 {
+        self.conn.s3()
+    }
+
+    /// The fixture's settings as S3 configuration keys: `bucket`, `endpoint`, `region`,
+    /// `access_key_id`, `secret_access_key`, and `disable_config_load` / `disable_ec2_metadata`
+    /// so that nothing comes from the environment. For `Operator::via_iter("s3", s3.options())`,
+    /// or for code that reads these keys from its own configuration; add `root` as needed.
+    pub fn options(&self) -> Vec<(String, String)> {
+        self.conn.options()
+    }
+
+    /// The same settings as an OpenDAL URI, `s3://<bucket>?endpoint=…&region=…`, for
+    /// `Operator::from_uri` or an application that reads a storage URI.
+    pub fn uri(&self) -> String {
+        let query = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(self.conn.options().into_iter().filter(|(k, _)| k != "bucket"))
+            .finish();
+        format!("s3://{}?{query}", self.conn.bucket)
+    }
+
     /// The server, for snapshots, the clock and the request log.
     pub fn server(&self) -> &fakes3::Server {
         &self.server
@@ -109,6 +174,21 @@ impl Fixture {
 
     pub fn bucket(&self) -> &str {
         &self.conn.bucket
+    }
+
+    /// `http://127.0.0.1:<port>`.
+    pub fn endpoint(&self) -> &str {
+        &self.conn.endpoint
+    }
+
+    /// The default account's access key, which the fixture's settings sign with.
+    pub fn access_key_id(&self) -> &str {
+        &self.conn.access_key
+    }
+
+    /// The default account's secret key.
+    pub fn secret_access_key(&self) -> &str {
+        &self.conn.secret_key
     }
 
     /// Clears the server (buckets, objects, uploads, the request log and the clock; snapshots

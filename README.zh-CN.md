@@ -116,12 +116,14 @@ server.shutdown().await;
 
 ### OpenDAL
 
-[`fakes3-opendal`](bindings/opendal/README.md) 在进程内起一个服务器、建好 bucket，返回一个走 OpenDAL 真实 S3 服务的
-[OpenDAL](https://opendal.apache.org) `Operator`。和 OpenDAL 的 `memory` 服务不同，它有 ETag、版本、分段上传和 S3 的条件写：
+[`fakes3-opendal`](bindings/opendal/README.md) 在进程内起一个服务器并建好 bucket，给 [OpenDAL](https://opendal.apache.org) 用。
+对 OpenDAL 来说它就是普通的 S3：可以直接拿一个现成的 `Operator`，也可以把它的 S3 配置（URI、配置键值或 S3 builder）交给你自己的代码，
+让代码像生产环境一样自己构建 operator。和 OpenDAL 的 `memory` 服务不同，它有 ETag、版本、分段上传、复制、预签名 URL 和 S3 的条件写：
 
 ```rust
 let s3 = fakes3_opendal::Fixture::start().await?;
 s3.operator().write("hello.txt", "hi").await?;
+let op = opendal::Operator::from_uri(s3.uri())?; // "s3://test?endpoint=…"，和生产配置的写法一样
 ```
 
 ### 独立二进制

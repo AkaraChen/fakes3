@@ -126,13 +126,16 @@ that are already open keep being served until the client closes them. See
 
 ### OpenDAL
 
-[`fakes3-opendal`](bindings/opendal/README.md) hands you an [OpenDAL](https://opendal.apache.org)
-`Operator` on OpenDAL's real S3 service, backed by an in-process server and a fresh bucket. Unlike
-OpenDAL's `memory` service, it has ETags, versions, multipart uploads and S3's conditional writes:
+[`fakes3-opendal`](bindings/opendal/README.md) starts an in-process server with a fresh bucket for
+[OpenDAL](https://opendal.apache.org). To OpenDAL it is plain S3: take a ready `Operator`, or hand
+your own code the fixture's S3 settings (a URI, configuration keys or an S3 builder) so it builds its
+operator the way it does in production. Unlike OpenDAL's `memory` service, you get ETags, versions,
+multipart uploads, copies, presigned URLs and S3's conditional writes:
 
 ```rust
 let s3 = fakes3_opendal::Fixture::start().await?;
 s3.operator().write("hello.txt", "hi").await?;
+let op = opendal::Operator::from_uri(s3.uri())?; // "s3://test?endpoint=…", as production config
 ```
 
 ### Standalone binary
