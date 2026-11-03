@@ -67,7 +67,7 @@ class Server:
         self.port = free_port()
         self.data = tempfile.mkdtemp(prefix=f"s3bench-{name}-", dir=SCRATCH)
         probe = list_buckets_probe(self.port)
-        t0 = time.monotonic()
+        t0 = time.perf_counter()
         cmd = [str(c) for c in command(name, self.port, self.data)]
         self.proc = subprocess.Popen(cmd, env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.procs = []
@@ -139,9 +139,9 @@ def measure(name, fn):
         time.sleep(1)
         idle = s.rss()
         with PeakRss(s) as peak:
-            c0, t0 = s.cpu_sec(), time.monotonic()
+            c0, t0 = s.cpu_sec(), time.perf_counter()
             result = fn(s.port)
-            wall, cpu = time.monotonic() - t0, s.cpu_sec() - c0
+            wall, cpu = time.perf_counter() - t0, s.cpu_sec() - c0
         mib = 1 << 20
         result.update(
             server_cpu_sec=cpu,
