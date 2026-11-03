@@ -42,7 +42,7 @@ Returns `Promise<FakeS3Server>`. Every option is optional:
 | `bucketDefaults` | `"legacy"` | Settings new buckets start with: `"legacy"`, or `"aws"` for what AWS applies today (ACLs disabled, Block Public Access on, SSE-S3, SSE-C blocked) |
 | `memoryLimit` | `"auto"` | Cap on object data: bytes, `"512MiB"`, `"2GiB"`, `"unlimited"`, or `"auto"` (75% of the container's or machine's memory). Writes past it fail with HTTP 507 |
 | `domains` | none | Base domains for virtual-host addressing (`<bucket>.<domain>`); path-style always works |
-| `inlineThreshold` | `1048576` | Objects at or above this many bytes are stored in a `memfd` instead of on the heap |
+| `inlineThreshold` | `1048576` | On Linux, objects at or above this many bytes are stored in a `memfd` instead of on the heap |
 | `requestLog` / `requestLogCapacity` | `true` / `10000` | Whether to record requests for `server.requests`, and how many to keep |
 
 ## `FakeS3Server`
@@ -102,10 +102,11 @@ your system:
 | `fakes3-sdk-linux-arm64-gnu` | Linux arm64, glibc ≥ 2.35 |
 | `fakes3-sdk-linux-x64-musl` | Linux x64, musl (Alpine) |
 | `fakes3-sdk-linux-arm64-musl` | Linux arm64, musl (Alpine) |
+| `fakes3-sdk-darwin-arm64` | macOS on Apple silicon |
+| `fakes3-sdk-darwin-x64` | macOS on Intel |
+| `fakes3-sdk-win32-x64-msvc` | Windows x64 |
 
-Node.js 18 or later. There are no prebuilt packages for macOS and Windows yet (fakes3 itself runs there);
-on those systems, start the [native binary](../../README.md#standalone-binary) or the Docker image
-`ghcr.io/akarachen/fakes3` instead.
+Node.js 18 or later.
 
 ## Security
 

@@ -91,7 +91,7 @@ await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
 await server.stop();
 ```
 
-预编译产物覆盖 Linux 的 x64 和 arm64，glibc 和 musl（Alpine）都有，需要 Node.js 18 或更新版本。
+预编译产物覆盖 Linux 的 x64 和 arm64（glibc 和 musl（Alpine）都有）、Apple silicon 和 Intel 的 macOS，以及 x64 的 Windows，需要 Node.js 18 或更新版本。
 全部选项和方法见[包的 README](bindings/node/README.zh-CN.md)。
 
 ### Rust（进程内）
@@ -319,7 +319,7 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认保留旧行为�
 | --- | --- |
 | Docker 镜像 | `linux/amd64`、`linux/arm64`（在 macOS 和 Windows 上可以用 Docker Desktop 运行） |
 | 二进制 | x86_64 和 aarch64 Linux（静态链接）、Apple silicon 和 Intel 的 macOS、x86_64 Windows |
-| Node.js 包 | Linux x64 和 arm64，glibc 和 musl，Node.js ≥ 18 |
+| Node.js 包 | Linux x64 和 arm64（glibc 和 musl）、macOS arm64 和 x64、Windows x64，Node.js ≥ 18 |
 | Rust 库 | Linux、macOS、Windows |
 
 CI 在 Linux、macOS 和 Windows 上都跑完整的测试。各平台行为一致，区别只在大对象放在哪里（Linux 上是 `memfd`，其他系统放在堆上）、

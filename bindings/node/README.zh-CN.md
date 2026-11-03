@@ -34,7 +34,7 @@ await server.stop();
 | `accessKey` / `secretKey` | `fakes3` / `fakes3secret` | 访问凭证，只在 `auth: true` 时用于校验 |
 | `users` | 无 | 更多账户 `[{ name, accessKey, secretKey, accountId?, canonicalId? }]`，见[多用户](../../docs/multi-user.md)；`server.users` 返回完整列表（含生成的 id） |
 | `auth` | `false` | 校验签名。默认不校验：任意 access key 和 secret 签名的请求都接受（身份由 access key 决定，没配置过的 key 是默认账户 `fakes3`，即 owner），未签名的是匿名请求（见[认证模式](../../docs/auth.md)）。原来的 `noAuth` 选项已删除，它现在就是默认行为 |
-| `inlineThreshold` | `1048576` | 达到这个大小的对象存进 memfd |
+| `inlineThreshold` | `1048576` | Linux 上达到这个大小的对象存进 memfd |
 | `requestLog` / `requestLogCapacity` | `true` / `10000` | 是否记录 S3 请求（见下面的控制面），以及最多保留多少条 |
 | `domains` | 无 | 虚拟主机寻址的基础域名（`<bucket>.<domain>`），path-style 始终可用 |
 | `bucketDefaults` | `"legacy"` | 新建 bucket 的初始设置：`"legacy"` 或 `"aws"`，见[新建 bucket 的默认值](../../docs/bucket-defaults.md) |
@@ -66,9 +66,9 @@ server.requests.clear();                // configure({ enabled, capacity }) 开�
 
 ## 平台
 
-预编译产物覆盖 Linux 的 x64 / arm64，glibc（≥ 2.35）和 musl（Alpine）都有，通过 `optionalDependencies` 里的
-`fakes3-sdk-linux-x64-gnu` 等平台包分发，需要 Node.js 18 或更新版本。macOS 和 Windows 还没有预编译包（fakes3 本身可以在这两个系统上运行），
-在这些系统上请启动[原生二进制](../../README.zh-CN.md#独立二进制)或者 Docker 镜像 `ghcr.io/akarachen/fakes3`。
+预编译产物覆盖 Linux 的 x64 / arm64（glibc ≥ 2.35 和 musl（Alpine）都有）、Apple silicon 和 Intel 的 macOS，以及 x64 的 Windows，
+通过 `optionalDependencies` 里的 `fakes3-sdk-linux-x64-gnu`、`fakes3-sdk-darwin-arm64`、`fakes3-sdk-win32-x64-msvc` 等平台包分发，
+需要 Node.js 18 或更新版本。
 
 ## 安全提示
 

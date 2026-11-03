@@ -98,8 +98,8 @@ await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
 await server.stop();
 ```
 
-Prebuilt for Linux x64 and arm64, on both glibc and musl (Alpine), with Node.js 18 or later. Every option
-and method is documented in the [package README](bindings/node/README.md).
+Prebuilt for Linux x64 and arm64 (glibc and musl/Alpine), macOS (Apple silicon and Intel) and Windows x64,
+with Node.js 18 or later. Every option and method is documented in the [package README](bindings/node/README.md).
 
 ### Rust, in-process
 
@@ -357,7 +357,7 @@ S3 Control. Website and notification *configuration* can be stored and read back
 | --- | --- |
 | Docker image | `linux/amd64`, `linux/arm64` (also runs under Docker Desktop on macOS and Windows) |
 | Binary | x86_64 and aarch64 Linux (static), macOS on Apple silicon and Intel, x86_64 Windows |
-| Node.js package | Linux x64 and arm64, glibc and musl, Node.js ≥ 18 |
+| Node.js package | Linux x64 and arm64 (glibc and musl), macOS arm64 and x64, Windows x64; Node.js ≥ 18 |
 | Rust library | Linux, macOS, Windows |
 
 CI runs the test suites on Linux, macOS and Windows. The behaviour is the same everywhere; what differs is

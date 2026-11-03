@@ -1,0 +1,4 @@
+# The Windows addon links the C runtime statically, so it loads without a Visual C++ redistributable
+# installed.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
