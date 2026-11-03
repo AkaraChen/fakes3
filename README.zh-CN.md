@@ -22,7 +22,8 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 - **快到可以每个测试起一个。** 容器启动后约 1 ms 就绪，空闲内存 9 MiB。一个 6,500 个请求的测试套件跑完只要 0.93 s，
   MinIO 要 3.4 s，LocalStack 要 7.7 s。
 - **行为和 AWS 一致。** 24 个 SDK 的兼容矩阵通过 99.1%；[ceph/s3-tests](https://github.com/ceph/s3-tests) 里 AWS 自己能通过的用例，
-  fakes3 通过 85.8%，LocalStack 59.1%，MinIO 52.0%。
+  fakes3 通过 85.8%，LocalStack 59.1%，MinIO 52.0%。[Apache OpenDAL](https://opendal.apache.org) 的 S3 behavior tests
+  不关闭任何能力也能全部通过（[conformance/OPENDAL.md](conformance/OPENDAL.md)）。
 - **为测试设计。** 测试之间重置状态、保存和回滚测试数据、拨动虚拟时钟让预签名 URL 过期或触发 Lifecycle 规则、
   用请求日志断言代码发了哪些请求。
 - **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、静态链接的 Linux 二进制，或者 GitHub Action。
@@ -287,7 +288,7 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认保留旧行为�
 - **版本控制**：Enabled / Suspended、删除标记、null version、按版本读取和删除
 - **Object Lock**：GOVERNANCE / COMPLIANCE 保留期、Legal Hold、bucket 默认保留期、绕过 governance
 - **条件请求**：`If-Match`、`If-None-Match`（包括 PUT、CopyObject 和 CompleteMultipartUpload 的条件写入）、`If-Modified-Since`、
-  `If-Unmodified-Since`，以及 CopySource 的条件头
+  `If-Unmodified-Since`、CopySource 的条件头，以及条件删除（DeleteObject 的 `If-Match`、DeleteObjects 里的 `<ETag>`）
 - **校验和**：CRC32、CRC32C、CRC64NVME、SHA-1、SHA-256，header 和 aws-chunked trailer 两种方式，分段上传支持 COMPOSITE 和 FULL_OBJECT；
   默认 CRC64NVME，和现在的 AWS 一致
 - **签名**：SigV4（header、预签名 URL、带 trailer 的流式上传）、SigV2、POST policy 表单上传
@@ -343,6 +344,7 @@ fakes3 是给测试用的，**不要把它暴露在不可信的网络上，也�
 | [docs/archive-storage.md](docs/archive-storage.md) | Glacier、Deep Archive、Intelligent-Tiering、恢复、Lifecycle 转换 |
 | [docs/select.md](docs/select.md) | S3 Select 的覆盖范围 |
 | [docs/benchmarks.md](docs/benchmarks.md) | SDK 兼容矩阵、ceph/s3-tests 和性能测试结果 |
+| [conformance/OPENDAL.md](conformance/OPENDAL.md) | 用 Apache OpenDAL 的 behavior tests 测 fakes3 |
 | [docs/s3s-workarounds.md](docs/s3s-workarounds.md) | fakes3 在哪些地方修正了 s3s 以对齐 AWS |
 | [docs/development.md](docs/development.md) | 构建、测试、CI 和发布 |
 

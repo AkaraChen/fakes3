@@ -47,8 +47,6 @@
       offset 必须等于当前大小（`InvalidWriteOffset`），每次追加算一个 part（上限 10000，`TooManyParts`），
       ETag 是 `<摘要>-<part 数>`，FULL_OBJECT 的 CRC 会接着算，SHA 和 composite 校验和接不上就去掉；
       保留原对象的元数据、标签、ACL、存储类型和加密方式，SSE-C 的 key 不一致返回 `EncryptionTypeMismatch`
-- [ ] HeadObject 的 `response-*` 覆盖参数（GetObject 已支持）；DeleteObjects 里 `<Object>` 的 `<ETag>` 条件
-      （DeleteObject 的 If-Match 已支持）。OpenDAL 的 behavior tests 还剩这 4 个失败
 - [x] 对象和 bucket 的 Tagging
 - [x] ACL（canned / grant / 请求体）、OwnershipControls、PublicAccessBlock、Bucket Policy 求值（匿名访问 + 显式 Deny）、
       CORS 预检与响应头、Lifecycle（按服务端时钟惰性执行）、Website 与 Notification 的配置读写
@@ -86,6 +84,7 @@
 - [x] ceph/s3-tests 里“便宜”的一批修复（请求 id、对已有 bucket 再次 CreateBucket 返回 200、`?partNumber=` 的分段校验和、ListObjects 字段、Object Lock 边角、Content-MD5、
       `x-amz-expected-bucket-owner` 等，见 [conformance/S3-TESTS.md](conformance/S3-TESTS.md)）：AWS 适用的 816 个里通过 475 → 513
   - 剩下的 `test_copy_part_enc[…-sse-c-…]`（SSE-C 分段上传的 Complete 不带 key 是否应该 400，AWS 行为未确认）、`test_object_read_unreadable`（C1 控制字符的 key）没动
-- [x] 接入 Apache OpenDAL 的 behavior tests（`conformance/opendal/run.sh`，基线和分类见 [conformance/OPENDAL.md](conformance/OPENDAL.md)）
+- [x] 接入 Apache OpenDAL 的 behavior tests（`conformance/opendal/run.sh`，结果见 [conformance/OPENDAL.md](conformance/OPENDAL.md)）：
+      四种配置全部通过，不用关闭任何能力（v0.1.1 时 12 个失败，#7、#8 补齐）
 - [ ] 接入 MinIO mint
 - [ ] 对真实 AWS S3 做差分测试（录制和回放）

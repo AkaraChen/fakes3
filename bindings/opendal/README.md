@@ -38,7 +38,9 @@ Like fakes3 itself, it builds on Linux only, and the build compiles OpenSSL, so 
 
 - **The real S3 code path.** Signing, XML parsing, multipart uploads, conditional requests and the
   mapping of S3 errors to `opendal::ErrorKind` all run, against a server that passes most of
-  [ceph/s3-tests](https://github.com/AkaraChen/fakes3#why-fakes3).
+  [ceph/s3-tests](https://github.com/AkaraChen/fakes3#why-fakes3) and every one of
+  [OpenDAL's own S3 behavior tests](https://github.com/AkaraChen/fakes3/blob/main/conformance/OPENDAL.md),
+  with no capability switched off.
 - **Isolation.** Every fixture has its own server and port. The operator never reads AWS settings
   from the environment, `~/.aws` or instance metadata, so credentials on your machine cannot leak
   into a test.
