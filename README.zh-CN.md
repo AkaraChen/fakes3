@@ -2,6 +2,7 @@
 
 [![ci](https://github.com/AkaraChen/fakes3/actions/workflows/ci.yml/badge.svg)](https://github.com/AkaraChen/fakes3/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/fakes3-sdk)](https://www.npmjs.com/package/fakes3-sdk)
+[![crates.io](https://img.shields.io/crates/v/fakes3)](https://crates.io/crates/fakes3)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 [English](README.md) | 简体中文
@@ -94,11 +95,11 @@ await server.stop();
 
 ### Rust（进程内）
 
-还没有发布到 crates.io，用 git 依赖：
+把 [`fakes3`](https://crates.io/crates/fakes3) 加为 dev-dependency。只能在 Linux 上构建，构建时会编译 OpenSSL，需要 `perl` 和 `make`：
 
 ```toml
 [dev-dependencies]
-fakes3 = { git = "https://github.com/AkaraChen/fakes3", tag = "v0.1.0" }
+fakes3 = "0.1"
 ```
 
 ```rust
@@ -121,7 +122,7 @@ curl -L https://github.com/AkaraChen/fakes3/releases/latest/download/fakes3-x86_
 ./fakes3-x86_64-unknown-linux-musl/fakes3 --port 0   # 0 表示随机选一个空闲端口，实际地址打印到 stdout
 ```
 
-从源码构建：`cargo build --release`。构建时会编译 OpenSSL，需要 `perl` 和 `make`。
+从源码构建：`cargo install fakes3 --locked`，或者在仓库里 `cargo build --release`。构建时会编译 OpenSSL，需要 `perl` 和 `make`。
 
 ## Testcontainers
 

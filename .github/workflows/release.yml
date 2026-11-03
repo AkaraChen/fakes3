@@ -1,12 +1,14 @@
 name: release
 
 # Builds the Alpine image for linux/amd64 and linux/arm64 (each on a native runner) and the static
-# musl binaries from the same Dockerfile.
+# musl binaries from the same Dockerfile, and packages the crate.
 #
 # Publishing only happens on an explicit trigger:
-#   - pushing a `v*` tag: pushes ghcr.io/akarachen/fakes3 and attaches the binaries to a GitHub release
+#   - pushing a `v*` tag: pushes ghcr.io/akarachen/fakes3, attaches the binaries to a GitHub release
+#     and publishes the crate to crates.io
 #   - manual dispatch with `publish: true`: pushes the image only (tagged with the commit sha)
-# Anything else is a dry run: the images are built and smoke-tested, nothing leaves the runner.
+# Anything else is a dry run: the images are built and smoke-tested, the crate is packaged and
+# verified, nothing leaves the runner.
 on:
   push:
     tags: ["v*"]
@@ -221,3 +223,56 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes
           fi
+
+  # Publishes the crate through crates.io trusted publishing: the job trades its OIDC token for a
+  # short-lived crates.io token, so the repository holds no secret. The trusted publisher is bound
+  # to this file name; see docs/development.md for the one-time setup.
+  crate:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Only a tag publishes, and only once: re-running a release whose crate already went out must
+      # not fail on the upload.
+      - name: Decide whether to publish
+        id: mode
+        run: |
+          if [[ "$GITHUB_REF" != refs/tags/v* ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version=${GITHUB_REF_NAME#v}
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -A "fakes3 release workflow (https://github.com/$GITHUB_REPOSITORY)" \
+            "https://crates.io/api/v1/crates/fakes3/$version")
+          case "$code" in
+            200)
+              echo "fakes3 $version is already on crates.io"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            404) echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::crates.io answered HTTP $code"
+              exit 1
+              ;;
+          esac
+
+      - name: Package and verify
+        if: steps.mode.outputs.publish != 'true'
+        run: cargo publish --dry-run --locked
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+        if: steps.mode.outputs.publish == 'true'
+
+      - name: Publish
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --locked

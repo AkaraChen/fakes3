@@ -8,6 +8,13 @@ repository = "https://github.com/AkaraChen/fakes3"
 readme = "README.md"
 keywords = ["s3", "fake", "mock", "testing", "in-memory"]
 categories = ["development-tools::testing", "web-programming::http-server"]
+# The crate ships the library, the CLI, the examples and the tests; benchmarks, the SDK matrix and
+# the Node binding stay in the repository.
+include = ["/src", "/examples", "/tests", "/README.md", "/LICENSE"]
+
+# Large objects live in Linux memfds, so the crate only builds on Linux.
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 async-trait = "0.1.92"
