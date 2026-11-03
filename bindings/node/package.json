@@ -26,6 +26,7 @@
   },
   "napi": {
     "binaryName": "fakes3",
+    "packageName": "@akarachen/fakes3-sdk",
     "targets": [
       "x86_64-unknown-linux-gnu",
       "aarch64-unknown-linux-gnu",

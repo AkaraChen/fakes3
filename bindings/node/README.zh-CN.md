@@ -67,7 +67,7 @@ server.requests.clear();                // configure({ enabled, capacity }) 开�
 ## 平台
 
 预编译产物覆盖 Linux 的 x64 / arm64（glibc ≥ 2.35 和 musl（Alpine）都有）、Apple silicon 和 Intel 的 macOS，以及 x64 的 Windows，
-通过 `optionalDependencies` 里的 `fakes3-sdk-linux-x64-gnu`、`fakes3-sdk-darwin-arm64`、`fakes3-sdk-win32-x64-msvc` 等平台包分发，
+通过 `optionalDependencies` 里的 `@akarachen/fakes3-sdk-linux-x64-gnu`、`@akarachen/fakes3-sdk-darwin-arm64`、`@akarachen/fakes3-sdk-win32-x64-msvc` 等平台包分发，
 需要 Node.js 18 或更新版本。
 
 ## 安全提示

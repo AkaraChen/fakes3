@@ -9,15 +9,17 @@
 # Usage: npm login && bindings/node/scripts/claim-npm-names.sh
 set -euo pipefail
 
+# The platform packages live in the publisher's scope (napi.packageName in package.json): npm's spam
+# detection refused the unscoped `fakes3-sdk-win32-x64-msvc`.
 NAMES=(
   fakes3-sdk
-  fakes3-sdk-linux-x64-gnu
-  fakes3-sdk-linux-arm64-gnu
-  fakes3-sdk-linux-x64-musl
-  fakes3-sdk-linux-arm64-musl
-  fakes3-sdk-darwin-arm64
-  fakes3-sdk-darwin-x64
-  fakes3-sdk-win32-x64-msvc
+  @akarachen/fakes3-sdk-linux-x64-gnu
+  @akarachen/fakes3-sdk-linux-arm64-gnu
+  @akarachen/fakes3-sdk-linux-x64-musl
+  @akarachen/fakes3-sdk-linux-arm64-musl
+  @akarachen/fakes3-sdk-darwin-arm64
+  @akarachen/fakes3-sdk-darwin-x64
+  @akarachen/fakes3-sdk-win32-x64-msvc
 )
 
 npm whoami >/dev/null || { echo "run 'npm login' first" >&2; exit 1; }

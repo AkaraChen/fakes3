@@ -98,13 +98,13 @@ your system:
 
 | Package | Platform |
 | --- | --- |
-| `fakes3-sdk-linux-x64-gnu` | Linux x64, glibc ≥ 2.35 |
-| `fakes3-sdk-linux-arm64-gnu` | Linux arm64, glibc ≥ 2.35 |
-| `fakes3-sdk-linux-x64-musl` | Linux x64, musl (Alpine) |
-| `fakes3-sdk-linux-arm64-musl` | Linux arm64, musl (Alpine) |
-| `fakes3-sdk-darwin-arm64` | macOS on Apple silicon |
-| `fakes3-sdk-darwin-x64` | macOS on Intel |
-| `fakes3-sdk-win32-x64-msvc` | Windows x64 |
+| `@akarachen/fakes3-sdk-linux-x64-gnu` | Linux x64, glibc ≥ 2.35 |
+| `@akarachen/fakes3-sdk-linux-arm64-gnu` | Linux arm64, glibc ≥ 2.35 |
+| `@akarachen/fakes3-sdk-linux-x64-musl` | Linux x64, musl (Alpine) |
+| `@akarachen/fakes3-sdk-linux-arm64-musl` | Linux arm64, musl (Alpine) |
+| `@akarachen/fakes3-sdk-darwin-arm64` | macOS on Apple silicon |
+| `@akarachen/fakes3-sdk-darwin-x64` | macOS on Intel |
+| `@akarachen/fakes3-sdk-win32-x64-msvc` | Windows x64 |
 
 Node.js 18 or later.
 
