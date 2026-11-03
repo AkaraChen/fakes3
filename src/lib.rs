@@ -71,6 +71,8 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 pub use blocking::BlockingServer;
+#[doc(hidden)]
+pub use blocking::worker_threads;
 pub use bucket_defaults::BucketDefaults;
 pub use clock::{Clock, OutOfRange, parse_duration};
 pub use control::{Control, ControlError, ResetOptions, SnapshotInfo};

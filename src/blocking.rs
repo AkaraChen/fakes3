@@ -33,7 +33,7 @@ impl Server {
     /// // The server stops when `server` goes out of scope.
     /// ```
     pub fn start_blocking(config: Config) -> io::Result<BlockingServer> {
-        let threads = std::thread::available_parallelism().map_or(2, |n| n.get().min(4));
+        let threads = worker_threads().min(4);
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(threads)
             .thread_name("fakes3")
@@ -94,4 +94,14 @@ impl Drop for BlockingServer {
         // to do in async code.
         runtime.shutdown_background();
     }
+}
+
+/// Worker threads for a runtime fakes3 builds for itself (the CLI's, and [`Server::start_blocking`]'s
+/// up to its cap): one per core, except on Windows. Waking a parked worker is expensive there, and
+/// half the cores (at least two) serve 25-35% more small requests than all of them, with a third less
+/// CPU per request, while leaving the rest to the client; see docs/benchmarks.md.
+#[doc(hidden)]
+pub fn worker_threads() -> usize {
+    let cores = std::thread::available_parallelism().map_or(2, |n| n.get());
+    if cfg!(windows) { (cores / 2).max(2) } else { cores }
 }

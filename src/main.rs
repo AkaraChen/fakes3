@@ -117,11 +117,15 @@ fn main() -> std::io::Result<std::process::ExitCode> {
         bucket_defaults: opt.bucket_defaults,
         fast_list: !opt.no_fast_list,
     };
-    tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(async {
-        let server = fakes3::Server::start(config).await?;
-        println!("{}", server.endpoint());
-        std::io::stdout().flush()?;
-        server.wait().await;
-        Ok(std::process::ExitCode::SUCCESS)
-    })
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(fakes3::worker_threads())
+        .enable_all()
+        .build()?
+        .block_on(async {
+            let server = fakes3::Server::start(config).await?;
+            println!("{}", server.endpoint());
+            std::io::stdout().flush()?;
+            server.wait().await;
+            Ok(std::process::ExitCode::SUCCESS)
+        })
 }
