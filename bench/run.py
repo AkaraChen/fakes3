@@ -182,13 +182,17 @@ def native_startup(n):
     return res
 
 
-def warp(server, args, duration):
+# warp as a container on the host network; bench/native.py passes the binary instead.
+WARP_CMD = ["docker", "run", "--rm", "--network", "host", "minio/warp:latest"]
+
+
+def warp(p, args, duration, warp_cmd=WARP_CMD, cwd=None):
     cmd = [
-        "docker", "run", "--rm", "--network", "host", "minio/warp:latest", *args,
-        "--host", f"127.0.0.1:{port(server)}", "--access-key", AK, "--secret-key", SK,
+        *warp_cmd, *args,
+        "--host", f"127.0.0.1:{p}", "--access-key", AK, "--secret-key", SK,
         "--lookup", "path", "--duration", duration, "--no-color", "--json",
     ]
-    r = subprocess.run(cmd, text=True, capture_output=True, timeout=1200)
+    r = subprocess.run(cmd, text=True, capture_output=True, timeout=1200, cwd=cwd)
     out = r.stdout
     i = out.find("{")
     if r.returncode != 0 or i < 0:
@@ -319,7 +323,7 @@ def main():
             if not want(w):
                 continue
             try:
-                r[w] = measure(s, lambda: {"ops": summarize_warp(warp(s, args, dur[0] if dur else a.duration), op)})
+                r[w] = measure(s, lambda: {"ops": summarize_warp(warp(port(s), args, dur[0] if dur else a.duration), op)})
             except Exception as e:  # noqa: BLE001
                 r[w] = {"error": str(e)[-500:]}
                 stop(s)

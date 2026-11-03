@@ -34,7 +34,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # The vendored OpenSSL build needs a native Windows Perl, not the MSYS one that comes with Git.
       - if: runner.os == 'Windows'
-        run: echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> $env:GITHUB_ENV
+        shell: bash
+        run: printf 'OPENSSL_SRC_PERL=%s\n' 'C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
       - if: runner.os == 'Linux'
         run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
