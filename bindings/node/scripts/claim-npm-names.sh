@@ -15,6 +15,9 @@ NAMES=(
   fakes3-sdk-linux-arm64-gnu
   fakes3-sdk-linux-x64-musl
   fakes3-sdk-linux-arm64-musl
+  fakes3-sdk-darwin-arm64
+  fakes3-sdk-darwin-x64
+  fakes3-sdk-win32-x64-msvc
 )
 
 npm whoami >/dev/null || { echo "run 'npm login' first" >&2; exit 1; }

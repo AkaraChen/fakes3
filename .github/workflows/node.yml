@@ -1,7 +1,7 @@
 name: node
 
-# Builds the Node.js addon (bindings/node) for four Linux targets and tests each build with
-# @aws-sdk/client-s3. Runs on changes to the binding or the library.
+# Builds the Node.js addon (bindings/node) for Linux (glibc and musl), macOS and Windows targets and
+# tests each build with @aws-sdk/client-s3. Runs on changes to the binding or the library.
 #
 # npm publishing only happens on an explicit trigger: a `v*` tag push, or a manual dispatch with
 # `publish: true`. Otherwise the publish job runs `npm publish --dry-run`, which checks the package
@@ -45,11 +45,18 @@ jobs:
           - target: aarch64-unknown-linux-musl
             runner: ubuntu-24.04-arm
             alpine: true
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
     name: build (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     defaults:
       run:
+        shell: bash
         working-directory: bindings/node
     steps:
       - uses: actions/checkout@v7
@@ -67,6 +74,7 @@ jobs:
         if: ${{ !matrix.alpine }}
         with:
           workspaces: bindings/node
+      - uses: ./.github/actions/windows-openssl
 
       - name: Build and test
         if: ${{ !matrix.alpine }}
@@ -151,8 +159,8 @@ jobs:
           npx napi artifacts -d artifacts
           find npm -name '*.node'
 
-      # npm trusted publishing (OIDC, no token): needs npm >= 11.5.1. Each of the five packages
-      # (fakes3-sdk and its four platform packages) must have this repository + `node.yml`
+      # npm trusted publishing (OIDC, no token): needs npm >= 11.5.1. Each of the eight packages
+      # (fakes3-sdk and its seven platform packages) must have this repository + `node.yml`
       # registered as a trusted publisher on npmjs.com; see bindings/node/PUBLISHING.md.
       - run: npm install -g npm@^11.5.1
 
