@@ -305,6 +305,10 @@ let (requests, total) = server.requests(&fakes3::RequestFilter {
     ..Default::default()
 });
 
+// 进程内的客户端不一定能建 bucket（OpenDAL 就没有 bucket 接口），所以 Server 上也能直接建：
+server.create_bucket("data")?;                     // 默认账户所有，和不带选项的 CreateBucket 一样套用 bucket 默认值
+server.enable_versioning("data")?;
+
 // 其余操作（reset 的选项、快照列表和删除、请求日志开关）在 server.control() 上：
 server.control().reset_with(fakes3::ResetOptions { snapshots: true, ..Default::default() });
 server.control().delete_snapshot("seeded")?;

@@ -589,3 +589,48 @@ async fn stats_endpoint_and_cli_report_memory() {
         "{out}"
     );
 }
+
+#[tokio::test]
+async fn rust_api_creates_buckets_like_create_bucket() {
+    let s = start_with(Config {
+        bucket_defaults: fakes3::BucketDefaults::Aws,
+        users: vec!["alt:ALTKEY:ALTSECRET".parse().unwrap()],
+        ..Config::default()
+    })
+    .await;
+    s.create_bucket("made").unwrap();
+    // A bucket the default account already has is left alone, as CreateBucket does in us-east-1.
+    put_object(&s, "made", "k", "v").await;
+    s.create_bucket("made").unwrap();
+    assert_eq!(send(&s, "GET", "/made/k", "").await.body, "v");
+    // The bucket defaults apply, and the default account owns the bucket.
+    let own = send(&s, "GET", "/made?ownershipControls", "").await.body;
+    assert!(own.contains("BucketOwnerEnforced"), "{own}");
+    let list = send(&s, "GET", "/", "").await.body;
+    assert!(list.contains("<Name>made</Name>"), "{list}");
+
+    let taken = common::send(s.addr(), common::req("PUT", "/taken").signed_by("ALTKEY", "ALTSECRET")).await;
+    assert_eq!(taken.status, 200);
+    assert!(matches!(s.create_bucket("taken"), Err(fakes3::ControlError::Conflict(_))));
+    assert!(matches!(s.create_bucket("_fakes3"), Err(fakes3::ControlError::BadRequest(_))));
+    assert!(matches!(s.create_bucket("Upper"), Err(fakes3::ControlError::BadRequest(_))));
+    s.shutdown().await;
+}
+
+#[tokio::test]
+async fn rust_api_enables_versioning() {
+    let s = start().await;
+    assert!(matches!(s.enable_versioning("missing"), Err(fakes3::ControlError::NotFound(_))));
+    s.create_bucket("ver").unwrap();
+    assert!(!send(&s, "GET", "/ver?versioning", "").await.body.contains("<Status>"));
+    s.enable_versioning("ver").unwrap();
+    assert!(
+        send(&s, "GET", "/ver?versioning", "")
+            .await
+            .body
+            .contains("<Status>Enabled</Status>")
+    );
+    let put = send(&s, "PUT", "/ver/k", "1").await;
+    assert!(put.headers.contains_key("x-amz-version-id"));
+    s.shutdown().await;
+}

@@ -15,11 +15,14 @@
 
 use std::fmt;
 use std::str::FromStr;
+use std::time::SystemTime;
 
 use s3s::dto::{BlockedEncryptionTypes, EncryptionType, ServerSideEncryption};
 
 use crate::bucket_config::{BucketConfig, Ownership, PublicAccessBlock};
 use crate::objext::EncryptionRule;
+use crate::store::Bucket;
+use crate::users::UserId;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BucketDefaults {
@@ -36,9 +39,18 @@ impl BucketDefaults {
         }
     }
 
+    /// An empty bucket in the state CreateBucket leaves it before the request's own options
+    /// (`x-amz-object-ownership`, ACL headers, Object Lock) are applied.
+    pub(crate) fn new_bucket(self, now: SystemTime, owner: UserId) -> Bucket {
+        let bucket = Bucket::new(now, owner);
+        self.apply(&bucket.config);
+        bucket.cfg.set_encryption(self.default_encryption());
+        bucket
+    }
+
     /// Sets the configuration documents a freshly created bucket has before the request's own
     /// options (`x-amz-object-ownership`, ACL headers) are applied.
-    pub(crate) fn apply(self, config: &BucketConfig) {
+    fn apply(self, config: &BucketConfig) {
         if self == Self::Aws {
             *config.ownership.write() = Some(Ownership::Enforced);
             *config.public_access_block.write() = Some(PublicAccessBlock {

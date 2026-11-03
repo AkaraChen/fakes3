@@ -878,7 +878,7 @@ dependencies = [
 
 [[package]]
 name = "fakes3"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "aws-sdk-s3",

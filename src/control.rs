@@ -21,8 +21,8 @@ use crate::clock::{self, Clock};
 use crate::memory::MemoryTracker;
 use crate::reqlog::{RequestFilter, RequestLog, RequestRecord, StatusFilter};
 use crate::snapshot::{Counts, StoreSnapshot};
-use crate::store::Store;
-use crate::users::Users;
+use crate::store::{Store, Versioning};
+use crate::users::{UserId, Users};
 
 pub const PREFIX: &str = "/_fakes3";
 
@@ -194,6 +194,33 @@ impl Control {
         };
         self.store.restore(&snap);
         Ok(info)
+    }
+
+    /// Creates an empty bucket owned by the default account, in the state a CreateBucket request
+    /// without options leaves it, so the bucket defaults apply. It is for in-process tests whose S3
+    /// client cannot create buckets (OpenDAL has no bucket API). A bucket the default account
+    /// already has is left as it is.
+    pub fn create_bucket(&self, name: &str) -> Result<(), ControlError> {
+        if !s3s::path::check_bucket_name(name) {
+            return Err(ControlError::BadRequest(format!("invalid bucket name {name:?}")));
+        }
+        let bucket = self.bucket_defaults.new_bucket(self.clock.now(), UserId::DEFAULT);
+        if self.store.add_bucket(name.to_owned(), bucket) {
+            Ok(())
+        } else {
+            Err(ControlError::Conflict(format!("bucket {name:?} belongs to another account")))
+        }
+    }
+
+    /// Turns versioning on for a bucket, as PutBucketVersioning with `Enabled` does, minus the MFA
+    /// Delete check.
+    pub fn enable_versioning(&self, bucket: &str) -> Result<(), ControlError> {
+        let b = self
+            .store
+            .bucket(bucket)
+            .ok_or_else(|| ControlError::NotFound(format!("no bucket named {bucket:?}")))?;
+        *b.versioning.write() = Versioning::Enabled;
+        Ok(())
     }
 
     pub fn snapshots(&self) -> Vec<SnapshotInfo> {
