@@ -110,6 +110,10 @@ runner 每次分到的 CPU 不一样，不同系统之间的绝对值不能直�
 | 64 MiB PUT，4 并发 | 856 MiB/s（1.2×，4.5×） | 454 MiB/s（1.3×，3.1×） | 797 MiB/s（2.8×，22×） |
 | 写入 551 MiB 数据集后的额外内存 | –² | 63 MiB | 42 MiB |
 
+启动时间是从启动进程到第一个带签名的 ListBuckets 返回 200，探测本身在 Windows 和 macOS 上有十几毫秒的开销。直接计时
+`fakes3 --port 0` 从启动到打印出监听地址（[运行](https://github.com/AkaraChen/fakes3/actions/runs/41606354429)），Windows 上是 5.9 ms
+（其中进程创建 5.5 ms：`fakes3 --version` 就要这么久），macOS 上是 10.4 ms。
+
 ¹ 这次运行里 moto 在 macOS 上每次启动都要 36 秒，前一次运行是 0.6 秒，原因没查。
 ² Linux 上大对象在 memfd 里，不计入进程的 RSS，这一项看上面的 Docker 测试。MinIO 的数据在磁盘上（Linux 上在 /dev/shm），也不计入。
 
