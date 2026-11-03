@@ -21,6 +21,10 @@ on:
       startup_runs:
         description: "Starts per server"
         default: "5"
+  # TEMPORARY: lets the branch run this before the workflow exists on main. Remove before merging.
+  push:
+    branches: [cross-platform-windows-macos]
+    paths: [.github/workflows/bench-native.yml]
 
 permissions:
   contents: read
@@ -31,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: ${{ fromJSON(inputs.runners) }}
+        runner: ${{ fromJSON(inputs.runners || '["ubuntu-24.04", "macos-15", "windows-2025"]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     defaults:
@@ -64,10 +68,10 @@ jobs:
 
       - name: Run benchmarks
         env:
-          SERVERS: ${{ inputs.servers }}
+          SERVERS: ${{ inputs.servers || 'fakes3,minio,moto' }}
           ONLY: ${{ inputs.only }}
-          DURATION: ${{ inputs.duration }}
-          STARTUP_RUNS: ${{ inputs.startup_runs }}
+          DURATION: ${{ inputs.duration || '15s' }}
+          STARTUP_RUNS: ${{ inputs.startup_runs || '5' }}
         run: |
           uv run bench/native.py \
             --servers "$SERVERS" \
