@@ -66,8 +66,9 @@ WORKLOADS = [w for w in os.environ.get("WORKLOADS", "small_get,small_get_c1,smal
 
 
 def cpu_sec(proc):
+    """(user + kernel, kernel) CPU seconds."""
     t = proc.cpu_times()
-    return t.user + t.system
+    return t.user + t.system, t.system
 
 
 def free_port():
@@ -99,7 +100,7 @@ def once(binary, wl):
             except OSError:
                 time.sleep(0.05)
         proc = psutil.Process(p.pid)
-        c0 = cpu_sec(proc)
+        (c0, k0) = cpu_sec(proc)
         # warp leaves its raw data in the working directory.
         with tempfile.TemporaryDirectory() as scratch:
             r = subprocess.run(
@@ -107,12 +108,13 @@ def once(binary, wl):
                  "--lookup", "path", "--duration", duration[0] if duration else DURATION, "--no-color", "--json"],
                 capture_output=True, text=True, check=True, cwd=scratch,
             )
-        cpu = cpu_sec(proc) - c0
+        (c1, k1) = cpu_sec(proc)
+        cpu, kernel = c1 - c0, k1 - k0
         d = json.loads(r.stdout[r.stdout.find("{"):])
         ops = sum(x["ops_per_sec"] for x in summarize_warp(d, op).values())
         total = sum(x["total_requests"] for k, x in d["by_op_type"].items() if op is None or k == op)
         # Server CPU also covers warp's preparation phase; per-op it is still comparable A vs B.
-        return ops, cpu / max(total, 1) * 1e6
+        return ops, cpu / max(total, 1) * 1e6, kernel / max(cpu, 1e-9)
     finally:
         p.kill()
         p.wait()
@@ -123,9 +125,9 @@ for rnd in range(ROUNDS):
     for wl in WORKLOADS:
         order = [("A", A), ("B", B)] if rnd % 2 == 0 else [("B", B), ("A", A)]
         for name, binary in order:
-            ops, cpu_us = once(binary, wl)
+            ops, cpu_us, kernel = once(binary, wl)
             res[(wl, name)].append((ops, cpu_us))
-            print(f"round {rnd} {wl} {name}: {ops:.0f} ops/s, {cpu_us:.1f} server-µs/op", flush=True)
+            print(f"round {rnd} {wl} {name}: {ops:.0f} ops/s, {cpu_us:.1f} server-µs/op ({kernel:.0%} in the kernel)", flush=True)
 
 lines = [
     f"Median of {ROUNDS} interleaved rounds, {DURATION} each, {'signatures verified' if AUTH else 'signatures not verified (--no-auth / default)'}, "
