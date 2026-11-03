@@ -21,7 +21,8 @@ on:
       startup_runs:
         description: "Starts per server"
         default: "5"
-  # TEMPORARY: lets the branch run this before the workflow exists on main. Remove before merging.
+  # TEMPORARY: lets the branch run this before the workflow exists on main (dispatch needs that).
+  # Remove before merging.
   push:
     branches: [cross-platform-windows-macos]
     paths: [.github/workflows/bench-native.yml]
