@@ -25,7 +25,8 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
   9 MiB. A 6,500-request test suite runs in 0.93 s, against 3.4 s on MinIO and 7.7 s on LocalStack.
 - **Behaves like AWS.** It passes 99.1% of a 24-SDK compatibility matrix and 85.8% of the
   [ceph/s3-tests](https://github.com/ceph/s3-tests) cases that AWS itself passes. LocalStack passes
-  59.1% of those, MinIO 52.0%.
+  59.1% of those, MinIO 52.0%. It also passes all of [Apache OpenDAL](https://opendal.apache.org)'s S3
+  behavior tests without switching off a single capability ([conformance/OPENDAL.md](conformance/OPENDAL.md)).
 - **Built for tests.** Reset state between tests, snapshot and restore fixtures, move a virtual clock to
   expire presigned URLs or run lifecycle rules, and assert on a log of the requests your code made.
 - **Runs where your tests run.** Use the Docker image (amd64 and arm64), the Node.js package in-process,
@@ -317,8 +318,8 @@ No mainstream SDK retries a 507. See [docs/memory-limit.md](docs/memory-limit.md
 - **Versioning**: enabled and suspended, delete markers, null versions, per-version reads and deletes
 - **Object Lock**: GOVERNANCE and COMPLIANCE retention, legal hold, default retention, governance bypass
 - **Conditional requests**: `If-Match`, `If-None-Match` (including conditional writes: PUT,
-  CopyObject and CompleteMultipartUpload), `If-Modified-Since`, `If-Unmodified-Since`, and the
-  copy-source variants
+  CopyObject and CompleteMultipartUpload), `If-Modified-Since`, `If-Unmodified-Since`, the
+  copy-source variants, and conditional deletes (`If-Match` on DeleteObject, `<ETag>` in DeleteObjects)
 - **Checksums**: CRC32, CRC32C, CRC64NVME, SHA-1 and SHA-256, in headers or aws-chunked trailers, with
   COMPOSITE and FULL_OBJECT multipart checksums. CRC64NVME is the default, as on AWS today.
 - **Signatures**: SigV4 (headers, presigned URLs, streaming with trailers), SigV2, POST policy uploads
@@ -390,6 +391,7 @@ Detailed documentation is in [docs/](docs/). Most of it is written in Chinese.
 | [docs/archive-storage.md](docs/archive-storage.md) | Glacier, Deep Archive, Intelligent-Tiering, restores, lifecycle transitions |
 | [docs/select.md](docs/select.md) | S3 Select coverage |
 | [docs/benchmarks.md](docs/benchmarks.md) | SDK matrix, ceph/s3-tests and performance results |
+| [conformance/OPENDAL.md](conformance/OPENDAL.md) | Apache OpenDAL's behavior tests against fakes3 |
 | [docs/s3s-workarounds.md](docs/s3s-workarounds.md) | Where fakes3 corrects s3s to match AWS |
 | [docs/development.md](docs/development.md) | Building, testing, CI and releasing |
 
