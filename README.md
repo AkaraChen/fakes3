@@ -2,6 +2,7 @@
 
 [![ci](https://github.com/AkaraChen/fakes3/actions/workflows/ci.yml/badge.svg)](https://github.com/AkaraChen/fakes3/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/fakes3-sdk)](https://www.npmjs.com/package/fakes3-sdk)
+[![crates.io](https://img.shields.io/crates/v/fakes3)](https://crates.io/crates/fakes3)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 English | [简体中文](README.zh-CN.md)
@@ -101,11 +102,12 @@ and method is documented in the [package README](bindings/node/README.md).
 
 ### Rust, in-process
 
-The crate is not on crates.io yet, so add it as a git dependency:
+Add [`fakes3`](https://crates.io/crates/fakes3) as a dev-dependency. It builds on Linux only, and the build
+compiles OpenSSL, so it needs `perl` and `make`:
 
 ```toml
 [dev-dependencies]
-fakes3 = { git = "https://github.com/AkaraChen/fakes3", tag = "v0.1.0" }
+fakes3 = "0.1"
 ```
 
 ```rust
@@ -131,7 +133,8 @@ curl -L https://github.com/AkaraChen/fakes3/releases/latest/download/fakes3-x86_
 ./fakes3-x86_64-unknown-linux-musl/fakes3 --port 0   # 0 picks a free port; the address is printed to stdout
 ```
 
-To build from source, run `cargo build --release`. The build compiles OpenSSL, so it needs `perl` and `make`.
+To build from source, run `cargo install fakes3 --locked`, or `cargo build --release` in a checkout. The build
+compiles OpenSSL, so it needs `perl` and `make`.
 
 ## Testcontainers
 
