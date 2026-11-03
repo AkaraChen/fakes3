@@ -26,7 +26,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
   不关闭任何能力也能全部通过（[conformance/OPENDAL.md](conformance/OPENDAL.md)）。
 - **为测试设计。** 测试之间重置状态、保存和回滚测试数据、拨动虚拟时钟让预签名 URL 过期或触发 Lifecycle 规则、
   用请求日志断言代码发了哪些请求。
-- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、静态链接的 Linux 二进制，或者 GitHub Action。
+- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、Linux / macOS / Windows 的原生二进制，或者 GitHub Action。
 
 | | fakes3 | MinIO | LocalStack | moto | S3Mock |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -96,7 +96,7 @@ await server.stop();
 
 ### Rust（进程内）
 
-把 [`fakes3`](https://crates.io/crates/fakes3) 加为 dev-dependency。只能在 Linux 上构建，构建时会编译 OpenSSL，需要 `perl` 和 `make`：
+把 [`fakes3`](https://crates.io/crates/fakes3) 加为 dev-dependency。可以在 Linux、macOS 和 Windows 上构建。构建时会编译 OpenSSL，需要 `perl` 和 `make`；Windows 上需要原生的 Perl（例如 Strawberry Perl），装了 NASM 的话 OpenSSL 会用上汇编实现：
 
 ```toml
 [dev-dependencies]
@@ -128,14 +128,21 @@ let op = opendal::Operator::from_uri(s3.uri())?; // "s3://test?endpoint=…"，�
 
 ### 独立二进制
 
-每个 [release](https://github.com/AkaraChen/fakes3/releases) 都附带 x86_64 和 aarch64 的静态 Linux 二进制，各带 SHA-256 校验文件：
+每个 [release](https://github.com/AkaraChen/fakes3/releases) 都附带 x86_64 和 aarch64 的静态 Linux 二进制、Apple silicon 和 Intel 的 macOS 二进制，
+以及 x86_64 的 Windows 二进制，各带 SHA-256 校验文件：
 
 ```bash
 curl -L https://github.com/AkaraChen/fakes3/releases/latest/download/fakes3-x86_64-unknown-linux-musl.tar.gz | tar xz
 ./fakes3-x86_64-unknown-linux-musl/fakes3 --port 0   # 0 表示随机选一个空闲端口，实际地址打印到 stdout
 ```
 
-从源码构建：`cargo install fakes3 --locked`，或者在仓库里 `cargo build --release`。构建时会编译 OpenSSL，需要 `perl` 和 `make`。
+| 平台 | 压缩包 |
+| --- | --- |
+| Linux x86_64 / aarch64（静态链接） | `fakes3-x86_64-unknown-linux-musl.tar.gz` / `fakes3-aarch64-unknown-linux-musl.tar.gz` |
+| macOS Apple silicon / Intel | `fakes3-aarch64-apple-darwin.tar.gz` / `fakes3-x86_64-apple-darwin.tar.gz` |
+| Windows x86_64 | `fakes3-x86_64-pc-windows-msvc.zip` |
+
+从源码构建：`cargo install fakes3 --locked`，或者在仓库里 `cargo build --release`。构建时会编译 OpenSSL，需要 `perl` 和 `make`（Windows 见 [Rust（进程内）](#rust进程内)）。
 
 ## Testcontainers
 
@@ -243,7 +250,7 @@ fakes3 ctl requests list --op PutObject       # 请求日志：按 bucket、操�
 | `--domain` | `FAKES3_DOMAIN` | `localhost` | virtual-host 寻址的基础域名（`<bucket>.<domain>`），可重复，传 `""` 关闭 |
 | `--bucket-defaults` | `FAKES3_BUCKET_DEFAULTS` | `legacy` | 新建 bucket 的初始设置：`legacy` 或 `aws`（见下文） |
 | `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | 对象数据的内存上限：`512MiB`、`2GiB`、`unlimited`，或 `auto`（容器或机器内存的 75%） |
-| `--inline-threshold` | | `1048576` | 达到这个大小的对象存进 `memfd`，小于它的放在堆上 |
+| `--inline-threshold` | | `1048576` | Linux 上达到这个大小的对象存进 `memfd`，小于它的放在堆上 |
 | `--no-request-log` | | | 不记录请求日志 |
 | `--request-log-capacity` | | `10000` | 请求日志最多保留的条数，满了丢弃最早的 |
 
@@ -311,11 +318,13 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认保留旧行为�
 | | 平台 |
 | --- | --- |
 | Docker 镜像 | `linux/amd64`、`linux/arm64`（在 macOS 和 Windows 上可以用 Docker Desktop 运行） |
-| 静态二进制 | x86_64 和 aarch64 Linux |
+| 二进制 | x86_64 和 aarch64 Linux（静态链接）、Apple silicon 和 Intel 的 macOS、x86_64 Windows |
 | Node.js 包 | Linux x64 和 arm64，glibc 和 musl，Node.js ≥ 18 |
-| Rust 库 | Linux |
+| Rust 库 | Linux、macOS、Windows |
 
-不支持在 macOS 或 Windows 上原生运行（大对象存放在 Linux 的 `memfd` 里），在这些系统上请用 Docker 镜像。
+CI 在 Linux、macOS 和 Windows 上都跑完整的测试。各平台行为一致，区别只在大对象放在哪里（Linux 上是 `memfd`，其他系统放在堆上）、
+默认的 `auto` 内存上限从哪里读机器内存（只有 Linux 会读容器的 cgroup 限制），以及 Windows 上唤醒线程的开销更大，
+服务端的 worker 线程数是核数的一半。各系统上的性能见 [docs/benchmarks.md](docs/benchmarks.md#macos-和-windows)。
 
 ## 安全提示
 
@@ -329,8 +338,8 @@ fakes3 是给测试用的，**不要把它暴露在不可信的网络上，也�
 ## 实现方式
 
 - **元数据**全部在内存里：每个 bucket 一个有序 map（key → 版本链），列举就是有序遍历。
-- **对象数据**是一组不可变、带引用计数的 `Bytes` 分段。小对象放在堆上；大对象写进 `memfd`（tmpfs 承载、不占用文件名、进程退出时自动释放），
-  再通过只读 mmap 提供读取。
+- **对象数据**是一组不可变、带引用计数的 `Bytes` 分段。小对象放在堆上；Linux 上大对象写进 `memfd`（tmpfs 承载、不占用文件名、进程退出时自动释放），
+  再通过只读 mmap 提供读取。macOS 和 Windows 没有 memfd，大对象也放在堆上。
 - 因为数据不可变，GET、CopyObject、UploadPartCopy 和 CompleteMultipartUpload 都**不拷贝对象数据**，只是拼接或切片分段、增加引用计数。
 - 协议层（路由、XML、SigV4、aws-chunked）由 [s3s](https://github.com/Nugine/s3s) 负责；这个仓库实现的是存储引擎和 S3 语义。
 

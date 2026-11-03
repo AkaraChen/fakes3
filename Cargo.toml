@@ -12,10 +12,6 @@ categories = ["development-tools::testing", "web-programming::http-server"]
 # the Node binding stay in the repository.
 include = ["/src", "/examples", "/tests", "/README.md", "/LICENSE"]
 
-# Large objects live in Linux memfds, so the crate only builds on Linux.
-[package.metadata.docs.rs]
-targets = ["x86_64-unknown-linux-gnu"]
-
 [dependencies]
 async-trait = "0.1.92"
 base64-simd = "0.8.0"
@@ -29,12 +25,10 @@ http = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1.21", features = ["server-auto", "tokio", "server-graceful"] }
-memmap2 = "0.9.12"
 mimalloc = "0.1.52"
 openssl-sys = { version = "0.9.117", features = ["vendored"] }
 parking_lot = "0.13.0"
 percent-encoding = "2"
-rustix = { version = "1.1.6", features = ["fs"] }
 s3s = "0.17"
 s3s-policy = "0.17"
 serde = { version = "1", features = ["derive"] }
@@ -44,6 +38,18 @@ tokio = { version = "1.54.1", features = ["full"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.29.0", features = ["v4"] }
+
+# Platform specifics: large objects in memfds on Linux (src/spill.rs), the machine's memory size for
+# the default memory limit elsewhere (src/memory.rs).
+[target.'cfg(target_os = "linux")'.dependencies]
+memmap2 = "0.9.12"
+rustix = { version = "1.1.6", features = ["fs"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_SystemInformation"] }
 
 [profile.release]
 lto = "fat"

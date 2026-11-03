@@ -18,34 +18,50 @@ on:
         description: "1: both verify signatures (--auth); 0: neither does (--no-auth on A, the default on B)"
         default: "1"
       workloads:
-        description: "Comma-separated: small_get,small_get_c1,small_put,stat,list,versioned,large_get"
+        description: "Comma-separated: small_get,small_get_c1,small_put,stat,list,versioned,large_get,large_get_c1,large_put"
         default: "small_get,small_get_c1,small_put,stat,list,versioned"
+      runner:
+        description: "Runner label: ubuntu-24.04, macos-15, windows-2025, ..."
+        default: "ubuntu-24.04"
 
 permissions:
   contents: read
 
 jobs:
   ab:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: ./.github/actions/windows-openssl
       - name: Build A and B
         env:
           BASE: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
         run: |
+          tmp=$(cygpath -u "$RUNNER_TEMP" 2>/dev/null || echo "$RUNNER_TEMP")
+          exe=$([ "$RUNNER_OS" = Windows ] && echo .exe || true)
           for side in a b; do
             ref=$([ "$side" = a ] && echo "$BASE" || echo "$HEAD_REF")
-            git worktree add "/tmp/src-$side" "origin/$ref" 2>/dev/null || git worktree add "/tmp/src-$side" "$ref"
-            (cd "/tmp/src-$side" && cargo build --release --locked)
-            cp "/tmp/src-$side/target/release/fakes3" "/tmp/fakes3-$side"
-            echo "$side = $ref @ $(git -C /tmp/src-$side rev-parse --short HEAD)"
+            git worktree add "$tmp/src-$side" "origin/$ref" 2>/dev/null || git worktree add "$tmp/src-$side" "$ref"
+            (cd "$tmp/src-$side" && cargo build --release --locked)
+            cp "$tmp/src-$side/target/release/fakes3$exe" "$tmp/fakes3-$side$exe"
+            echo "$side = $ref @ $(git -C "$tmp/src-$side" rev-parse --short HEAD)"
           done
-          docker pull -q minio/warp:latest
+          bench/setup-native.sh warp
       - name: Compare
         env:
           ROUNDS: ${{ inputs.rounds }}
@@ -54,5 +70,7 @@ jobs:
           BASE: ${{ inputs.base }}
           HEAD_REF: ${{ inputs.head }}
         run: |
-          echo "A = $BASE, B = $HEAD_REF, CPU: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)" >> "$GITHUB_STEP_SUMMARY"
-          python3 bench/ab.py /tmp/fakes3-a /tmp/fakes3-b
+          tmp=$(cygpath -u "$RUNNER_TEMP" 2>/dev/null || echo "$RUNNER_TEMP")
+          exe=$([ "$RUNNER_OS" = Windows ] && echo .exe || true)
+          echo "A = $BASE, B = $HEAD_REF" >> "$GITHUB_STEP_SUMMARY"
+          uv run bench/ab.py "$tmp/fakes3-a$exe" "$tmp/fakes3-b$exe"

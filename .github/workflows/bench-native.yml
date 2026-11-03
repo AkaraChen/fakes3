@@ -1,0 +1,93 @@
+name: bench-native
+
+# Runs bench/native.py (fakes3 vs MinIO and moto, all as native processes) on Linux, macOS and
+# Windows runners, on demand. bench.yml is the Docker-based comparison with every competitor, which
+# only Linux can run. Each runner's report is shown in the job summary and uploaded as an artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      runners:
+        description: "JSON list of runner labels"
+        default: '["ubuntu-24.04", "macos-15", "windows-2025"]'
+      servers:
+        description: "Comma-separated servers (default: all)"
+        default: "fakes3,minio,moto"
+      only:
+        description: "Comma-separated measurements, e.g. startup,suite,footprint,small_get (default: all)"
+        default: ""
+      duration:
+        description: "Duration of each warp workload"
+        default: "15s"
+      startup_runs:
+        description: "Starts per server"
+        default: "5"
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: bench (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(inputs.runners) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache-dependency-path: bench/suite/go.sum
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - uses: ./.github/actions/windows-openssl
+      # moto opens a connection per request, and the clients run out of Windows' default ephemeral
+      # range (16k ports, each held in TIME_WAIT for minutes) within a workload.
+      - if: runner.os == 'Windows'
+        run: netsh int ipv4 set dynamicport tcp start=10000 num=55535
+
+      - name: Prepare binaries
+        run: bench/setup-native.sh
+
+      - name: Run benchmarks
+        env:
+          SERVERS: ${{ inputs.servers }}
+          ONLY: ${{ inputs.only }}
+          DURATION: ${{ inputs.duration }}
+          STARTUP_RUNS: ${{ inputs.startup_runs }}
+        run: |
+          uv run bench/native.py \
+            --servers "$SERVERS" \
+            --only "$ONLY" \
+            --duration "$DURATION" \
+            --startup-runs "$STARTUP_RUNS" \
+            --out bench/results/native.json
+
+      - name: Render report
+        if: always()
+        run: |
+          if [ -f bench/results/native.json ]; then
+            uv run bench/report.py bench/results/native.json
+            cat bench/RESULTS.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bench-native-${{ matrix.runner }}-${{ github.run_id }}
+          path: |
+            bench/results/native.json
+            bench/RESULTS.md
+          if-no-files-found: ignore

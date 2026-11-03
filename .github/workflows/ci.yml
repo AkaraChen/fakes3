@@ -1,8 +1,8 @@
 name: ci
 
-# Fast checks on every push and pull request: formatting, clippy, the Rust test suites, the Node
-# binding's build, and the workflow files themselves. The slow suites (SDK matrix, s3-tests,
-# benchmarks) stay manual: matrix.yml, s3-tests.yml, bench.yml, ab.yml.
+# Fast checks on every push and pull request: formatting, clippy and the Rust test suites on Linux,
+# macOS and Windows, the Node binding's build, and the workflow files themselves. The slow suites
+# (SDK matrix, s3-tests, benchmarks) stay manual: matrix.yml, s3-tests.yml, bench.yml, ab.yml.
 on:
   push:
   pull_request:
@@ -19,15 +19,22 @@ env:
 
 jobs:
   rust:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    name: rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --check
+      - uses: ./.github/actions/windows-openssl
+      - if: runner.os == 'Linux'
+        run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
 

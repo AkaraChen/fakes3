@@ -1,14 +1,11 @@
 //! In-memory object store.
 //!
 //! Object data is a list of immutable, reference-counted `Bytes` segments. Small payloads live on
-//! the heap; payloads at or above the inline threshold are written into a `memfd` (tmpfs-backed,
-//! freed automatically when the last mapping drops) and served from a read-only mapping. Either
-//! way a read is a slice of `Bytes`, so GET, CopyObject and CompleteMultipartUpload never copy
-//! object data.
+//! the heap; payloads at or above the inline threshold go wherever [`crate::spill`] puts them for
+//! the platform (a `memfd` on Linux). Either way a read is a slice of `Bytes`, so GET, CopyObject
+//! and CompleteMultipartUpload never copy object data.
 
 use std::collections::{BTreeMap, HashMap};
-use std::fs::File;
-use std::io::Write;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -17,6 +14,7 @@ use parking_lot::RwLock;
 
 use crate::memory::{LimitExceeded, MemoryTracker, Reservation, Tracked};
 use crate::objext::{BucketCfg, ObjectExt};
+use crate::spill::Spill;
 use crate::users::UserId;
 
 #[derive(Clone, Default)]
@@ -285,7 +283,7 @@ impl From<LimitExceeded> for BlobError {
     }
 }
 
-/// Accumulates an incoming body, spilling to a memfd once it reaches `threshold` bytes.
+/// Accumulates an incoming body, handing it to a [`Spill`] once it reaches `threshold` bytes.
 ///
 /// Small bodies are copied into an exact-size heap buffer rather than keeping the request's
 /// chunks, which would pin hyper's (much larger) read buffers.
@@ -298,7 +296,7 @@ pub struct BlobWriter {
     reservation: Reservation,
     len: u64,
     mem: Vec<u8>,
-    file: Option<File>,
+    spill: Option<Spill>,
 }
 
 impl BlobWriter {
@@ -308,10 +306,10 @@ impl BlobWriter {
             reservation: memory.reserve(size_hint.unwrap_or(0))?,
             len: 0,
             mem: Vec::new(),
-            file: None,
+            spill: None,
         };
         match size_hint {
-            Some(n) if n as usize >= threshold => w.file = Some(new_memfd(n)?),
+            Some(n) if n as usize >= threshold => w.spill = Some(Spill::with_capacity(n)?),
             Some(n) => w.mem.reserve_exact(n as usize),
             None => {}
         }
@@ -323,46 +321,27 @@ impl BlobWriter {
         if let Some(extra) = self.len.checked_sub(self.reservation.bytes()) {
             self.reservation.grow(extra)?;
         }
-        if let Some(f) = &mut self.file {
-            return Ok(f.write_all(chunk)?);
+        if let Some(s) = &mut self.spill {
+            return Ok(s.write(chunk)?);
         }
         self.mem.extend_from_slice(chunk);
         if self.mem.len() >= self.threshold {
-            let mut f = new_memfd(0)?;
-            f.write_all(&self.mem)?;
-            self.mem = Vec::new();
-            self.file = Some(f);
+            self.spill = Some(Spill::from_vec(std::mem::take(&mut self.mem))?);
         }
         Ok(())
     }
 
     pub fn finish(mut self) -> Result<Bytes, BlobError> {
         self.reservation.shrink_to(self.len);
-        let Some(f) = self.file else {
-            if self.mem.is_empty() {
-                return Ok(Bytes::new());
-            }
-            self.mem.shrink_to_fit();
-            return Ok(Bytes::from_owner(Tracked::new(self.mem, self.reservation)));
-        };
-        if f.metadata()?.len() == 0 {
+        if self.len == 0 {
             return Ok(Bytes::new());
         }
-        // SAFETY: the memfd is private to this process and never written again.
-        let map = unsafe { memmap2::Mmap::map(&f)? };
-        Ok(Bytes::from_owner(Tracked::new(map, self.reservation)))
+        if let Some(s) = self.spill {
+            return Ok(s.finish(self.reservation)?);
+        }
+        self.mem.shrink_to_fit();
+        Ok(Bytes::from_owner(Tracked::new(self.mem, self.reservation)))
     }
-}
-
-fn new_memfd(size_hint: u64) -> std::io::Result<File> {
-    use rustix::fs::{MemfdFlags, memfd_create};
-    let fd = memfd_create("fakes3-blob", MemfdFlags::CLOEXEC)?;
-    let f = File::from(fd);
-    if size_hint > 0 {
-        // Reserve pages up front so writes don't grow the file piecemeal.
-        let _ = rustix::fs::fallocate(&f, rustix::fs::FallocateFlags::KEEP_SIZE, 0, size_hint);
-    }
-    Ok(f)
 }
 
 #[cfg(test)]
@@ -394,10 +373,10 @@ mod tests {
     }
 
     #[test]
-    fn writer_accounts_heap_and_memfd_with_and_without_a_size_hint() {
+    fn writer_accounts_heap_and_spilled_blobs_with_and_without_a_size_hint() {
         let t = MemoryTracker::new(None);
         for hint in [true, false] {
-            // 250 bytes with a 1000-byte threshold stays on the heap; 2500 goes to a memfd.
+            // 250 bytes with a 1000-byte threshold stays on the heap; 2500 is spilled.
             let small = blob(&t, 1000, 250, hint).unwrap();
             let big = blob(&t, 1000, 2500, hint).unwrap();
             assert_eq!(t.stats().used, 2750, "hint={hint}");

@@ -1,14 +1,15 @@
 name: release
 
 # Builds the Alpine image for linux/amd64 and linux/arm64 (each on a native runner) and the static
-# musl binaries from the same Dockerfile, and packages the crate.
+# musl binaries from the same Dockerfile, the macOS and Windows binaries with cargo, and packages
+# the crate.
 #
 # Publishing only happens on an explicit trigger:
 #   - pushing a `v*` tag: pushes ghcr.io/akarachen/fakes3, attaches the binaries to a GitHub release
 #     and publishes the crate to crates.io
 #   - manual dispatch with `publish: true`: pushes the image only (tagged with the commit sha)
-# Anything else is a dry run: the images are built and smoke-tested, the crate is packaged and
-# verified, nothing leaves the runner.
+# Anything else is a dry run: the images and binaries are built and smoke-tested, the crate is
+# packaged and verified, nothing leaves the runner.
 on:
   push:
     tags: ["v*"]
@@ -153,6 +154,82 @@ jobs:
           path: digests/*
           if-no-files-found: error
 
+  # macOS and Windows binaries, built with cargo on their own runners. The Windows one links the C
+  # runtime statically, so it needs no Visual C++ redistributable.
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            triple: aarch64-apple-darwin
+            smoke: true
+          # Cross-compiled on the arm64 runner, so it is only checked to be an x86_64 binary.
+          - runner: macos-15
+            triple: x86_64-apple-darwin
+          - runner: windows-2025
+            triple: x86_64-pc-windows-msvc
+            smoke: true
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      TRIPLE: ${{ matrix.triple }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+
+      - uses: ./.github/actions/windows-openssl
+      - if: runner.os == 'Windows'
+        run: echo "RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
+
+      - run: cargo build --release --locked --target "$TRIPLE"
+
+      - name: Smoke test
+        run: |
+          bin=target/$TRIPLE/release/fakes3$([ "$RUNNER_OS" = Windows ] && echo .exe || true)
+          file "$bin" || true
+          if [ "${{ matrix.smoke }}" != true ]; then
+            file "$bin" | grep -q x86_64
+            exit 0
+          fi
+          "$bin" --version
+          "$bin" --port 0 > endpoint.txt &
+          pid=$!
+          for _ in $(seq 100); do
+            grep -q '^http://' endpoint.txt && break
+            sleep 0.1
+          done
+          # As in the image's smoke test: an unsigned ListBuckets is anonymous, hence AccessDenied.
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$(head -n1 endpoint.txt)/")
+          kill "$pid"
+          test "$code" = 403
+
+      - name: Package binary
+        run: |
+          name=fakes3-$TRIPLE
+          mkdir "$name"
+          cp target/"$TRIPLE"/release/fakes3* README.md "$name"/
+          rm -f "$name"/*.d "$name"/*.pdb
+          if [ "$RUNNER_OS" = Windows ]; then
+            archive=$name.zip
+            7z a -tzip "$archive" "$name" >/dev/null
+          else
+            archive=$name.tar.gz
+            tar -czf "$archive" "$name"
+          fi
+          (sha256sum "$archive" 2>/dev/null || shasum -a 256 "$archive") | tee "$archive.sha256"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.triple }}
+          path: fakes3-${{ matrix.triple }}.*
+          if-no-files-found: error
+
   # Joins the two per-architecture images into one multi-arch tag set.
   manifest:
     needs: build
@@ -199,9 +276,9 @@ jobs:
       - name: Inspect
         run: docker buildx imagetools inspect "${IMAGE}:${{ steps.meta.outputs.version }}"
 
-  # Attaches the static binaries to the GitHub release for the tag.
+  # Attaches the binaries (static Linux ones, macOS, Windows) to the GitHub release for the tag.
   release:
-    needs: build
+    needs: [build, native]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:

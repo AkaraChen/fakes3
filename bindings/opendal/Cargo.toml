@@ -13,10 +13,6 @@ include = ["/src", "/tests", "/README.md", "/LICENSE"]
 # Not part of the root package's build: it has its own lockfile and target directory.
 [workspace]
 
-# fakes3 stores large objects in Linux memfds, so this only builds on Linux.
-[package.metadata.docs.rs]
-targets = ["x86_64-unknown-linux-gnu"]
-
 [dependencies]
 fakes3 = { version = "0.1.2", path = "../.." }
 form_urlencoded = "1"

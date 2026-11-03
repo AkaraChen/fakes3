@@ -17,6 +17,7 @@ import datetime
 import http.client
 import json
 import os
+import socket
 import statistics
 import subprocess
 import sys
@@ -106,18 +107,26 @@ def list_buckets_probe(p):
 
 
 def wait_ok(probe, timeout=180.0, alive=None):
-    """Polls a signed ListBuckets until it returns 200; returns the time it did."""
+    """Polls a signed ListBuckets until it returns 200; returns the time.perf_counter() it did.
+
+    (perf_counter rather than monotonic for every timing here: monotonic ticks in 15.6 ms steps
+    on Windows with older Pythons.)
+    """
     p, headers = probe
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+    deadline = time.perf_counter() + timeout
+    while time.perf_counter() < deadline:
         try:
             conn = http.client.HTTPConnection("127.0.0.1", p, timeout=2)
+            # Windows takes ~0.5 s to report a refused connection; give up on the connect after
+            # 2 ms instead and try again, so readiness is still seen within milliseconds.
+            conn.sock = socket.create_connection(("127.0.0.1", p), timeout=0.002)
+            conn.sock.settimeout(2)
             conn.request("GET", "/", headers=headers())
             r = conn.getresponse()
             r.read()
             conn.close()
             if r.status == 200:
-                return time.monotonic()
+                return time.perf_counter()
         except OSError:
             pass
         if alive and not alive():
@@ -135,9 +144,9 @@ def start(server):
     """Starts a fresh container; returns (seconds until docker run returned, seconds until ready)."""
     sh(str(SERVERS_SH), "stop", server, check=False)
     url = list_buckets_probe(port(server))
-    t0 = time.monotonic()
+    t0 = time.perf_counter()
     sh(str(SERVERS_SH), "launch", server)
-    t1 = time.monotonic()
+    t1 = time.perf_counter()
     t2 = wait_ok(url, alive=lambda: container_alive(server))
     return t1 - t0, t2 - t0
 
@@ -150,9 +159,9 @@ def docker_baseline(n):
     """Time for `docker run -d` of a no-op container: the overhead every server pays."""
     out = []
     for _ in range(n):
-        t0 = time.monotonic()
+        t0 = time.perf_counter()
         sh("docker", "run", "-d", "--rm", "--name", f"{PREFIX}-baseline", "--network", "host", "alpine:3", "sleep", "30")
-        out.append(time.monotonic() - t0)
+        out.append(time.perf_counter() - t0)
         sh("docker", "rm", "-f", f"{PREFIX}-baseline", check=False)
     return out
 
@@ -171,7 +180,7 @@ def native_startup(n):
             p = 9190
             url = list_buckets_probe(p)
             with tempfile.TemporaryDirectory(dir="/dev/shm") as d:
-                t0 = time.monotonic()
+                t0 = time.perf_counter()
                 proc = subprocess.Popen(cmd(p, d), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 try:
                     times.append(wait_ok(url, alive=lambda: proc.poll() is None) - t0)
@@ -182,13 +191,17 @@ def native_startup(n):
     return res
 
 
-def warp(server, args, duration):
+# warp as a container on the host network; bench/native.py passes the binary instead.
+WARP_CMD = ["docker", "run", "--rm", "--network", "host", "minio/warp:latest"]
+
+
+def warp(p, args, duration, warp_cmd=WARP_CMD, cwd=None):
     cmd = [
-        "docker", "run", "--rm", "--network", "host", "minio/warp:latest", *args,
-        "--host", f"127.0.0.1:{port(server)}", "--access-key", AK, "--secret-key", SK,
+        *warp_cmd, *args,
+        "--host", f"127.0.0.1:{p}", "--access-key", AK, "--secret-key", SK,
         "--lookup", "path", "--duration", duration, "--no-color", "--json",
     ]
-    r = subprocess.run(cmd, text=True, capture_output=True, timeout=1200)
+    r = subprocess.run(cmd, text=True, capture_output=True, timeout=1200, cwd=cwd)
     out = r.stdout
     i = out.find("{")
     if r.returncode != 0 or i < 0:
@@ -235,9 +248,9 @@ def measure(server, fn):
         time.sleep(1)
         idle = mem(cg, "memory.current")
         c0 = cpu_usec(cg)
-        t0 = time.monotonic()
+        t0 = time.perf_counter()
         result = fn()
-        wall = time.monotonic() - t0
+        wall = time.perf_counter() - t0
         result.update(
             server_cpu_sec=(cpu_usec(cg) - c0) / 1e6,
             wall_sec=wall,
@@ -319,7 +332,7 @@ def main():
             if not want(w):
                 continue
             try:
-                r[w] = measure(s, lambda: {"ops": summarize_warp(warp(s, args, dur[0] if dur else a.duration), op)})
+                r[w] = measure(s, lambda: {"ops": summarize_warp(warp(port(s), args, dur[0] if dur else a.duration), op)})
             except Exception as e:  # noqa: BLE001
                 r[w] = {"error": str(e)[-500:]}
                 stop(s)

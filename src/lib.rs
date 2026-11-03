@@ -39,6 +39,7 @@ mod cors;
 mod digest;
 mod host;
 mod lifecycle;
+mod linger;
 mod listxml;
 mod memory;
 mod names;
@@ -54,6 +55,7 @@ mod s3s_compat;
 mod select;
 mod sigv2;
 mod snapshot;
+mod spill;
 mod store;
 mod users;
 
@@ -69,6 +71,8 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 pub use blocking::BlockingServer;
+#[doc(hidden)]
+pub use blocking::worker_threads;
 pub use bucket_defaults::BucketDefaults;
 pub use clock::{Clock, OutOfRange, parse_duration};
 pub use control::{Control, ControlError, ResetOptions, SnapshotInfo};
@@ -98,7 +102,7 @@ pub struct Config {
     /// the account its access key belongs to (the first one if none does), and an unsigned request
     /// is anonymous. Authorization (ACLs, bucket policies, Block Public Access) applies either way.
     pub auth: bool,
-    /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
+    /// On Linux, objects and parts at or above this size are stored in a memfd instead of on the heap.
     pub inline_threshold: usize,
     /// Base domains for virtual-host-style addressing: `<bucket>.<domain>` selects the bucket.
     /// Path-style requests keep working on every host. Empty disables virtual-host addressing.
@@ -192,7 +196,7 @@ impl Server {
                 let (socket, peer) = socket;
                 let _ = socket.set_nodelay(true);
                 let conn = http
-                    .serve_connection(TokioIo::new(socket), service.for_peer(peer.ip()))
+                    .serve_connection(TokioIo::new(linger::Lingering::new(socket)), service.for_peer(peer.ip()))
                     .into_owned();
                 tokio::spawn(async move {
                     let _ = conn.await;

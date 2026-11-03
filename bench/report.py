@@ -50,28 +50,65 @@ def ratio(base, x, higher_better=True):
 
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else max((HERE / "results").glob("*.json"))
-    d = json.loads(path.read_text())
+    d = json.loads(path.read_text(encoding="utf-8"))
     S = d["servers"]
     servers = [s for s in ORDER if s in S]
+    native = d.get("mode") == "native"
     out = ["# 性能对比", ""]
     h = d["host"]
     out += [
-        f"由 `bench/run.py` 生成，原始数据：`{path.relative_to(HERE.parent) if path.is_relative_to(HERE.parent) else path}`。",
+        f"由 `bench/{'native' if native else 'run'}.py` 生成，原始数据：`{path.relative_to(HERE.parent) if path.is_relative_to(HERE.parent) else path}`。",
         "",
-        f"环境：{h['cpu']}，{h['cores']} 核，{h['mem_gib']} GiB 内存，Linux {h['kernel']}，测试时间 {d['date']}。",
+        f"环境：{h['cpu']}，{h['cores']} 核，{h['mem_gib']} GiB 内存，{h.get('os') or 'Linux ' + h['kernel']}，测试时间 {d['date']}。",
         "",
-        "所有实现都跑在 Docker 里：host 网络、数据目录放在容器内的 tmpfs、使用相同的凭证；每项测量都用一个新启动的容器。",
-        "内存取自容器 cgroup（`memory.current` / `memory.peak`，包含 tmpfs 页），CPU 取自 cgroup 的 `cpu.stat`。",
-        "fakes3 使用仓库里 Dockerfile 构建的镜像（Alpine + 静态链接的 musl 二进制）。"
-        "竞品版本：MinIO 用 Chainguard 从源码构建的最新版（官方镜像已下架）；LocalStack 4.14（最后一个免登录的社区版）；"
-        "moto、S3Mock、JuiceFS 用当时的最新镜像（JuiceFS gateway 的元数据用 SQLite，数据用本地文件，两者都在 tmpfs 上）。",
-        "",
+    ]
+    if native:
+        out += [
+            "所有实现都作为本机进程运行（不经过 Docker），监听 127.0.0.1、使用相同的凭证；每项测量都启动一个新进程，"
+            "数据目录是新建的临时目录（有 /dev/shm 时放在那里，否则在系统临时目录，也就是磁盘上）。"
+            "CPU 和内存取自服务端的进程树（psutil）：内存是常驻内存（RSS，Windows 上是工作集），每 20 ms 采样一次取峰值，"
+            "不包括进程之外的数据：MinIO 的数据文件，以及 Linux 上 fakes3 存在 memfd 里、还没被读过的大对象。",
+            "fakes3 是 `cargo build --release` 构建的二进制。MinIO 和 warp 不再发布二进制，都用 `go install` 从源码构建；moto 用 pip 安装的最新版。",
+            "",
+        ]
+    else:
+        out += [
+            "所有实现都跑在 Docker 里：host 网络、数据目录放在容器内的 tmpfs、使用相同的凭证；每项测量都用一个新启动的容器。",
+            "内存取自容器 cgroup（`memory.current` / `memory.peak`，包含 tmpfs 页），CPU 取自 cgroup 的 `cpu.stat`。",
+            "fakes3 使用仓库里 Dockerfile 构建的镜像（Alpine + 静态链接的 musl 二进制）。"
+            "竞品版本：MinIO 用 Chainguard 从源码构建的最新版（官方镜像已下架）；LocalStack 4.14（最后一个免登录的社区版）；"
+            "moto、S3Mock、JuiceFS 用当时的最新镜像（JuiceFS gateway 的元数据用 SQLite，数据用本地文件，两者都在 tmpfs 上）。",
+            "",
+        ]
+    out += [
         "「倍数」列表示 fakes3 相对该实现的倍数：吞吐类为 fakes3 ÷ 对方，延迟、CPU、内存类为对方 ÷ fakes3。数值越大，fakes3 越占优。",
         "",
     ]
 
     # Startup
-    if any("startup_sec" in S[s] for s in servers):
+    if native and any("startup_sec" in S[s] for s in servers):
+        n = len(S[servers[0]].get("startup_sec", []))
+        out += ["## 启动", ""]
+        out += [
+            f"从启动进程到第一个带签名的 ListBuckets 返回 200 的时间，每个服务测 {n} 次取中位数；空闲内存是就绪 2 秒后的常驻内存。"
+            "就绪探测每 1 ms 轮询一次。",
+            "",
+            "| 实现 | 就绪 (ms) | 倍数 | 空闲内存 (MiB) | 倍数 |",
+            "|---|---:|---:|---:|---:|",
+        ]
+        fs = S.get("fakes3", {})
+        for s in servers:
+            r = S[s]
+            if "startup_sec" not in r:
+                continue
+            t = med(r["startup_sec"])
+            other = s != "fakes3"
+            out.append(
+                f"| {s} | {f(t * 1000, 1)} | {ratio(med(fs.get('startup_sec', [])), t, False) if other else ''} "
+                f"| {f(r.get('mem_idle_mib'))} | {ratio(fs.get('mem_idle_mib'), r.get('mem_idle_mib'), False) if other else ''} |"
+            )
+        out.append("")
+    elif any("startup_sec" in S[s] for s in servers):
         n = len(S[servers[0]].get("startup_sec", []))
         out += ["## 启动", ""]
         out += [
@@ -134,7 +171,8 @@ def main():
             "## 内存占用（固定数据集）",
             "",
             "写入固定的数据集：10,000 个 4 KiB 对象加 8 个 64 MiB 对象，逻辑数据量共 551 MiB，16 并发。"
-            "「写入后」是写完时容器的内存占用（包括 tmpfs），「额外开销」是它减去逻辑数据量的部分。",
+            + ("「写入后」是写完时服务端的常驻内存（不包括上面说的进程外数据），「额外开销」是它减去逻辑数据量的部分。"
+               if native else "「写入后」是写完时容器的内存占用（包括 tmpfs），「额外开销」是它减去逻辑数据量的部分。"),
             "",
             "| 实现 | 写入耗时 (s) | 倍数 | 写入后 (MiB) | 额外开销 (MiB) | 峰值 (MiB) | 服务端 CPU (s) |",
             "|---|---:|---:|---:|---:|---:|---:|",
@@ -159,7 +197,7 @@ def main():
         "## 吞吐与延迟（MinIO warp）",
         "",
         "使用 MinIO 官方的 S3 压测工具 [warp](https://github.com/minio/warp)，每项跑固定时长。延迟取 warp 记录的单请求耗时；"
-        f"「平均 CPU」是整个过程（包括 warp 的数据准备阶段）中服务端容器平均占用的 CPU 核数。机器共 {h['cores']} 核，warp 客户端也要占用一部分。",
+        f"「平均 CPU」是整个过程（包括 warp 的数据准备阶段）中服务端{'进程' if native else '容器'}平均占用的 CPU 核数。机器共 {h['cores']} 核，warp 客户端也要占用一部分。",
         "",
     ]
     for key, op, title in WORKLOADS:
@@ -194,7 +232,7 @@ def main():
             )
         out += rows + [""]
 
-    (HERE / "RESULTS.md").write_text("\n".join(out) + "\n")
+    (HERE / "RESULTS.md").write_text("\n".join(out) + "\n", encoding="utf-8")
     print(HERE / "RESULTS.md")
 
 

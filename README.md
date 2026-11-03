@@ -30,7 +30,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 - **Built for tests.** Reset state between tests, snapshot and restore fixtures, move a virtual clock to
   expire presigned URLs or run lifecycle rules, and assert on a log of the requests your code made.
 - **Runs where your tests run.** Use the Docker image (amd64 and arm64), the Node.js package in-process,
-  the Rust library in-process, a static Linux binary, or the GitHub Action.
+  the Rust library in-process, a native binary for Linux, macOS or Windows, or the GitHub Action.
 
 |                                       | fakes3      | MinIO   | LocalStack | moto    | S3Mock  |
 | ------------------------------------- | ----------: | ------: | ---------: | ------: | ------: |
@@ -103,8 +103,9 @@ and method is documented in the [package README](bindings/node/README.md).
 
 ### Rust, in-process
 
-Add [`fakes3`](https://crates.io/crates/fakes3) as a dev-dependency. It builds on Linux only, and the build
-compiles OpenSSL, so it needs `perl` and `make`:
+Add [`fakes3`](https://crates.io/crates/fakes3) as a dev-dependency. It builds on Linux, macOS and Windows.
+The build compiles OpenSSL, so it needs `perl` and `make`; on Windows, a native Perl such as Strawberry Perl
+(and NASM, if installed, gets OpenSSL's assembly):
 
 ```toml
 [dev-dependencies]
@@ -141,15 +142,22 @@ let op = opendal::Operator::from_uri(s3.uri())?; // "s3://test?endpoint=…", as
 ### Standalone binary
 
 Every [release](https://github.com/AkaraChen/fakes3/releases) ships static Linux binaries for x86_64 and
-aarch64, each with a SHA-256 checksum:
+aarch64, macOS binaries for Apple silicon and Intel, and a Windows x86_64 binary, each with a SHA-256
+checksum:
 
 ```bash
 curl -L https://github.com/AkaraChen/fakes3/releases/latest/download/fakes3-x86_64-unknown-linux-musl.tar.gz | tar xz
 ./fakes3-x86_64-unknown-linux-musl/fakes3 --port 0   # 0 picks a free port; the address is printed to stdout
 ```
 
+| Platform | Archive |
+| --- | --- |
+| Linux x86_64 / aarch64 (static) | `fakes3-x86_64-unknown-linux-musl.tar.gz` / `fakes3-aarch64-unknown-linux-musl.tar.gz` |
+| macOS Apple silicon / Intel | `fakes3-aarch64-apple-darwin.tar.gz` / `fakes3-x86_64-apple-darwin.tar.gz` |
+| Windows x86_64 | `fakes3-x86_64-pc-windows-msvc.zip` |
+
 To build from source, run `cargo install fakes3 --locked`, or `cargo build --release` in a checkout. The build
-compiles OpenSSL, so it needs `perl` and `make`.
+compiles OpenSSL, so it needs `perl` and `make` (see [Rust, in-process](#rust-in-process) for Windows).
 
 ## Testcontainers
 
@@ -263,7 +271,7 @@ Every option can be given as a flag or an environment variable:
 | `--domain` | `FAKES3_DOMAIN` | `localhost` | Base domain for virtual-host addressing (`<bucket>.<domain>`); repeatable; `""` turns it off |
 | `--bucket-defaults` | `FAKES3_BUCKET_DEFAULTS` | `legacy` | Settings new buckets start with: `legacy` or `aws` (see below) |
 | `--memory-limit` | `FAKES3_MEMORY_LIMIT` | `auto` | Cap on object data: `512MiB`, `2GiB`, `unlimited`, or `auto` (75% of the container's or machine's memory) |
-| `--inline-threshold` | | `1048576` | Objects at or above this size live in a `memfd` instead of on the heap |
+| `--inline-threshold` | | `1048576` | On Linux, objects at or above this size live in a `memfd` instead of on the heap |
 | `--no-request-log` | | | Don't record requests for the control plane's request log |
 | `--request-log-capacity` | | `10000` | Requests kept in the log; the oldest are dropped first |
 
@@ -348,12 +356,15 @@ S3 Control. Website and notification *configuration* can be stored and read back
 | | Platforms |
 | --- | --- |
 | Docker image | `linux/amd64`, `linux/arm64` (also runs under Docker Desktop on macOS and Windows) |
-| Static binary | x86_64 and aarch64 Linux |
+| Binary | x86_64 and aarch64 Linux (static), macOS on Apple silicon and Intel, x86_64 Windows |
 | Node.js package | Linux x64 and arm64, glibc and musl, Node.js ≥ 18 |
-| Rust library | Linux |
+| Rust library | Linux, macOS, Windows |
 
-Running natively on macOS or Windows isn't supported, because large objects are stored in Linux
-`memfd`s. Use the Docker image there.
+CI runs the test suites on Linux, macOS and Windows. The behaviour is the same everywhere; what differs is
+where large objects live (a `memfd` on Linux, the heap elsewhere), where the default `auto` memory limit gets
+the machine's memory size from (a container's cgroup limit is only read on Linux), and that on Windows the
+server runs half as many worker threads as there are cores, because waking threads costs more there.
+Performance on each system is in [docs/benchmarks.md](docs/benchmarks.md#macos-和-windows).
 
 ## Security
 
@@ -372,9 +383,9 @@ fakes3 is for tests. **Don't expose it to an untrusted network, and don't store 
 
 - **Metadata** lives in memory: one ordered map per bucket (key → version chain), so a listing is an
   ordered walk.
-- **Object data** is immutable, reference-counted `Bytes` segments. Small objects sit on the heap; large
-  ones are written to a `memfd` (tmpfs-backed and anonymous, freed when the process exits) and served
-  through a read-only mmap.
+- **Object data** is immutable, reference-counted `Bytes` segments. Small objects sit on the heap; on Linux,
+  large ones are written to a `memfd` (tmpfs-backed and anonymous, freed when the process exits) and served
+  through a read-only mmap. macOS and Windows have no memfd, so large objects stay on the heap there.
 - Because data is immutable, GET, CopyObject, UploadPartCopy and CompleteMultipartUpload **never copy
   object bytes**. They slice and splice segments and bump reference counts.
 - [s3s](https://github.com/Nugine/s3s) handles the protocol (routing, XML, SigV4, aws-chunked). This
