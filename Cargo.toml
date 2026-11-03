@@ -39,8 +39,8 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.29.0", features = ["v4"] }
 
-# Platform specifics: large objects in memfds on Linux (see src/store.rs), the machine's memory size
-# for the default memory limit elsewhere (src/memory.rs).
+# Platform specifics: large objects in memfds on Linux (src/spill.rs), the machine's memory size for
+# the default memory limit elsewhere (src/memory.rs).
 [target.'cfg(target_os = "linux")'.dependencies]
 memmap2 = "0.9.12"
 rustix = { version = "1.1.6", features = ["fs"] }

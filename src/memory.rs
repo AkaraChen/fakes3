@@ -3,10 +3,9 @@
 //! Every byte of object data lives in a buffer (a heap `Vec`, or on Linux a memfd mapping) that is
 //! wrapped in a [`Tracked`] owner. The owner holds a [`Reservation`] against the server's
 //! [`MemoryTracker`] and gives it back when the buffer is freed, i.e. when the last `Bytes` slice of
-//! it goes away. Blobs
-//! are shared between objects, versions, copies and multipart parts, so each buffer is counted
-//! exactly once and released exactly when nothing references it any more, whatever dropped the
-//! last reference (overwrite, delete, abort, a finished GET stream, a reset).
+//! it goes away. Blobs are shared between objects, versions, copies and multipart parts, so each
+//! buffer is counted exactly once and released exactly when nothing references it any more,
+//! whatever dropped the last reference (overwrite, delete, abort, a finished GET stream, a reset).
 //!
 //! The hot path is a handful of relaxed/CAS atomics on one cache line: no locks. The count is the
 //! size of the data buffers only (not metadata, keys, or allocator overhead).
