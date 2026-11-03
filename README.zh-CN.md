@@ -322,8 +322,9 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认保留旧行为�
 | Node.js 包 | Linux x64 和 arm64，glibc 和 musl，Node.js ≥ 18 |
 | Rust 库 | Linux、macOS、Windows |
 
-CI 在 Linux、macOS 和 Windows 上都跑完整的测试。各平台行为一致，区别只在大对象放在哪里（Linux 上是 `memfd`，其他系统放在堆上），
-以及默认的 `auto` 内存上限从哪里读机器内存（只有 Linux 会读容器的 cgroup 限制）。各系统上的性能见 [docs/benchmarks.md](docs/benchmarks.md#macos-和-windows)。
+CI 在 Linux、macOS 和 Windows 上都跑完整的测试。各平台行为一致，区别只在大对象放在哪里（Linux 上是 `memfd`，其他系统放在堆上）、
+默认的 `auto` 内存上限从哪里读机器内存（只有 Linux 会读容器的 cgroup 限制），以及 Windows 上唤醒线程的开销更大，
+服务端的 worker 线程数是核数的一半。各系统上的性能见 [docs/benchmarks.md](docs/benchmarks.md#macos-和-windows)。
 
 ## 安全提示
 

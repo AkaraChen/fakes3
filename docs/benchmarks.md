@@ -92,23 +92,24 @@ fakes3 在 macOS 和 Windows 上原生运行，CI 在三个系统上都跑全部
 
 macOS 没有 Docker，Windows 跑不了 Linux 容器，所以这两个系统上的性能用 `bench-native` workflow 测（[bench/native.py](../bench/native.py)）：
 fakes3、MinIO、moto 都作为本机进程运行，负载和上面的 Docker 测试相同，CPU 和内存取自服务端的进程树。MinIO 和 warp 已经不发布二进制，
-都用 `go install` 从源码构建。下面是[一次运行](https://github.com/AkaraChen/fakes3/actions/runs/41601919891)在三个托管 runner 上的结果。
+都用 `go install` 从源码构建。下面的 Linux、macOS 两列来自[一次运行](https://github.com/AkaraChen/fakes3/actions/runs/41601919891)，
+Windows 一列来自 worker 线程减半（见下文）之后的[一次运行](https://github.com/AkaraChen/fakes3/actions/runs/41609261240)。
 runner 每次分到的 CPU 不一样，不同系统之间的绝对值不能直接比，要看同一台机器上的倍数（括号里是 fakes3 相对 MinIO、moto 的倍数）。
 
 | | Linux | macOS | Windows |
 |---|---:|---:|---:|
-| runner | EPYC 7763，4 核 | Apple M1（虚拟机），3 核 | EPYC 9V74，4 核 |
-| 启动到就绪：fakes3 / MinIO / moto | 3.7 ms / 357 ms / 407 ms | 16 ms / 455 ms / 36 s¹ | 32 ms / 456 ms / 542 ms |
-| 空闲内存 | 15.9 MiB | 4.9 MiB | 7.3 MiB |
-| 模拟测试套件，每请求 | 245 µs（3.2×，9.8×） | 121 µs（5.9×，20×） | 247 µs（31×，14×） |
-| 4 KiB GET，16 并发 | 16,291 ops/s（3.3×，37×） | 27,502 ops/s（3.3×，43×） | 12,574 ops/s（2.0×，42×） |
-| 4 KiB PUT，16 并发 | 9,412 ops/s（2.8×，24×） | 14,610 ops/s（6.8×，37×） | 6,040 ops/s（9.9×，21×） |
-| HEAD，16 并发 | 20,103 ops/s（3.1×，44×） | 35,299 ops/s（3.6×，68×） | 22,506 ops/s（2.8×，76×） |
-| ListObjects，8 并发 | 1,052 ops/s（3.3×，34×） | 1,966 ops/s（6.5×，36×） | 1,343 ops/s（12×，35×） |
-| 64 MiB GET，4 并发 | 5.3 GiB/s（1.5×，2.5×） | 6.6 GiB/s（2.0×，2.8×） | 7.1 GiB/s（1.7×，2.5×） |
-| 64 MiB GET，单流 | 2.7 GiB/s（1.8×，3.5×） | 5.1 GiB/s（2.9×，2.5×） | 1.7 GiB/s（1.6×，1.6×） |
-| 64 MiB PUT，4 并发 | 856 MiB/s（1.2×，4.5×） | 454 MiB/s（1.3×，3.1×） | 797 MiB/s（2.8×，22×） |
-| 写入 551 MiB 数据集后的额外内存 | –² | 63 MiB | 42 MiB |
+| runner | EPYC 7763，4 核 | Apple M1（虚拟机），3 核 | EPYC 7763，4 核 |
+| 启动到就绪：fakes3 / MinIO / moto | 3.7 ms / 357 ms / 407 ms | 16 ms / 455 ms / 36 s¹ | 35 ms / 501 ms / 684 ms |
+| 空闲内存 | 15.9 MiB | 4.9 MiB | 7.2 MiB |
+| 模拟测试套件，每请求 | 245 µs（3.2×，9.8×） | 121 µs（5.9×，20×） | 297 µs（27×，16×） |
+| 4 KiB GET，16 并发 | 16,291 ops/s（3.3×，37×） | 27,502 ops/s（3.3×，43×） | 15,039 ops/s（3.5×，67×） |
+| 4 KiB PUT，16 并发 | 9,412 ops/s（2.8×，24×） | 14,610 ops/s（6.8×，37×） | 8,234 ops/s（15×，38×） |
+| HEAD，16 并发 | 20,103 ops/s（3.1×，44×） | 35,299 ops/s（3.6×，68×） | 18,656 ops/s（3.4×，74×） |
+| ListObjects，8 并发 | 1,052 ops/s（3.3×，34×） | 1,966 ops/s（6.5×，36×） | 828 ops/s（11×，32×） |
+| 64 MiB GET，4 并发 | 5.3 GiB/s（1.5×，2.5×） | 6.6 GiB/s（2.0×，2.8×） | 3.3 GiB/s（1.0×，1.3×）³ |
+| 64 MiB GET，单流 | 2.7 GiB/s（1.8×，3.5×） | 5.1 GiB/s（2.9×，2.5×） | 0.9 GiB/s（2.8×，1.1×） |
+| 64 MiB PUT，4 并发 | 856 MiB/s（1.2×，4.5×） | 454 MiB/s（1.3×，3.1×） | 481 MiB/s（4.0×，6.8×） |
+| 写入 551 MiB 数据集后的额外内存 | –² | 63 MiB | 38 MiB |
 
 启动时间是从启动进程到第一个带签名的 ListBuckets 返回 200，探测本身在 Windows 和 macOS 上有十几毫秒的开销。直接计时
 `fakes3 --port 0` 从启动到打印出监听地址（[运行](https://github.com/AkaraChen/fakes3/actions/runs/41606354429)），Windows 上是 5.9 ms
@@ -116,6 +117,9 @@ runner 每次分到的 CPU 不一样，不同系统之间的绝对值不能直�
 
 ¹ 这次运行里 moto 在 macOS 上每次启动都要 36 秒，前一次运行是 0.6 秒，原因没查。
 ² Linux 上大对象在 memfd 里，不计入进程的 RSS，这一项看上面的 Docker 测试。MinIO 的数据在磁盘上（Linux 上在 /dev/shm），也不计入。
+³ EPYC 7763 的 Windows runner 上，64 MiB GET 时有时会进入一种慢的状态：每个对象的服务端 CPU 从约 7.5 ms 变成约 34 ms，九成在内核里，
+不论哪个版本都会遇到（[运行](https://github.com/AkaraChen/fakes3/actions/runs/41615044972)）；这次 MinIO 和 moto 也一样慢。EPYC 9V74 的 runner 上
+同样的负载是 7 GiB/s 左右。
 
 ### 每个请求的 CPU 花在哪
 
@@ -133,7 +137,7 @@ runner 每次分到的 CPU 不一样，不同系统之间的绝对值不能直�
 ntdll、vcruntime、ws2_32 这些系统库约 8%。折算到每个请求，fakes3 自己的用户态代码在 Windows 上约 12 µs，和 Linux 同档 CPU 上
 （约 20 µs 一个请求，60% 在 fakes3 里）相同；Windows 多出来的开销几乎全在内核：网络栈，以及 ntoskrnl 里独占 12% 的一个函数，
 对应 tokio worker 线程在虚拟机里的休眠和唤醒（macOS 上相应的是 `__psynch_cvwait` 和 `kevent`）。所以 Windows 上没有能靠条件编译
-去掉的用户态热点。
+去掉的用户态热点；能做的是少唤醒线程：Windows 上 fakes3 只用一半的核做 worker 线程（见下表）。
 
 ### 在 macOS 和 Windows 上试过的优化
 
@@ -144,10 +148,11 @@ ntdll、vcruntime、ws2_32 这些系统库约 8%。折算到每个请求，fakes
 | 写入前用 `mlock` 一次性预缺页（macOS） | 50–80 ms / 64 MiB，比直接写还慢 | 不采用 |
 | Windows 上用 NASM 构建 OpenSSL 的汇编 | MD5 0.71 GB/s，和 Linux 相同（macOS M1 虚拟机上是 0.49–0.56 GB/s） | release 和 bench 都这样构建；没装 NASM 时 OpenSSL 退回 C 实现 |
 | 关连接时 lingering close | 修正：提前返回的错误（比如 NoSuchBucket）在 macOS、Windows 上不再变成 connection reset | 所有系统都启用（[src/linger.rs](../src/linger.rs)） |
+| tokio worker 线程数减半（至少 2 个） | Windows（4 核，四次 A/B，两台 EPYC 9V74、两台 EPYC 7763）：并发小请求的吞吐 B/A 1.19–1.34，每请求服务端 CPU 0.64–0.76，每次每轮都一样；单连接延迟、64 MiB GET 和 PUT 持平或略好（[1](https://github.com/AkaraChen/fakes3/actions/runs/41604107640)、[2](https://github.com/AkaraChen/fakes3/actions/runs/41609262547)、[3](https://github.com/AkaraChen/fakes3/actions/runs/41615049618)、[4](https://github.com/AkaraChen/fakes3/actions/runs/41615044972)）。只少一个（核数 − 1）只有 1.05–1.07（[运行](https://github.com/AkaraChen/fakes3/actions/runs/41615256038)）。macOS（3 核 → 2）：0.87–1.35，有好有坏（[运行](https://github.com/AkaraChen/fakes3/actions/runs/41604111663)） | 只在 Windows 上启用（`worker_threads()`，[src/blocking.rs](../src/blocking.rs)），CLI 和 `Server::start_blocking` 都用 |
 
 ### 已知瓶颈
 
-- Windows 上单流读大对象约 1.5–1.7 GiB/s（4 路并发能到 7 GiB/s）。这时 fakes3 只用 0.2 核，MinIO、moto 单流也是这个速度，
+- Windows 上单流读大对象约 0.9–1.7 GiB/s（4 路并发能到 7 GiB/s）。这时 fakes3 只用 0.2 核，MinIO、moto 单流也是这个速度，
   限制在客户端和 Windows 回环的单连接吞吐上；调大服务端的 socket 缓冲区没有变化。
 - macOS runner 上 64 MiB PUT 约 450 MiB/s，fakes3 用不到 1 核，MinIO 也是这个速度：3 核的机器上 warp 客户端先到了上限。
   服务端每 64 MiB 的主要开销是 MD5（M1 虚拟机上约 130 ms，在单独的线程上流水线计算），其次是首次写入新内存的缺页（约 30 ms）。

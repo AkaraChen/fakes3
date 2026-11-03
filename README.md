@@ -361,9 +361,10 @@ S3 Control. Website and notification *configuration* can be stored and read back
 | Rust library | Linux, macOS, Windows |
 
 CI runs the test suites on Linux, macOS and Windows. The behaviour is the same everywhere; what differs is
-where large objects live (a `memfd` on Linux, the heap elsewhere) and, for the default `auto` memory limit,
-where the machine's memory size comes from (a container's cgroup limit is only read on Linux). Performance
-on each system is in [docs/benchmarks.md](docs/benchmarks.md#macos-和-windows).
+where large objects live (a `memfd` on Linux, the heap elsewhere), where the default `auto` memory limit gets
+the machine's memory size from (a container's cgroup limit is only read on Linux), and that on Windows the
+server runs half as many worker threads as there are cores, because waking threads costs more there.
+Performance on each system is in [docs/benchmarks.md](docs/benchmarks.md#macos-和-windows).
 
 ## Security
 
