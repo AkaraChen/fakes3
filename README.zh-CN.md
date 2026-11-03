@@ -279,12 +279,15 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认保留旧行为�
 ## 支持的功能
 
 - **Bucket**：创建、删除、HeadBucket、ListBuckets（分页）、GetBucketLocation、标签
-- **对象**：PUT、GET、HEAD、DELETE、DeleteObjects、CopyObject（支持替换元数据和标签）、Range 读取、标签、GetObjectAttributes
+- **对象**：PUT、GET、HEAD、DELETE、DeleteObjects、CopyObject（支持替换元数据和标签）、Range 读取、标签、GetObjectAttributes，
+  以及追加写（`x-amz-write-offset-bytes`）。AWS 只在 S3 Express One Zone 的目录 bucket 里支持追加写；fakes3 没有目录 bucket，
+  所以所有 bucket 都支持，规则相同：offset 必须等于当前大小，每次追加算一个 part
 - **列举**：ListObjectsV2、ListObjects（v1）、ListObjectVersions、ListMultipartUploads，支持 prefix、delimiter、分页、`encoding-type=url`
 - **分段上传**：Create、UploadPart、UploadPartCopy、ListParts、Complete、Abort，GET / HEAD 支持 `?partNumber=`
 - **版本控制**：Enabled / Suspended、删除标记、null version、按版本读取和删除
 - **Object Lock**：GOVERNANCE / COMPLIANCE 保留期、Legal Hold、bucket 默认保留期、绕过 governance
-- **条件请求**：`If-Match`、`If-None-Match`（包括条件写入）、`If-Modified-Since`、`If-Unmodified-Since`，以及 CopySource 的条件头
+- **条件请求**：`If-Match`、`If-None-Match`（包括 PUT、CopyObject 和 CompleteMultipartUpload 的条件写入）、`If-Modified-Since`、
+  `If-Unmodified-Since`，以及 CopySource 的条件头
 - **校验和**：CRC32、CRC32C、CRC64NVME、SHA-1、SHA-256，header 和 aws-chunked trailer 两种方式，分段上传支持 COMPOSITE 和 FULL_OBJECT；
   默认 CRC64NVME，和现在的 AWS 一致
 - **签名**：SigV4（header、预签名 URL、带 trailer 的流式上传）、SigV2、POST policy 表单上传

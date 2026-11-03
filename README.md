@@ -307,15 +307,18 @@ No mainstream SDK retries a 507. See [docs/memory-limit.md](docs/memory-limit.md
 
 - **Buckets**: create, delete, head, list (paginated), location, tagging
 - **Objects**: PUT, GET, HEAD, DELETE, DeleteObjects, CopyObject (with metadata and tag replacement),
-  range reads, tagging, GetObjectAttributes
+  range reads, tagging, GetObjectAttributes, and appends (`x-amz-write-offset-bytes`). AWS only allows
+  appends in S3 Express One Zone directory buckets; fakes3 has no directory buckets and allows them in
+  every bucket, with the same rules: the offset must be the current size, and each append is a part
 - **Listing**: ListObjectsV2, ListObjects (v1), ListObjectVersions and ListMultipartUploads, with prefix,
   delimiter, pagination and `encoding-type=url`
 - **Multipart uploads**: create, UploadPart, UploadPartCopy, ListParts, complete, abort, and
   `?partNumber=` on GET and HEAD
 - **Versioning**: enabled and suspended, delete markers, null versions, per-version reads and deletes
 - **Object Lock**: GOVERNANCE and COMPLIANCE retention, legal hold, default retention, governance bypass
-- **Conditional requests**: `If-Match`, `If-None-Match` (including conditional writes),
-  `If-Modified-Since`, `If-Unmodified-Since`, and the copy-source variants
+- **Conditional requests**: `If-Match`, `If-None-Match` (including conditional writes: PUT,
+  CopyObject and CompleteMultipartUpload), `If-Modified-Since`, `If-Unmodified-Since`, and the
+  copy-source variants
 - **Checksums**: CRC32, CRC32C, CRC64NVME, SHA-1 and SHA-256, in headers or aws-chunked trailers, with
   COMPOSITE and FULL_OBJECT multipart checksums. CRC64NVME is the default, as on AWS today.
 - **Signatures**: SigV4 (headers, presigned URLs, streaming with trailers), SigV2, POST policy uploads
