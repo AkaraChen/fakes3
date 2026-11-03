@@ -13,17 +13,20 @@ Node binding 的编译，以及 workflow 文件的 actionlint 检查。
 
 - **matrix**：先跑单元测试，再对选定的服务跑 SDK 兼容矩阵，报告显示在 job summary 里。
 - **s3-tests**：用 ceph/s3-tests 衡量一致性，和 main 逐个用例对比。
-- **bench**：对选定的服务跑启动、模拟测试套件、内存占用和 warp 压测。
+- **bench**：对选定的服务跑启动、模拟测试套件、内存占用和 warp 压测（Docker，只能在 Linux 上跑）。
+- **bench-native**：同样的测量，但所有服务都作为本机进程运行（fakes3、MinIO、moto），在 Linux、macOS 和 Windows 的 runner 上各跑一遍。
 - **ab**：在同一台 runner 上交替压测两个版本（`base` / `head`），用来判断一个改动对性能的影响。
   托管 runner 之间速度能差 2 倍，所以比较两个版本时只能用这个，不能拿两次独立的 bench 结果比。
+  `runner` 可以选 macOS 或 Windows 的 runner；两个 ref 都要能在那个系统上构建。
 - **node**：构建 Node 插件并测试；推送 `v*` tag 时通过 npm 可信发布上传（见 [bindings/node/PUBLISHING.md](../bindings/node/PUBLISHING.md)）。
-- **release**：推送 `v*` tag 时发布 GHCR 镜像、静态二进制和 crates.io 上的 `fakes3` crate；其余情况只打包并校验 crate（`cargo publish --dry-run`）。
+- **release**：推送 `v*` tag 时发布 GHCR 镜像、二进制（静态链接的 Linux 版、macOS 和 Windows 版）和 crates.io 上的 `fakes3` crate；其余情况只打包并校验 crate（`cargo publish --dry-run`）。
 - **opendal**：测试 OpenDAL 绑定；推送 `fakes3-opendal-v*` tag 时发布 `fakes3-opendal` crate（见[下文](#fakes3-opendal)）。
 
 本地也可以跑兼容矩阵和性能测试，前提是装好 Docker 和各语言的工具链：
 
 ```bash
 bench/setup.sh && uv run bench/run.py      # 性能测试，结果写到 bench/RESULTS.md
+bench/setup-native.sh && uv run bench/native.py   # 不用 Docker 的版本，macOS 和 Windows（Git Bash）上也能跑
 SERVERS="fakes3 minio" matrix/run.sh && python3 matrix/report.py   # 兼容矩阵
 ```
 

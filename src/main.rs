@@ -49,7 +49,7 @@ struct Opt {
     #[arg(long, hide = true, conflicts_with = "auth")]
     no_auth: bool,
 
-    /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
+    /// On Linux, objects and parts at or above this size are stored in a memfd instead of on the heap.
     #[arg(long, default_value_t = 1 << 20)]
     inline_threshold: usize,
 

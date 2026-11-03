@@ -100,7 +100,7 @@ pub struct Config {
     /// the account its access key belongs to (the first one if none does), and an unsigned request
     /// is anonymous. Authorization (ACLs, bucket policies, Block Public Access) applies either way.
     pub auth: bool,
-    /// Objects and parts at or above this size are stored in a memfd instead of on the heap.
+    /// On Linux, objects and parts at or above this size are stored in a memfd instead of on the heap.
     pub inline_threshold: usize,
     /// Base domains for virtual-host-style addressing: `<bucket>.<domain>` selects the bucket.
     /// Path-style requests keep working on every host. Empty disables virtual-host addressing.

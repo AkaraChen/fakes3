@@ -34,7 +34,7 @@ pub struct StartOptions {
     /// belongs to (`fakes3` if none does), while an unsigned request is anonymous and subject to
     /// ACLs, bucket policies and Block Public Access.
     pub auth: Option<bool>,
-    /// Objects and parts at or above this many bytes are stored in a memfd instead of on the heap.
+    /// On Linux, objects and parts at or above this many bytes are stored in a memfd instead of on the heap.
     /// Default 1 MiB.
     pub inline_threshold: Option<u32>,
     /// Base domains for virtual-host-style addressing: `<bucket>.<domain>` selects the bucket.
