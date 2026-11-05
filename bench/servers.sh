@@ -11,6 +11,7 @@
 #
 # S3BENCH_PREFIX / S3BENCH_PORT_OFFSET namespace container names and ports, so benchmarks can
 # restart servers without disturbing a long-lived set used by the SDK matrix.
+# FAKES3_BIND is the address fakes3 listens on (default 127.0.0.1).
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -48,7 +49,7 @@ launch() {
       # matrix (bad_credentials), the s3-tests runner and the benchmarks all measure fakes3 as a
       # server that checks them. Without it those results would silently change meaning.
       # shellcheck disable=SC2086 # FAKES3_RUN_ARGS is a list of extra `docker run` options, e.g. "-e FAKES3_BUCKET_DEFAULTS=aws"
-      run fakes3 ${FAKES3_RUN_ARGS:-} "${FAKES3_IMAGE:-fakes3:local}" --host 127.0.0.1 --port "$p" --access-key "$AK" --secret-key "$SK" --auth ;;
+      run fakes3 ${FAKES3_RUN_ARGS:-} "${FAKES3_IMAGE:-fakes3:local}" --host "${FAKES3_BIND:-127.0.0.1}" --port "$p" --access-key "$AK" --secret-key "$SK" --auth ;;
     minio)
       run minio --tmpfs /data -e MINIO_ROOT_USER="$AK" -e MINIO_ROOT_PASSWORD="$SK" \
         -e MINIO_BROWSER=off cgr.dev/chainguard/minio:latest server /data --address "127.0.0.1:$p" ;;

@@ -114,6 +114,9 @@ def start(server):
     if os.environ.get("WARP_NO_SERVER"):
         return int(os.environ["WARP_PORT"])
     env = dict(os.environ)
+    if name == "fakes3":
+        # Dual-stack, because <bucket>.localhost may resolve to ::1.
+        env["FAKES3_BIND"] = "::"
     if server == "fakes3-aws":
         env["FAKES3_RUN_ARGS"] = "-e FAKES3_BUCKET_DEFAULTS=aws"
     subprocess.run([str(SERVERS_SH), "start", name], check=True, text=True, capture_output=True, env=env)
