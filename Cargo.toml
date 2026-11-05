@@ -1,6 +1,6 @@
 [package]
 name = "fakes3"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 description = "An in-memory S3 server for tests: millisecond startup, no persistence, AWS-compatible behaviour"
 license = "MIT"
