@@ -86,5 +86,9 @@
   - 剩下的 `test_copy_part_enc[…-sse-c-…]`（SSE-C 分段上传的 Complete 不带 key 是否应该 400，AWS 行为未确认）、`test_object_read_unreadable`（C1 控制字符的 key）没动
 - [x] 接入 Apache OpenDAL 的 behavior tests（`conformance/opendal/run.sh`，结果见 [conformance/OPENDAL.md](conformance/OPENDAL.md)）：
       四种配置全部通过，不用关闭任何能力（v0.1.1 时 12 个失败，#7、#8 补齐）
+- [x] 接入 MinIO warp 的各个 workload（`conformance/warp/run.py`、`.github/workflows/warp.yml`，结果见 [conformance/WARP.md](conformance/WARP.md)）：
+      warp 是压测工具，这里只当冒烟测试用；S3 用例 50/50（第一次 46/50）
+  - [x] CompleteMultipartUpload 的 composite 校验和不带 `-<parts>` 时也比较摘要（和 MinIO 一样），否则 minio-go 开了 `TrailingHeaders` 后，
+        超过 16 MiB 的 `PutObject` 全部 `BadDigest`；AWS 对不带后缀的值怎么处理还没验证
 - [ ] 接入 MinIO mint
 - [ ] 对真实 AWS S3 做差分测试（录制和回放）

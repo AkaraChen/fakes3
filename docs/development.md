@@ -13,6 +13,7 @@ Node binding 的编译，以及 workflow 文件的 actionlint 检查。
 
 - **matrix**：先跑单元测试，再对选定的服务跑 SDK 兼容矩阵，报告显示在 job summary 里。
 - **s3-tests**：用 ceph/s3-tests 衡量一致性，和 main 逐个用例对比。
+- **warp**：把 MinIO warp 的各个 workload 当冒烟测试跑一遍，报告哪些功能能跑通，以 MinIO 做对照（不是压测，见 [conformance/WARP.md](../conformance/WARP.md)）。
 - **bench**：对选定的服务跑启动、模拟测试套件、内存占用和 warp 压测（Docker，只能在 Linux 上跑）。
 - **bench-native**：同样的测量，但所有服务都作为本机进程运行（fakes3、MinIO、moto），在 Linux、macOS 和 Windows 的 runner 上各跑一遍。
 - **ab**：在同一台 runner 上交替压测两个版本（`base` / `head`），用来判断一个改动对性能的影响。
