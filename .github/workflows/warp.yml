@@ -9,6 +9,7 @@ on:
   push:
     paths:
       - .github/workflows/warp.yml
+      - conformance/warp/**
   workflow_dispatch:
     inputs:
       servers:
