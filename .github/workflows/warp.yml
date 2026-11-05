@@ -6,10 +6,6 @@ name: warp
 # The report is shown in the job summary and uploaded as an artifact, and a failing case does not
 # fail the run, as in s3-tests.yml.
 on:
-  push:
-    paths:
-      - .github/workflows/warp.yml
-      - conformance/warp/**
   workflow_dispatch:
     inputs:
       servers:
@@ -54,7 +50,7 @@ jobs:
         env:
           SERVERS: ${{ inputs.servers }}
           CASES: ${{ inputs.cases }}
-          DURATION: ${{ inputs.duration || '3s' }}
+          DURATION: ${{ inputs.duration }}
         run: |
           # shellcheck disable=SC2086 # SERVERS is a list
           python3 conformance/warp/run.py $SERVERS --cases "$CASES" --duration "$DURATION"
