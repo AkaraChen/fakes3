@@ -356,6 +356,7 @@ fakes3 是给测试用的，**不要把它暴露在不可信的网络上，也�
 | [docs/select.md](docs/select.md) | S3 Select 的覆盖范围 |
 | [docs/benchmarks.md](docs/benchmarks.md) | SDK 兼容矩阵、ceph/s3-tests 和性能测试结果 |
 | [conformance/OPENDAL.md](conformance/OPENDAL.md) | 用 Apache OpenDAL 的 behavior tests 测 fakes3 |
+| [conformance/WARP.md](conformance/WARP.md) | 用 MinIO warp 的各个 workload 对 fakes3 做冒烟测试 |
 | [docs/s3s-workarounds.md](docs/s3s-workarounds.md) | fakes3 在哪些地方修正了 s3s 以对齐 AWS |
 | [docs/development.md](docs/development.md) | 构建、测试、CI 和发布 |
 

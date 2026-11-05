@@ -1,0 +1,67 @@
+name: warp
+
+# Runs every minio/warp workload that doesn't need another service (conformance/warp/run.py, warp
+# pinned in bench/setup-native.sh) against fakes3 and, as a reference, MinIO. This is warp as a smoke
+# test of the data path: which features work, not how fast. bench.yml measures performance.
+# The report is shown in the job summary and uploaded as an artifact, and a failing case does not
+# fail the run, as in s3-tests.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      servers:
+        description: "Space-separated servers: fakes3, fakes3-aws (fakes3 --bucket-defaults aws), minio, localstack, moto, s3mock, juicefs"
+        default: "fakes3 fakes3-aws minio"
+      cases:
+        description: "Comma-separated cases from conformance/warp/run.py (default: all)"
+        default: ""
+      duration:
+        description: "Duration of each workload"
+        default: "3s"
+
+permissions:
+  contents: read
+
+jobs:
+  warp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+
+      - uses: docker/setup-buildx-action@v4
+      - name: Build fakes3 image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          tags: fakes3:local
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build warp
+        run: bench/setup-native.sh warp
+
+      - name: Run warp
+        env:
+          SERVERS: ${{ inputs.servers }}
+          CASES: ${{ inputs.cases }}
+          DURATION: ${{ inputs.duration }}
+        run: |
+          # shellcheck disable=SC2086 # SERVERS is a list
+          python3 conformance/warp/run.py $SERVERS --cases "$CASES" --duration "$DURATION"
+
+      - name: Render report
+        if: always()
+        run: python3 conformance/warp/report.py conformance/warp/results | tee conformance/warp/results/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: warp-${{ github.run_id }}
+          path: conformance/warp/results/
+          if-no-files-found: warn

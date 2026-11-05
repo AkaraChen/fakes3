@@ -406,6 +406,7 @@ Detailed documentation is in [docs/](docs/). Most of it is written in Chinese.
 | [docs/select.md](docs/select.md) | S3 Select coverage |
 | [docs/benchmarks.md](docs/benchmarks.md) | SDK matrix, ceph/s3-tests and performance results |
 | [conformance/OPENDAL.md](conformance/OPENDAL.md) | Apache OpenDAL's behavior tests against fakes3 |
+| [conformance/WARP.md](conformance/WARP.md) | MinIO warp's workloads as a smoke test of fakes3 |
 | [docs/s3s-workarounds.md](docs/s3s-workarounds.md) | Where fakes3 corrects s3s to match AWS |
 | [docs/development.md](docs/development.md) | Building, testing, CI and releasing |
 

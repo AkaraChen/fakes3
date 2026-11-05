@@ -8,3 +8,4 @@
 __pycache__/
 /conformance/opendal/.work/
 /conformance/opendal/results/
+/conformance/warp/results/
