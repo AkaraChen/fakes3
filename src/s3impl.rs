@@ -535,6 +535,13 @@ fn multipart_checksum(alg_idx: usize, ty: &ChecksumType, parts: &[(&Checksum, u6
     out
 }
 
+/// Whether the checksum sent with CompleteMultipartUpload is the one computed for the object. A
+/// composite value may leave out its `-<parts>`: minio-go sends it that way and MinIO accepts it,
+/// and the digest is still compared. A part count that is there has to be right.
+fn whole_checksum_matches(claimed: &str, computed: &str) -> bool {
+    claimed == computed || computed.rsplit_once('-').is_some_and(|(digest, _)| claimed == digest)
+}
+
 /// `aws-chunked` describes the request framing, not the object; S3 never stores it. The rest of the
 /// client's value is returned as sent, spacing included (`deflate, gzip` stays `deflate, gzip`).
 fn strip_aws_chunked(ce: Option<String>) -> Option<String> {
@@ -2531,7 +2538,7 @@ impl S3 for FakeS3 {
             // A request-level checksum (the full-object value, or the composite `<digest>-<parts>`)
             // must match ours; anything else, a malformed value included, is a BadDigest.
             if let (Some(want), Some(have)) = (slot(&claimed_whole, alg_idx), slot(&checksum, alg_idx))
-                && want != have
+                && !whole_checksum_matches(want, have)
             {
                 return Err(s3_error!(
                     BadDigest,
@@ -2713,6 +2720,17 @@ mod tests {
         raw.extend(base64_simd::STANDARD.decode_to_vec(b.checksum_sha256.unwrap()).unwrap());
         let want = format!("{}-2", crc_of(3, &raw).checksum_sha256.unwrap());
         assert_eq!(got.checksum_sha256.as_deref(), Some(want.as_str()));
+    }
+
+    #[test]
+    fn whole_checksum_may_leave_out_the_part_count() {
+        assert!(whole_checksum_matches("abc=-3", "abc=-3"));
+        assert!(whole_checksum_matches("abc=", "abc=-3"));
+        assert!(!whole_checksum_matches("abd=", "abc=-3"));
+        assert!(!whole_checksum_matches("abc=-2", "abc=-3"));
+        // A full-object value has no part count.
+        assert!(whole_checksum_matches("abc=", "abc="));
+        assert!(!whole_checksum_matches("abc=-1", "abc="));
     }
 
     #[test]

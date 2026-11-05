@@ -447,6 +447,63 @@ async fn complete_multipart_checks_the_request_level_checksum() {
     assert_eq!(r.status, 200, "{}", r.body);
 }
 
+/// minio-go sends the composite digest without `-<parts>`, which warp's `--checksum` runs into
+/// (conformance/WARP.md). The object still gets the value with the part count.
+#[tokio::test]
+async fn complete_multipart_takes_a_composite_checksum_without_its_part_count() {
+    let (_s, a) = start().await;
+    make_bucket(a, "bkt").await;
+    let up = send(
+        a,
+        req("POST", "/bkt/mp").query("uploads").header("x-amz-checksum-algorithm", "SHA256"),
+    )
+    .await;
+    let uid = tag(&up.body, "UploadId").unwrap().to_owned();
+    let q = format!("partNumber=1&uploadId={uid}");
+    let p = send(
+        a,
+        req("PUT", "/bkt/mp")
+            .query(&q)
+            .header("x-amz-checksum-algorithm", "SHA256")
+            .body(b"only part"),
+    )
+    .await;
+    let sum = p.header("x-amz-checksum-sha256").unwrap();
+    let body = format!(
+        "<CompleteMultipartUpload><Part><ETag>{}</ETag><ChecksumSHA256>{sum}</ChecksumSHA256><PartNumber>1</PartNumber></Part></CompleteMultipartUpload>",
+        p.header("etag").unwrap()
+    );
+    let digest = {
+        use sha2::{Digest, Sha256};
+        let raw = base64_simd::STANDARD.decode_to_vec(sum).unwrap();
+        base64_simd::STANDARD.encode_to_string(Sha256::digest(raw))
+    };
+    let complete = |checksum: String| {
+        let (q, body) = (format!("uploadId={uid}"), body.clone());
+        async move {
+            send(
+                a,
+                req("POST", "/bkt/mp")
+                    .query(&q)
+                    .header("x-amz-checksum-sha256", &checksum)
+                    .body(body.as_bytes()),
+            )
+            .await
+        }
+    };
+    // Leaving the part count out doesn't turn off the comparison, and a wrong one is still wrong.
+    let r = complete("Ok6Cs5b96ux6+MWQkJO7UBT5sKPBeXBLwvj/hK89smg=".into()).await;
+    assert_eq!((r.status, r.code()), (400, "BadDigest"), "{}", r.body);
+    let r = complete(format!("{digest}-2")).await;
+    assert_eq!((r.status, r.code()), (400, "BadDigest"), "{}", r.body);
+
+    let r = complete(digest.clone()).await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert_eq!(tag(&r.body, "ChecksumSHA256"), Some(format!("{digest}-1").as_str()), "{}", r.body);
+    let h = send(a, req("HEAD", "/bkt/mp").header("x-amz-checksum-mode", "ENABLED")).await;
+    assert_eq!(h.header("x-amz-checksum-sha256"), Some(format!("{digest}-1").as_str()));
+}
+
 #[tokio::test]
 async fn a_foreign_expected_bucket_owner_is_denied() {
     let (_s, a) = start().await;
