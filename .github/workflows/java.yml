@@ -1,0 +1,104 @@
+name: java
+
+# Tests the Java library (bindings/java) with the AWS SDK for Java v2 on Linux, macOS and Windows.
+#
+# The `test` jobs use the library as users get it: no binary configured and none on PATH, so it
+# downloads the pinned fakes3 release from GitHub and verifies its .sha256. The `source` job runs
+# the same tests against a binary built from this commit, so control-plane changes that would
+# break the library show up before a release.
+#
+# Nothing is published from here; see java-publish.yml.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - "bindings/java/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/java.yml"
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: java-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, Java ${{ matrix.java }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            java: 11
+          - os: ubuntu-24.04
+            java: 21
+          - os: ubuntu-24.04-arm
+            java: 17
+          - os: macos-15
+            java: 17
+          - os: windows-2025
+            java: 11
+          - os: windows-2025
+            java: 21
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: bindings/java
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+          cache-dependency-path: bindings/java/pom.xml
+      - name: No fakes3 on PATH
+        run: "! command -v fakes3"
+      - run: mvn -B -ntp verify
+      - name: No fakes3 process left behind
+        if: always()
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            left=$(tasklist //FI "IMAGENAME eq fakes3.exe" | grep -i fakes3.exe || true)
+          else
+            left=$(pgrep -l fakes3 || true)
+          fi
+          if [ -n "$left" ]; then
+            echo "::error::fakes3 processes are still running: $left"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: surefire-${{ matrix.os }}-${{ matrix.java }}
+          path: bindings/java/target/surefire-reports
+
+  source:
+    name: test (binary from this commit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+          cache-dependency-path: bindings/java/pom.xml
+      - name: mvn verify
+        working-directory: bindings/java
+        env:
+          FAKES3_BINARY: ${{ github.workspace }}/target/release/fakes3
+        run: mvn -B -ntp verify

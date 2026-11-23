@@ -1,0 +1,53 @@
+name: java-publish
+
+# Publishes the Java library (bindings/java) to Maven Central through the Central Portal.
+# It only ever runs by hand, and only uploads when `publish` is ticked; otherwise it builds,
+# tests and packages the jars (classes, sources, javadoc) without signing or uploading.
+# The upload waits in the Central Portal until it is published there by hand (autoPublish=false).
+#
+# Before the first real run, see bindings/java/PUBLISHING.md: claim the namespace, then add the
+# secrets CENTRAL_USERNAME, CENTRAL_PASSWORD (a Central Portal user token), GPG_PRIVATE_KEY and
+# GPG_PASSPHRASE.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Sign and upload to Maven Central (dry run when false)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: bindings/java
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+          cache-dependency-path: bindings/java/pom.xml
+          server-id: central
+          server-username: CENTRAL_USERNAME
+          server-password: CENTRAL_PASSWORD
+          gpg-private-key: ${{ inputs.publish && secrets.GPG_PRIVATE_KEY || '' }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Dry run
+        if: ${{ !inputs.publish }}
+        run: mvn -B -ntp verify
+
+      - name: Sign and upload
+        if: ${{ inputs.publish }}
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: mvn -B -ntp -Prelease deploy
