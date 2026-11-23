@@ -7,8 +7,10 @@
 - [x] `/_fakes3/clock`：冻结、推进或设置虚拟时间；预签名 URL 过期跟随虚拟时钟
   - s3s 不允许注入时间，SigV4 日期偏差检查仍然用主机时间（见文档）
   - lifecycle 过期和转换、Object Lock retention 到期、Glacier restore 的完成与到期都读 `Clock::now`
-- [ ] `POST /_fakes3/faults`：按操作、bucket/key 前缀或概率注入故障
-  - 503 SlowDown、500 InternalError、固定或随机延迟、body 截断、连接重置
+- [x] `POST /_fakes3/faults`：按操作、bucket/key 前缀或概率注入故障（见 [docs/control-plane.md](docs/control-plane.md#故障注入)）
+  - 503 SlowDown、500 InternalError（及任意状态码 + 错误码）、固定或随机延迟、body 截断、连接重置；`times` / `skip` / 带种子的概率
+  - 延迟用真实时间，不跟随虚拟时钟；快照不包含规则，`reset` 默认删除规则；无规则时请求路径只多一次原子读
+  - 不做：响应发送到一半时停顿、“处理后断开但不回响应”；HTTP/2 上的重置只重置单个流
 - [x] `GET /_fakes3/requests`：请求日志，用于断言调用次数和顺序
 - [x] 命令行 `fakes3 ctl` 和 Rust 进程内的 `Server` 方法
 - [x] Rust 进程内库模式（`Server::start` / `Server::start_blocking`）、Node.js 绑定（napi-rs）、GHCR 镜像

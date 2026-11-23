@@ -53,10 +53,11 @@ Returns `Promise<FakeS3Server>`. Every option is optional:
 | `accessKey`, `secretKey`, `users` | The configured accounts |
 | `stop(): Promise<void>` | Stops the server and releases the port immediately. Safe to call more than once |
 | `memory(): { used, limit? }` | Object data held, in bytes, and the limit (omitted when unlimited) |
-| `reset(options?)` | Clears all buckets, objects and uploads, and by default the request log and clock. Pass `{ snapshots: true }` to delete snapshots too |
+| `reset(options?)` | Clears all buckets, objects and uploads, and by default the request log, clock and fault rules. Pass `{ snapshots: true }` to delete snapshots too, `{ faults: false }` to keep the fault rules |
 | `snapshot(name?)`, `restore(name)`, `snapshots()`, `deleteSnapshot(name)` | Save the current state and roll back to it, as often as you like. Object data is shared, not copied |
 | `clock` | The server clock (below) |
 | `requests` | The request log (below) |
+| `faults` | Fault injection (below) |
 
 ### Virtual clock
 
@@ -84,9 +85,38 @@ server.requests.configure({ enabled: true, capacity: 50_000 });
 ```
 
 Records come in arrival order:
-`{ seq, time, method, path, bucket, key, operation, status, latencyUs, bytesIn, bytesOut, accessKey, requestId }`.
+`{ seq, time, method, path, bucket, key, operation, status, latencyUs, bytesIn, bytesOut, accessKey, requestId, fault? }`.
 Filters: `bucket`, `keyPrefix`, `operation`, `method`, `status` (`404`, `"4xx"` or `"error"`), `since`,
 `after` (a `seq`) and `limit` (keep only the most recent matches).
+
+### Fault injection
+
+Make S3 requests fail the way S3 sometimes does, to test your retries and timeouts:
+
+```ts
+// The next PutObject gets 503 SlowDown; the SDK retries and succeeds.
+server.faults.add({ operation: "PutObject", error: "SlowDown", times: 1 });
+
+server.faults.add({ operation: "GetObject", error: { status: 500, code: "InternalError" } });
+server.faults.add({ bucket: "logs", delay: "2s" });                       // or ms, or { min: 50, max: "300ms" }
+server.faults.add({ operation: "GetObject", truncate: 100 });             // send 100 body bytes, then close
+server.faults.add({ keyPrefix: "tmp/", reset: true, times: 1 });          // TCP reset, no response
+server.faults.add({ error: "SlowDown", probability: 0.2, seed: 42 });     // repeatable random failures
+
+server.faults.list();      // rules with matched, fired and remaining counts
+server.faults.remove(id);
+server.faults.clear();
+```
+
+A rule matches by `operation` (one name or an array), `bucket` and `keyPrefix`; `times` limits how many
+requests it hits and `skip` lets the first matches through. It does one of `error` (an S3 error code such
+as `"SlowDown"`, or `{ status, code, message }`), `truncate` or `reset`, optionally after a `delay`, or
+just the delay. Rules are checked in the order they were added and the first that fires wins.
+Probability draws and random delays come from the rule's `seed`, so the same seed and the same sequence
+of requests give the same faults; a generated seed is returned by `add()`. Delays use real time, not
+the virtual clock. Requests a rule hit carry `fault: { id, type, delayed }` in the request log (a reset
+one has `status: 0`). `reset()` removes all rules; snapshots don't include them. Details:
+[docs/control-plane.md](../../docs/control-plane.md#故障注入).
 
 Control calls are not synchronized with in-flight requests, so make them between tests, while no
 requests are pending. After `stop()`, they throw `server is stopped`.

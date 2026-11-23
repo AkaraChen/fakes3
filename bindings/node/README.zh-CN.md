@@ -46,7 +46,7 @@ await server.stop();
 **测试控制面**：[控制面](../../docs/control-plane.md)的操作也有对应的方法，直接在进程内调用，不走 HTTP。时间一律用 JS 的 `Date`。
 
 ```ts
-server.reset();                         // 清空所有数据、请求日志和时钟；快照保留（reset({ snapshots: true }) 一并删除）
+server.reset();                         // 清空所有数据、请求日志、时钟和故障规则；快照保留（reset({ snapshots: true }) 一并删除，reset({ faults: false }) 保留规则）
 server.snapshot("seeded");              // 保存当前状态 → { name, created, buckets, objects, uploads }
 server.restore("seeded");               // 回滚到快照（快照不会被消耗）；snapshots() 列出，deleteSnapshot(name) 删除
 server.memory();                        // { used, limit }
@@ -58,9 +58,23 @@ server.clock.now();                     // Date；isFrozen()、isShifted()
 server.requests.list({ operation: "PutObject", status: "error", limit: 10 }); // 过滤条件都可省略
 server.requests.count({ bucket: "demo" });   // 匹配的条数（忽略 limit）
 server.requests.clear();                // configure({ enabled, capacity }) 开关日志、改容量
+
+server.faults.add({ operation: "PutObject", error: "SlowDown", times: 1 });  // 下一个 PutObject 收到 503，SDK 重试成功
+server.faults.add({ operation: "GetObject", error: { status: 500, code: "InternalError" } });
+server.faults.add({ bucket: "logs", delay: "2s" });                // 也可以是毫秒数，或 { min: 50, max: "300ms" }
+server.faults.add({ operation: "GetObject", truncate: 100 });      // 响应体只发 100 字节就断开
+server.faults.add({ keyPrefix: "tmp/", reset: true, times: 1 });   // TCP RST，没有响应
+server.faults.add({ error: "SlowDown", probability: 0.2, seed: 42 }); // 可重复的随机失败
+server.faults.list();                   // 规则及 matched、fired、remaining 计数；remove(id)、clear()
 ```
 
-`requests.list()` 返回按到达顺序排列的记录：`{ seq, time, method, path, bucket, key, operation, status, latencyUs, bytesIn, bytesOut, accessKey, requestId }`。
+**故障注入**：规则按 `operation`（一个或数组）、`bucket`、`keyPrefix` 匹配，`times` 限制命中次数，`skip` 先放行前几个匹配的请求；
+故障是 `error`（错误码如 `"SlowDown"`，或 `{ status, code, message }`）、`truncate`、`reset` 之一，可以先 `delay`，也可以只有延迟。
+按添加顺序检查，第一条命中的规则生效。概率和随机延迟由规则的 `seed` 决定，同样的种子和同样顺序的请求得到同样的故障；没给种子时 `add()` 返回生成的种子。
+延迟用真实时间，不跟随虚拟时钟。被命中的请求在请求日志里带 `fault: { id, type, delayed }`（连接重置的 `status` 为 0）。`reset()` 删除所有规则，快照不包含规则。
+详见[控制面文档](../../docs/control-plane.md#故障注入)。
+
+`requests.list()` 返回按到达顺序排列的记录：`{ seq, time, method, path, bucket, key, operation, status, latencyUs, bytesIn, bytesOut, accessKey, requestId, fault? }`。
 过滤条件：`bucket`、`keyPrefix`、`operation`、`method`、`status`（`404`、`"4xx"` 或 `"error"`）、`since`、`after`（`seq`）、`limit`（只保留最近的几条）。
 和控制面一样，这些调用没有和进行中的请求同步，请在测试之间、没有未完成请求时使用。服务停止后调用会抛出 `server is stopped`。
 
