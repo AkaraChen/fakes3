@@ -16,7 +16,12 @@
 - [x] GitHub Action：[setup-fakes3](https://github.com/AkaraChen/setup-fakes3)，下载 release 里的静态二进制并在后台启动
 - [x] OpenDAL 绑定：crate `fakes3-opendal`（[bindings/opendal](bindings/opendal/README.md)），返回走 OpenDAL S3 服务的 `Operator`；
       为此 `Server` 加了 `create_bucket` / `enable_versioning`
-- [ ] 其余语言的框架集成（pytest fixture 等，基于 `fakes3 ctl` 或 HTTP API）
+- [x] Python 包 `fakes3-sdk`（[bindings/python](bindings/python/README.md)）：wheel 自带预编译二进制，以子进程运行；
+      pytest fixture（每个测试一个 / 整个 session 一个），控制面封装成方法；子进程用 `--exit-on-stdin-close` 跟随父进程退出
+- [ ] boto3 + urllib3 1.x（Python 3.9 只能用这个组合）连续上传时会误读响应：带 `Expect: 100-continue` 的空 body PUT 收到的是直接的 200（hyper 对空 body 不发 `100 Continue`），
+      botocore 在这种情况下换了响应解析器，并且不会在下一个带 `Expect` 的请求前恢复；同一连接上的下一个 PUT 收到 `100 Continue` 后，把真正的 `200` 当成 header 解析失败并重试。
+      要么对空 body 也先发 `100 Continue`（看 S3 的实际行为），要么记录为已知限制。urllib3 2.x 不受影响
+- [ ] 其余语言的框架集成（Go、Java / JUnit 等，基于 `fakes3 ctl` 或 HTTP API）
 - [x] 默认不校验签名（原 `--no-auth`，现在是默认行为，`--auth` 才严格校验）：任意 access key / secret 签名的请求都接受（SigV4 / SigV2 的头和 presigned URL、三种流式上传，trailer 校验和仍会校验），
       并且是 bucket 的 owner；不带签名的请求是匿名请求，照常走 ACL / Bucket Policy / Block Public Access。
       s3s 没有跳过验签的开关，所以在服务包装层去掉签名再交给 s3s（aws-chunked 自己解码），并在请求扩展里留下 `Signed { access_key, presigned }`（见 `src/noauth.rs`、`src/access.rs`）

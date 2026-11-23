@@ -29,8 +29,8 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
   behavior tests without switching off a single capability ([conformance/OPENDAL.md](conformance/OPENDAL.md)).
 - **Built for tests.** Reset state between tests, snapshot and restore fixtures, move a virtual clock to
   expire presigned URLs or run lifecycle rules, and assert on a log of the requests your code made.
-- **Runs where your tests run.** Use the Docker image (amd64 and arm64), the Node.js package in-process,
-  the Rust library in-process, a native binary for Linux, macOS or Windows, or the GitHub Action.
+- **Runs where your tests run.** Use the Docker image (amd64 and arm64), the Python package with its pytest
+  fixtures, the Node.js package in-process, the Rust library in-process, a native binary for Linux, macOS or Windows, or the GitHub Action.
 
 |                                       | fakes3      | MinIO   | LocalStack | moto    | S3Mock  |
 | ------------------------------------- | ----------: | ------: | ---------: | ------: | ------: |
@@ -72,6 +72,31 @@ s3 = boto3.client(
 s3.create_bucket(Bucket="demo")
 s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 ```
+
+### Python and pytest
+
+[`fakes3-sdk`](bindings/python/README.md) on PyPI carries a prebuilt fakes3 binary for your platform
+and runs it as a child process, so there is no Docker and nothing to download. It also registers pytest
+fixtures: `fakes3_server` gives every test a fresh, empty server and stops it when the test ends.
+
+```bash
+pip install fakes3-sdk
+```
+
+```python
+def test_upload(fakes3_server):
+    s3 = fakes3_server.boto3_client()  # or pass fakes3_server.endpoint to your own code
+    s3.create_bucket(Bucket="demo")
+    s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
+
+    assert fakes3_server.requests.count(operation="PutObject") == 1
+    fakes3_server.clock.advance("31d")  # presigned URLs and lifecycle rules see the new time
+```
+
+Outside pytest, `with fakes3.start() as server:` does the same. The server never outlives your test
+process, even when it is killed. Wheels cover Linux x86_64 and aarch64 (glibc or musl), macOS (Apple
+silicon and Intel) and Windows x64, with Python 3.10 or later. Every option and method is in the
+[package README](bindings/python/README.md).
 
 ### Node.js, in-process
 
@@ -274,6 +299,7 @@ Every option can be given as a flag or an environment variable:
 | `--inline-threshold` | | `1048576` | On Linux, objects at or above this size live in a `memfd` instead of on the heap |
 | `--no-request-log` | | | Don't record requests for the control plane's request log |
 | `--request-log-capacity` | | `10000` | Requests kept in the log; the oldest are dropped first |
+| `--exit-on-stdin-close` | | | Exit when stdin closes. For programs that start fakes3 as a child process with stdin as a pipe: the server stops when they exit, even when they are killed |
 
 ### Authentication
 
@@ -357,6 +383,7 @@ S3 Control. Website and notification *configuration* can be stored and read back
 | --- | --- |
 | Docker image | `linux/amd64`, `linux/arm64` (also runs under Docker Desktop on macOS and Windows) |
 | Binary | x86_64 and aarch64 Linux (static), macOS on Apple silicon and Intel, x86_64 Windows |
+| Python package | Linux x86_64 and aarch64 (glibc and musl), macOS arm64 and x86_64, Windows x64; Python ≥ 3.10 |
 | Node.js package | Linux x64 and arm64 (glibc and musl), macOS arm64 and x64, Windows x64; Node.js ≥ 18 |
 | Rust library | Linux, macOS, Windows |
 

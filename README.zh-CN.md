@@ -26,7 +26,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
   不关闭任何能力也能全部通过（[conformance/OPENDAL.md](conformance/OPENDAL.md)）。
 - **为测试设计。** 测试之间重置状态、保存和回滚测试数据、拨动虚拟时钟让预签名 URL 过期或触发 Lifecycle 规则、
   用请求日志断言代码发了哪些请求。
-- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、Linux / macOS / Windows 的原生二进制，或者 GitHub Action。
+- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、带 pytest fixture 的 Python 包、在 Node.js 进程内运行、在 Rust 进程内运行、Linux / macOS / Windows 的原生二进制，或者 GitHub Action。
 
 | | fakes3 | MinIO | LocalStack | moto | S3Mock |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -66,6 +66,29 @@ s3 = boto3.client(
 s3.create_bucket(Bucket="demo")
 s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
 ```
+
+### Python 和 pytest
+
+PyPI 上的 [`fakes3-sdk`](bindings/python/README.zh-CN.md) 自带对应平台的预编译 fakes3 二进制，以子进程方式运行，不需要 Docker，
+也不会在运行时下载任何东西。安装后自动注册 pytest fixture：`fakes3_server` 给每个测试一个全新的空服务，测试结束时停掉。
+
+```bash
+pip install fakes3-sdk
+```
+
+```python
+def test_upload(fakes3_server):
+    s3 = fakes3_server.boto3_client()  # 或者把 fakes3_server.endpoint 交给你自己的代码
+    s3.create_bucket(Bucket="demo")
+    s3.put_object(Bucket="demo", Key="hello.txt", Body=b"hi")
+
+    assert fakes3_server.requests.count(operation="PutObject") == 1
+    fakes3_server.clock.advance("31d")  # 预签名 URL 和 Lifecycle 规则都按新时间算
+```
+
+不用 pytest 时，`with fakes3.start() as server:` 效果一样。服务不会比测试进程活得久，测试进程被强行杀掉也一样。
+wheel 覆盖 Linux x86_64 和 aarch64（glibc 和 musl 都能用）、Apple silicon 和 Intel 的 macOS、x64 的 Windows，需要 Python 3.10 或更新版本。
+全部选项和方法见[包的 README](bindings/python/README.zh-CN.md)。
 
 ### Node.js（进程内）
 
@@ -253,6 +276,7 @@ fakes3 ctl requests list --op PutObject       # 请求日志：按 bucket、操�
 | `--inline-threshold` | | `1048576` | Linux 上达到这个大小的对象存进 `memfd`，小于它的放在堆上 |
 | `--no-request-log` | | | 不记录请求日志 |
 | `--request-log-capacity` | | `10000` | 请求日志最多保留的条数，满了丢弃最早的 |
+| `--exit-on-stdin-close` | | | stdin 关闭时退出。给以子进程方式启动 fakes3、并把 stdin 接成管道的程序用：它们退出时服务跟着停，被强行杀掉也一样 |
 
 ### 认证
 
@@ -319,6 +343,7 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认保留旧行为�
 | --- | --- |
 | Docker 镜像 | `linux/amd64`、`linux/arm64`（在 macOS 和 Windows 上可以用 Docker Desktop 运行） |
 | 二进制 | x86_64 和 aarch64 Linux（静态链接）、Apple silicon 和 Intel 的 macOS、x86_64 Windows |
+| Python 包 | Linux x86_64 和 aarch64（glibc 和 musl）、macOS arm64 和 x86_64、Windows x64，Python ≥ 3.10 |
 | Node.js 包 | Linux x64 和 arm64（glibc 和 musl）、macOS arm64 和 x64、Windows x64，Node.js ≥ 18 |
 | Rust 库 | Linux、macOS、Windows |
 

@@ -80,6 +80,11 @@ struct Opt {
     /// Same bytes, slower; an escape hatch.
     #[arg(long, hide = true, env = "FAKES3_NO_FAST_LIST", value_parser = clap::builder::BoolishValueParser::new())]
     no_fast_list: bool,
+
+    /// Exit when stdin reaches end of file. A parent process that starts fakes3 with stdin as a
+    /// pipe gets the server stopped when it exits for any reason, even when it is killed.
+    #[arg(long)]
+    exit_on_stdin_close: bool,
 }
 
 #[derive(clap::Subcommand)]
@@ -98,6 +103,22 @@ fn main() -> std::io::Result<std::process::ExitCode> {
     }
     if opt.no_auth {
         eprintln!("fakes3: --no-auth is deprecated and does nothing; signatures are not verified unless --auth is given");
+    }
+    if opt.exit_on_stdin_close {
+        std::thread::spawn(|| {
+            use std::io::Read;
+            let mut sink = [0u8; 256];
+            let mut stdin = std::io::stdin().lock();
+            loop {
+                match stdin.read(&mut sink) {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(_) => break,
+                }
+            }
+            std::process::exit(0);
+        });
     }
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()))
