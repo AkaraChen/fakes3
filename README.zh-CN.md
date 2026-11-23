@@ -26,7 +26,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
   不关闭任何能力也能全部通过（[conformance/OPENDAL.md](conformance/OPENDAL.md)）。
 - **为测试设计。** 测试之间重置状态、保存和回滚测试数据、拨动虚拟时钟让预签名 URL 过期或触发 Lifecycle 规则、
   用请求日志断言代码发了哪些请求。
-- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、Linux / macOS / Windows 的原生二进制，或者 GitHub Action。
+- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、在 `go test` 里直接启动的 Go 模块、Linux / macOS / Windows 的原生二进制，或者 GitHub Action。
 
 | | fakes3 | MinIO | LocalStack | moto | S3Mock |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -126,6 +126,34 @@ s3.operator().write("hello.txt", "hi").await?;
 let op = opendal::Operator::from_uri(s3.uri())?; // "s3://test?endpoint=…"，和生产配置的写法一样
 ```
 
+### Go
+
+[Go 模块](bindings/go/README.zh-CN.md)在测试里把 fakes3 作为子进程启动，不需要 Docker。每次调用给当前测试一个独立的服务器，
+端口随机，测试结束时自动停止：
+
+```bash
+go get github.com/AkaraChen/fakes3/bindings/go
+```
+
+```go
+import fakes3 "github.com/AkaraChen/fakes3/bindings/go"
+
+func TestUpload(t *testing.T) {
+	t.Parallel()
+	srv := fakes3.Start(t)
+	client := s3.New(s3.Options{ // aws-sdk-go-v2；任何 S3 客户端都可以
+		BaseEndpoint: aws.String(srv.Endpoint),
+		Region:       srv.Region,
+		UsePathStyle: true,
+		Credentials:  credentials.NewStaticCredentialsProvider(srv.AccessKey, srv.SecretKey, ""),
+	})
+	// ...
+}
+```
+
+第一次运行时会把本平台的 release 二进制下载到用户缓存目录，并校验 SHA-256；想用已有的二进制，把 `fakes3` 放到 `PATH` 上或者设置
+`FAKES3_BINARY`。模块本身只用标准库，需要 Go 1.24 或更高版本。重置、快照、时钟和请求日志都是服务器上的方法，见[模块文档](bindings/go/README.zh-CN.md)。
+
 ### 独立二进制
 
 每个 [release](https://github.com/AkaraChen/fakes3/releases) 都附带 x86_64 和 aarch64 的静态 Linux 二进制、Apple silicon 和 Intel 的 macOS 二进制，
@@ -146,7 +174,7 @@ curl -L https://github.com/AkaraChen/fakes3/releases/latest/download/fakes3-x86_
 
 ## Testcontainers
 
-不需要专门的模块：用通用容器，暴露 9000 端口，等日志里出现 `http://`。容器几毫秒就能启动，所以可以每个测试类、甚至每个测试起一个。
+Go 测试可以直接用上面的 [Go 模块](#go)，完全不需要 Docker。其他语言不需要专门的模块：用通用容器，暴露 9000 端口，等日志里出现 `http://`。容器几毫秒就能启动，所以可以每个测试类、甚至每个测试起一个。
 
 ```python
 # Python：testcontainers-python
@@ -234,7 +262,7 @@ fakes3 ctl requests list --op PutObject       # 请求日志：按 bucket、操�
 ```
 
 进程内使用时是服务对象上的方法：Node.js 里是 `server.reset()`、`server.snapshot("seeded")`、`server.clock.advance("31d")`、
-`server.requests.list({ operation: "PutObject" })`，Rust 里是 `fakes3::Server` 上对应的方法。端点和语义见 [docs/control-plane.md](docs/control-plane.md)。
+`server.requests.list({ operation: "PutObject" })`，Go 里是 `srv.Clock().Advance(31 * 24 * time.Hour)` 等，Rust 里是 `fakes3::Server` 上对应的方法。端点和语义见 [docs/control-plane.md](docs/control-plane.md)。
 
 ## 配置
 
@@ -321,6 +349,7 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认保留旧行为�
 | 二进制 | x86_64 和 aarch64 Linux（静态链接）、Apple silicon 和 Intel 的 macOS、x86_64 Windows |
 | Node.js 包 | Linux x64 和 arm64（glibc 和 musl）、macOS arm64 和 x64、Windows x64，Node.js ≥ 18 |
 | Rust 库 | Linux、macOS、Windows |
+| Go 模块 | 有预编译二进制的平台；其他平台用自己构建的二进制。Go ≥ 1.24 |
 
 CI 在 Linux、macOS 和 Windows 上都跑完整的测试。各平台行为一致，区别只在大对象放在哪里（Linux 上是 `memfd`，其他系统放在堆上）、
 默认的 `auto` 内存上限从哪里读机器内存（只有 Linux 会读容器的 cgroup 限制），以及 Windows 上唤醒线程的开销更大，

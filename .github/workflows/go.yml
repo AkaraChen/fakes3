@@ -1,0 +1,89 @@
+name: go
+
+# Tests the Go module (bindings/go) with aws-sdk-go-v2.
+#
+#   - release: on Linux, macOS and Windows, with nothing configured, the way a user runs it: the
+#     module downloads the pinned fakes3 release from GitHub into an empty cache and checks its
+#     SHA-256 before starting it.
+#   - current: on Linux, against fakes3 built from this commit (FAKES3_BINARY), so a change to the
+#     control plane that breaks the Go client shows up here.
+#
+# Nothing is published: a Go module is released by pushing a `bindings/go/vX.Y.Z` tag.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - "bindings/go/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/go.yml"
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: release binary (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: bindings/go
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache-dependency-path: bindings/go/go.sum
+      - name: No fakes3 on PATH, empty cache
+        run: |
+          if command -v fakes3; then exit 1; fi
+          echo "FAKES3_CACHE_DIR=$RUNNER_TEMP/fakes3-cache" >> "$GITHUB_ENV"
+      - if: runner.os == 'Linux'
+        run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      # The race detector needs cgo, which the Windows runner has no C compiler for by default.
+      - if: runner.os != 'Windows'
+        run: go test -count=1 -v -race ./...
+      - if: runner.os == 'Windows'
+        run: go test -count=1 -v ./...
+      - name: The release was downloaded and cached
+        run: find "$FAKES3_CACHE_DIR" -type f -name 'fakes3*' | grep .
+      - name: No server left running
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            if tasklist | grep -i 'fakes3.exe'; then exit 1; fi
+          else
+            if pgrep -l fakes3; then exit 1; fi
+          fi
+
+  current:
+    name: current binary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --bin fakes3
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache-dependency-path: bindings/go/go.sum
+      - working-directory: bindings/go
+        env:
+          FAKES3_BINARY: ${{ github.workspace }}/target/debug/fakes3
+        run: go test -count=1 -race -v ./...

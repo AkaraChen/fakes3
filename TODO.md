@@ -16,6 +16,10 @@
 - [x] GitHub Action：[setup-fakes3](https://github.com/AkaraChen/setup-fakes3)，下载 release 里的静态二进制并在后台启动
 - [x] OpenDAL 绑定：crate `fakes3-opendal`（[bindings/opendal](bindings/opendal/README.md)），返回走 OpenDAL S3 服务的 `Operator`；
       为此 `Server` 加了 `create_bucket` / `enable_versioning`
+- [x] Go 模块：`github.com/AkaraChen/fakes3/bindings/go`（[bindings/go](bindings/go/README.zh-CN.md)），`fakes3.Start(t)` 起一个子进程，
+      二进制按 `FAKES3_BINARY` → `PATH` → 下载 release（校验 `.sha256`）的顺序取，控制面是 `Server` 上的方法；
+      测试进程异常退出时子进程跟着退出（Linux 用 `Pdeathsig`，macOS 用看门狗，Windows 用 job object）
+  - 发布要打 `bindings/go/vX.Y.Z` tag，还没有打
 - [ ] 其余语言的框架集成（pytest fixture 等，基于 `fakes3 ctl` 或 HTTP API）
 - [x] 默认不校验签名（原 `--no-auth`，现在是默认行为，`--auth` 才严格校验）：任意 access key / secret 签名的请求都接受（SigV4 / SigV2 的头和 presigned URL、三种流式上传，trailer 校验和仍会校验），
       并且是 bucket 的 owner；不带签名的请求是匿名请求，照常走 ACL / Bucket Policy / Block Public Access。
