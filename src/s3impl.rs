@@ -2535,8 +2535,10 @@ impl S3 for FakeS3 {
                 None => CRC64NVME,
             };
             let checksum = multipart_checksum(alg_idx, &up.checksum_type, &checksums);
-            // A request-level checksum (the full-object value, or the composite `<digest>-<parts>`)
-            // must match ours; anything else, a malformed value included, is a BadDigest.
+            // A request-level checksum must match ours: the full-object value, or for a composite
+            // checksum `<digest>-<parts>` or the bare `<digest>` (minio-go leaves out the part
+            // count; see `whole_checksum_matches`). Anything else, a wrong digest, a wrong part
+            // count or a malformed value, is a BadDigest.
             if let (Some(want), Some(have)) = (slot(&claimed_whole, alg_idx), slot(&checksum, alg_idx))
                 && !whole_checksum_matches(want, have)
             {

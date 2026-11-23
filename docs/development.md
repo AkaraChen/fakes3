@@ -7,13 +7,17 @@ cargo test
 ```
 
 **每次 push 和 PR** 都会自动跑 [ci](../.github/workflows/ci.yml)：格式、clippy（警告即失败）、全部 Rust 测试、
-Node binding 的编译，以及 workflow 文件的 actionlint 检查。
+Node binding 的编译、workflow 文件的 actionlint 检查，以及 README 里写死的版本号是否和 `Cargo.toml` 一致。
+
+改动服务端代码或 warp 测试脚本的 PR（以及合入 main 的 push）还会自动跑 **warp**（只测 fakes3 和 fakes3-aws，约 12 分钟）：
+fakes3 有本该通过的 S3 用例失败时 job 失败。
 
 比较慢的检查用 `workflow_dispatch` 手动触发：
 
 - **matrix**：先跑单元测试，再对选定的服务跑 SDK 兼容矩阵，报告显示在 job summary 里。
 - **s3-tests**：用 ceph/s3-tests 衡量一致性，和 main 逐个用例对比。
 - **warp**：把 MinIO warp 的各个 workload 当冒烟测试跑一遍，报告哪些功能能跑通，以 MinIO 做对照（不是压测，见 [conformance/WARP.md](../conformance/WARP.md)）。
+  手动触发时默认也跑 MinIO；MinIO 的失败只作参考，不影响结果。
 - **bench**：对选定的服务跑启动、模拟测试套件、内存占用和 warp 压测（Docker，只能在 Linux 上跑）。
 - **bench-native**：同样的测量，但所有服务都作为本机进程运行（fakes3、MinIO、moto），在 Linux、macOS 和 Windows 的 runner 上各跑一遍。
 - **ab**：在同一台 runner 上交替压测两个版本（`base` / `head`），用来判断一个改动对性能的影响。
@@ -60,7 +64,9 @@ cargo test
 
 ## 发布
 
-1. 把根目录 `Cargo.toml` 和 `bindings/node/package.json` 的 `version` 改成新版本，合入 main。
+1. 把根目录 `Cargo.toml` 和 `bindings/node/package.json` 的 `version` 改成新版本，`README.md` 和 `README.zh-CN.md` 里写死的版本
+   （setup-fakes3 示例的 `version:`、service container 的镜像 tag、镜像 tag 列表）也改成新版本，合入 main。
+   ci 和 release 都会跑 `.github/check-readme-version.sh`，漏改的话会失败。
 2. 在 main 上推送对应的 tag：`git tag v0.2.0 && git push origin v0.2.0`。
    - [release workflow](../.github/workflows/release.yml) 构建两个架构（各用原生 runner）、冒烟测试，把多架构镜像推到
      `ghcr.io/akarachen/fakes3`（tag：完整版本、`主版本.次版本`、`latest`、短 sha），并把静态二进制挂到 GitHub Release。

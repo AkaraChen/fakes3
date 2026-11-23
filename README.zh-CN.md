@@ -46,7 +46,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 ```
 
-镜像是 `ghcr.io/akarachen/fakes3`，支持 `linux/amd64` 和 `linux/arm64`，tag 有 `latest`、`0.1.0`、`0.1` 和 `sha-<提交>`。
+镜像是 `ghcr.io/akarachen/fakes3`，支持 `linux/amd64` 和 `linux/arm64`，tag 有 `latest`、`0.1.4`、`0.1` 和 `sha-<提交>`。
 它基于 Alpine，里面只有一个静态链接的二进制（压缩后约 7 MB），监听 `0.0.0.0:9000`，就绪后在 stdout 打印 `http://0.0.0.0:9000`。
 
 任何 S3 客户端用 path-style 寻址连上即可，凭证随意：
@@ -202,7 +202,7 @@ endpoint := fmt.Sprintf("http://%s:%s", host, port.Port())
 - uses: AkaraChen/setup-fakes3@v1
   id: s3
   with:
-    version: 0.1.0      # 默认 latest
+    version: 0.1.4      # 默认 latest
 - run: pytest
   env:
     S3_ENDPOINT: ${{ steps.s3.outputs.endpoint }}   # http://127.0.0.1:9000
@@ -216,7 +216,7 @@ endpoint := fmt.Sprintf("http://%s:%s", host, port.Port())
 ```yaml
 services:
   s3:
-    image: ghcr.io/akarachen/fakes3:0.1.0
+    image: ghcr.io/akarachen/fakes3:0.1.4
     ports: ["9000:9000"]
 ```
 
@@ -368,7 +368,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-每次 push 和 PR 都会在 CI 里跑这些检查。SDK 兼容矩阵、ceph/s3-tests 和性能测试是手动触发的 GitHub Actions workflow，见 [docs/development.md](docs/development.md)。
+每次 push 和 PR 都会在 CI 里跑这些检查，改动服务端的 PR 还会跑 warp 冒烟测试。SDK 兼容矩阵、ceph/s3-tests 和性能测试是手动触发的 GitHub Actions workflow，见 [docs/development.md](docs/development.md)。
 
 ## 许可证
 

@@ -58,6 +58,10 @@ jobs:
             exit 1
           fi
 
+      - name: READMEs pin the released version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: .github/check-readme-version.sh
+
       - uses: docker/setup-buildx-action@v4
 
       - id: meta

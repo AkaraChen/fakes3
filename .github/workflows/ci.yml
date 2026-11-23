@@ -1,8 +1,9 @@
 name: ci
 
 # Fast checks on every push and pull request: formatting, clippy and the Rust test suites on Linux,
-# macOS and Windows, the Node binding's build, and the workflow files themselves. The slow suites
-# (SDK matrix, s3-tests, benchmarks) stay manual: matrix.yml, s3-tests.yml, bench.yml, ab.yml.
+# macOS and Windows, the Node binding's build, the workflow files themselves and the version the
+# READMEs pin. warp.yml runs on pull requests that touch the server; the other slow suites (SDK
+# matrix, s3-tests, benchmarks) stay manual: matrix.yml, s3-tests.yml, bench.yml, ab.yml.
 on:
   push:
   pull_request:
@@ -62,3 +63,5 @@ jobs:
       - uses: actions/checkout@v7
       - name: actionlint
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest -no-color
+      - name: READMEs pin the current version
+        run: .github/check-readme-version.sh

@@ -45,10 +45,6 @@ struct Opt {
     #[arg(long, env = "FAKES3_AUTH", value_parser = clap::builder::BoolishValueParser::new())]
     auth: bool,
 
-    /// Deprecated, does nothing: not verifying signatures is the default now.
-    #[arg(long, hide = true, conflicts_with = "auth")]
-    no_auth: bool,
-
     /// On Linux, objects and parts at or above this size are stored in a memfd instead of on the heap.
     #[arg(long, default_value_t = 1 << 20)]
     inline_threshold: usize,
@@ -95,9 +91,6 @@ fn main() -> std::io::Result<std::process::ExitCode> {
             .enable_all()
             .build()?
             .block_on(ctl::run(c)));
-    }
-    if opt.no_auth {
-        eprintln!("fakes3: --no-auth is deprecated and does nothing; signatures are not verified unless --auth is given");
     }
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()))

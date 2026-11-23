@@ -51,7 +51,7 @@ Measured on a 4-core GitHub-hosted runner. Methodology, throughput numbers and t
 docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 ```
 
-The image is `ghcr.io/akarachen/fakes3` for `linux/amd64` and `linux/arm64`, tagged `latest`, `0.1.0`,
+The image is `ghcr.io/akarachen/fakes3` for `linux/amd64` and `linux/arm64`, tagged `latest`, `0.1.4`,
 `0.1` and `sha-<commit>`. It is Alpine plus a single static binary (about 7 MB compressed), listens on
 `0.0.0.0:9000`, and prints `http://0.0.0.0:9000` to stdout when it is ready.
 
@@ -219,7 +219,7 @@ in container jobs:
 - uses: AkaraChen/setup-fakes3@v1
   id: s3
   with:
-    version: 0.1.0      # default: latest
+    version: 0.1.4      # default: latest
 - run: pytest
   env:
     S3_ENDPOINT: ${{ steps.s3.outputs.endpoint }}   # http://127.0.0.1:9000
@@ -234,7 +234,7 @@ The Docker image also works as a service container:
 ```yaml
 services:
   s3:
-    image: ghcr.io/akarachen/fakes3:0.1.0
+    image: ghcr.io/akarachen/fakes3:0.1.4
     ports: ["9000:9000"]
 ```
 
@@ -418,8 +418,9 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-CI runs these on every push and pull request. The SDK compatibility matrix, ceph/s3-tests and the
-benchmarks are run manually as GitHub Actions workflows; see [docs/development.md](docs/development.md).
+CI runs these on every push and pull request, and the warp smoke test on pull requests that change the
+server. The SDK compatibility matrix, ceph/s3-tests and the benchmarks are run manually as GitHub Actions
+workflows; see [docs/development.md](docs/development.md).
 
 ## License
 

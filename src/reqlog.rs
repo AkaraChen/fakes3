@@ -32,7 +32,8 @@ pub struct RequestRecord {
     /// `x-amz-copy-source` was present.
     copy: bool,
     /// The access key the request was signed with. Only recorded when signatures are not verified
-    /// (`--no-auth`), where it can be anything; otherwise it is always the configured key.
+    /// (the default, without `--auth`), where it can be anything; otherwise it is always the
+    /// configured key.
     pub access_key: Option<String>,
     id: RequestId,
 }

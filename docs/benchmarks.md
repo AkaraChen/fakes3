@@ -26,7 +26,7 @@ IAM、STS、SNS、S3 Control 属于其他 AWS 服务，不计入：
 | MinIO | 356 | 52.0% |
 
 fakes3 剩下的 94 个失败里，82 个是测试本身不兼容 AWS（只符合 Ceph RGW 的行为，或者 boto3 测不出来），
-5 个是没有实现的 bucket 访问日志，3 个在 s3s 内部，4 个的 AWS 行为没有文档可查。
+5 个是没有实现的 bucket 访问日志，3 个在 s3s 内部，4 个与测试的期望不符、但 AWS 实际怎么做尚未确认（所以没有改）。
 逐条分类见 [conformance/S3-TESTS.md](../conformance/S3-TESTS.md)，可以用 `s3-tests` workflow 重新跑。
 
 fakes3 在 s3s 之上绕开了几处和 AWS 不一致的行为（SigV2 的日期和 bucket 级签名、POST policy 的错误码等），见 [docs/s3s-workarounds.md](s3s-workarounds.md)。
