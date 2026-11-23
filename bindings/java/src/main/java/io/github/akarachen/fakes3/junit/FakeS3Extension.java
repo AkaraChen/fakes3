@@ -13,20 +13,20 @@ import org.junit.jupiter.api.extension.ParameterResolver;
  * parameter on a {@code @BeforeAll} method starts one server for the whole class instead, and the
  * test methods of that class receive that same server.
  *
- * <pre>{@code
+ * <pre>
  * &#64;ExtendWith(FakeS3Extension.class)
  * class UploadTest {
  *   &#64;Test
  *   void uploads(FakeS3 s3) { ... }
  * }
- * }</pre>
+ * </pre>
  *
  * <p>To configure the servers, register an instance:
  *
- * <pre>{@code
+ * <pre>
  * &#64;RegisterExtension
  * static FakeS3Extension s3 = new FakeS3Extension(FakeS3.builder().auth(true));
- * }</pre>
+ * </pre>
  */
 public class FakeS3Extension implements ParameterResolver {
   private static final ExtensionContext.Namespace NAMESPACE =
