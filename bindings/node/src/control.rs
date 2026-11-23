@@ -1,4 +1,4 @@
-//! The control plane's clock and request log.
+//! The control plane's clock, request log and fault injection.
 
 use chrono::{DateTime, Utc};
 use napi::bindgen_prelude::*;
@@ -125,6 +125,8 @@ pub struct RequestRecord {
     pub access_key: Option<String>,
     /// The `x-amz-request-id` the response carried.
     pub request_id: String,
+    /// Set when a fault rule hit this request. `status` is 0 for a reset connection.
+    pub fault: Option<InjectedFault>,
 }
 
 /// Settings for the request log.
@@ -181,6 +183,11 @@ fn record(r: fakes3::RequestRecord) -> RequestRecord {
         bytes_out: r.bytes_out as f64,
         request_id,
         access_key: r.access_key,
+        fault: r.fault.map(|f| InjectedFault {
+            id: f.id as f64,
+            kind: f.kind.as_str().to_owned(),
+            delayed: f.delayed,
+        }),
     }
 }
 
@@ -233,5 +240,251 @@ impl RequestsControl {
                 s.control().set_request_log_capacity(n as usize);
             }
         })
+    }
+}
+
+/// How long a delayed request waits: milliseconds, a duration string such as `"500ms"` or `"2s"`,
+/// or `{ min, max }` for a random delay in that range.
+#[napi(object)]
+pub struct DelayRange {
+    pub min: Either<f64, String>,
+    pub max: Either<f64, String>,
+}
+
+/// The S3 error a fault answers with. `SlowDown`, `ServiceUnavailable` (503), `InternalError`
+/// (500) and `RequestTimeout` (400) need no status; a status of 503 or 500 alone means `SlowDown`
+/// or `InternalError`.
+#[napi(object)]
+pub struct FaultError {
+    pub status: Option<u32>,
+    pub code: Option<String>,
+    /// The `<Message>`; S3's message for the code when omitted.
+    pub message: Option<String>,
+}
+
+/// A fault rule for `server.faults.add()`. Give `error`, `truncate` or `reset` (at most one),
+/// `delay`, or a delay and one of the others.
+#[napi(object)]
+pub struct FaultRule {
+    /// S3 operation name such as `GetObject` (case-insensitive), or several. Default: all.
+    pub operation: Option<Either<String, Vec<String>>>,
+    /// Exact bucket name.
+    pub bucket: Option<String>,
+    /// Only keys starting with this (and so only requests that address an object).
+    pub key_prefix: Option<String>,
+    /// Chance from 0 to 1 that a matching request is hit. Default 1.
+    pub probability: Option<f64>,
+    /// Seed for the probability draws and random delays; the same seed gives the same faults for
+    /// the same sequence of requests. Generated when omitted (and reported back).
+    pub seed: Option<f64>,
+    /// Hit at most this many requests. `times: 1` is "fail once, then let the retry through".
+    pub times: Option<u32>,
+    /// Let the first `skip` matching requests through first.
+    pub skip: Option<u32>,
+    /// Wait before handling the request (or before the error / reset).
+    pub delay: Option<Either3<f64, String, DelayRange>>,
+    /// Answer with an S3 error: a code such as `"SlowDown"`, or `{ status, code, message }`.
+    pub error: Option<Either<String, FaultError>>,
+    /// Send only the first this-many bytes of the response body, then close the connection.
+    pub truncate: Option<f64>,
+    /// Close the connection with a TCP reset instead of answering.
+    pub reset: Option<bool>,
+}
+
+/// A random delay's bounds in milliseconds.
+#[napi(object)]
+pub struct DelayBounds {
+    pub min: f64,
+    pub max: f64,
+}
+
+/// A stored fault rule and how often it matched and fired.
+#[napi(object)]
+pub struct FaultInfo {
+    pub id: f64,
+    pub operation: Option<Vec<String>>,
+    pub bucket: Option<String>,
+    pub key_prefix: Option<String>,
+    pub probability: f64,
+    /// The seed in use, generated if none was given.
+    pub seed: f64,
+    pub times: Option<f64>,
+    pub skip: f64,
+    /// Milliseconds, or the bounds of a random delay.
+    pub delay: Option<Either<f64, DelayBounds>>,
+    pub error: Option<FaultError>,
+    pub truncate: Option<f64>,
+    pub reset: bool,
+    /// Requests that matched the operation, bucket and key prefix.
+    pub matched: f64,
+    /// Requests the rule hit.
+    pub fired: f64,
+    /// Hits left; omitted when unlimited.
+    pub remaining: Option<f64>,
+}
+
+/// The fault a logged request got from a fault rule.
+#[napi(object)]
+pub struct InjectedFault {
+    /// The rule's id.
+    pub id: f64,
+    /// `"error"`, `"delay"` (only delayed), `"truncate"` or `"reset"`.
+    #[napi(js_name = "type")]
+    pub kind: String,
+    /// The request waited before the fault (or before being handled).
+    pub delayed: bool,
+}
+
+fn invalid(m: impl std::fmt::Display) -> Error {
+    Error::new(Status::InvalidArg, m.to_string())
+}
+
+fn duration(d: Either<f64, String>) -> Result<std::time::Duration> {
+    let arg = match &d {
+        Either::A(ms) => fakes3::DurationArg::Millis(*ms),
+        Either::B(s) => fakes3::DurationArg::Text(s),
+    };
+    fakes3::parse_fault_duration(arg).map_err(invalid)
+}
+
+fn whole(n: f64, what: &str) -> Result<u64> {
+    if n.is_finite() && n >= 0.0 && n.fract() == 0.0 && n <= 9_007_199_254_740_991.0 {
+        Ok(n as u64)
+    } else {
+        Err(invalid(format!("{what} must be a non-negative integer, not {n}")))
+    }
+}
+
+fn to_rule(r: FaultRule) -> Result<fakes3::FaultRule> {
+    let delay = match r.delay {
+        None => None,
+        Some(Either3::A(ms)) => Some(fakes3::Delay::Fixed(duration(Either::A(ms))?)),
+        Some(Either3::B(s)) => Some(fakes3::Delay::Fixed(duration(Either::B(s))?)),
+        Some(Either3::C(range)) => Some(fakes3::Delay::Between(duration(range.min)?, duration(range.max)?)),
+    };
+    let reset = r.reset.unwrap_or(false);
+    if usize::from(r.error.is_some()) + usize::from(r.truncate.is_some()) + usize::from(reset) > 1 {
+        return Err(invalid("give only one of error, truncate and reset"));
+    }
+    let action = if let Some(e) = r.error {
+        let (status, code, message) = match e {
+            Either::A(code) => (None, Some(code), None),
+            Either::B(f) => (f.status, f.code, f.message),
+        };
+        let status = status
+            .map(|s| u16::try_from(s).map_err(|_| invalid(format!("invalid status {s}"))))
+            .transpose()?;
+        Some(fakes3::FaultAction::error_from(status, code.as_deref(), message).map_err(invalid)?)
+    } else if let Some(n) = r.truncate {
+        Some(fakes3::FaultAction::Truncate {
+            bytes: whole(n, "truncate")?,
+        })
+    } else if reset {
+        Some(fakes3::FaultAction::Reset)
+    } else {
+        None
+    };
+    Ok(fakes3::FaultRule {
+        operations: match r.operation {
+            None => Vec::new(),
+            Some(Either::A(op)) => vec![op],
+            Some(Either::B(ops)) => ops,
+        },
+        bucket: r.bucket,
+        key_prefix: r.key_prefix,
+        probability: r.probability.unwrap_or(1.0),
+        seed: r.seed.map(|n| whole(n, "seed")).transpose()?,
+        times: r.times.map(u64::from),
+        skip: r.skip.map_or(0, u64::from),
+        delay,
+        action,
+    })
+}
+
+fn ms(d: std::time::Duration) -> f64 {
+    d.as_secs_f64() * 1000.0
+}
+
+fn fault_info(f: fakes3::FaultInfo) -> FaultInfo {
+    let remaining = f.remaining().map(|n| n as f64);
+    let r = f.rule;
+    let (error, truncate, reset) = match r.action {
+        None => (None, None, false),
+        Some(fakes3::FaultAction::Error { status, code, message }) => (
+            Some(FaultError {
+                status: Some(status.into()),
+                code: Some(code),
+                message,
+            }),
+            None,
+            false,
+        ),
+        Some(fakes3::FaultAction::Truncate { bytes }) => (None, Some(bytes as f64), false),
+        Some(fakes3::FaultAction::Reset) => (None, None, true),
+    };
+    FaultInfo {
+        id: f.id as f64,
+        operation: (!r.operations.is_empty()).then_some(r.operations),
+        bucket: r.bucket,
+        key_prefix: r.key_prefix,
+        probability: r.probability,
+        seed: r.seed.unwrap_or(0) as f64,
+        times: r.times.map(|n| n as f64),
+        skip: r.skip as f64,
+        delay: r.delay.map(|d| match d {
+            fakes3::Delay::Fixed(d) => Either::A(ms(d)),
+            fakes3::Delay::Between(lo, hi) => Either::B(DelayBounds { min: ms(lo), max: ms(hi) }),
+        }),
+        error,
+        truncate,
+        reset,
+        matched: f.matched as f64,
+        fired: f.fired as f64,
+        remaining,
+    }
+}
+
+/// Fault injection: make matching S3 requests fail, wait, lose part of their response body or
+/// lose their connection. Rules are checked in the order they were added and the first that fires
+/// wins; control-plane calls are never affected. Obtained from `server.faults`.
+#[napi(js_name = "FaultsControl")]
+pub struct FaultsControl {
+    server: Slot,
+}
+
+impl FaultsControl {
+    pub(crate) fn new(server: Slot) -> Self {
+        Self { server }
+    }
+}
+
+#[napi]
+impl FaultsControl {
+    /// Adds a rule and returns it with its id.
+    #[napi]
+    pub fn add(&self, rule: FaultRule) -> Result<FaultInfo> {
+        let rule = to_rule(rule)?;
+        with_server(&self.server, |s| s.add_fault(rule))?
+            .map(fault_info)
+            .map_err(crate::control_error)
+    }
+
+    /// The rules with their counters, in the order they are checked.
+    #[napi]
+    pub fn list(&self) -> Result<Vec<FaultInfo>> {
+        Ok(with_server(&self.server, |s| s.faults())?.into_iter().map(fault_info).collect())
+    }
+
+    /// Removes one rule.
+    #[napi]
+    pub fn remove(&self, id: f64) -> Result<()> {
+        let id = whole(id, "id")?;
+        with_server(&self.server, |s| s.remove_fault(id))?.map_err(crate::control_error)
+    }
+
+    /// Removes every rule.
+    #[napi]
+    pub fn clear(&self) -> Result<()> {
+        with_server(&self.server, |s| s.clear_faults())
     }
 }

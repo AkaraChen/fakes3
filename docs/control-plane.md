@@ -1,7 +1,7 @@
 # 测试控制面
 
 fakes3 在 S3 接口所在的同一个端口上提供一组 HTTP API，前缀是 `/_fakes3/`，用来在测试之间重置状态、保存和回滚数据、
-控制服务器时间、检查收到过哪些 S3 请求。Bucket 名不能以 `_` 开头，所以 path-style 的 S3 请求不会和这个前缀冲突。
+控制服务器时间、检查收到过哪些 S3 请求，以及给 S3 请求注入故障（错误、延迟、截断、连接重置）来测试客户端的重试和超时。Bucket 名不能以 `_` 开头，所以 path-style 的 S3 请求不会和这个前缀冲突。
 
 不需要写客户端库：用命令行 `fakes3 ctl`，或者任何能发 HTTP 请求的工具（`curl`）。
 Rust 进程内使用时，同样的操作是 `fakes3::Server` 上的方法（见[最后一节](#rust-api)）。
@@ -15,6 +15,7 @@ fakes3 ctl reset                                 # 每个测试开始前
 fakes3 ctl snapshot restore seeded               # 或者回到存好的状态
 fakes3 ctl clock advance 31d                     # 让对象“过去” 31 天
 fakes3 ctl requests list --op PutObject --status error
+fakes3 ctl faults add --op PutObject --error SlowDown --times 1   # 下一个 PutObject 收到 503，重试成功
 ```
 
 ## 安全
@@ -42,7 +43,7 @@ curl、`fakes3 ctl` 和测试框架的 HTTP 客户端不会发 `Origin`。
 |---|---|
 | `status` | 时钟、内存、数据量、快照数、请求日志状态 |
 | `stats` | 内存用量（对象数据字节数和上限）、数据量、快照数、请求日志状态 |
-| `reset [--keep-clock] [--keep-requests] [--drop-snapshots]` | 清空数据，见[重置](#重置) |
+| `reset [--keep-clock] [--keep-requests] [--drop-snapshots] [--keep-faults]` | 清空数据，见[重置](#重置) |
 | `snapshot create [NAME]` | 保存当前状态；不给名字时用 `snap-<n>` |
 | `snapshot list` | 列出快照 |
 | `snapshot restore NAME` | 回滚到快照 |
@@ -56,9 +57,13 @@ curl、`fakes3 ctl` 和测试框架的 HTTP 客户端不会发 `Origin`。
 | `requests list [--bucket B] [--key-prefix P] [--op OP] [--method M] [--status S] [--since T] [--after SEQ] [--limit N] [--count]` | 列出请求日志 |
 | `requests clear` | 清空请求日志 |
 | `requests config [--enable \| --disable] [--capacity N]` | 查看或修改请求日志设置 |
+| `faults add [--op OP]... [--bucket B] [--key-prefix P] [--probability P] [--seed N] [--times N] [--skip N] [--delay D] [--error CODE] [--status S] [--message M] [--truncate N] [--reset]` | 添加故障规则，见[故障注入](#故障注入) |
+| `faults list` | 列出故障规则和计数 |
+| `faults delete ID` | 删除一条规则 |
+| `faults clear` | 删除所有规则 |
 
 Duration 的单位：`ns`、`us`、`ms`、`s`、`m`、`h`、`d`（24 小时）、`w`，可以连写（`1h30m`）；不带单位按秒算。
-负数可以直接写：`fakes3 ctl clock advance -1d`。
+负数可以直接写：`fakes3 ctl clock advance -1d`。`faults add --delay` 接受一个时长（`500ms`）或一个区间（`100ms..2s`，区间内随机）。
 
 服务端启动参数：`--no-request-log` 关闭请求日志，`--request-log-capacity N`（默认 10000）设置日志容量。
 
@@ -69,7 +74,8 @@ Duration 的单位：`ns`、`us`、`ms`、`s`、`m`、`h`、`d`（24 小时）�
 清空所有 bucket、对象（包括各版本和删除标记）、分段上传，bucket 的版本控制状态和标签也随之消失。默认同时：
 
 - 清空请求日志（序号 `seq` 不归零）；
-- 把时钟恢复为主机时钟。
+- 把时钟恢复为主机时钟；
+- 删除所有故障规则（规则 id 不归零）。
 
 **不会删除快照**，这样“存一份基线，每个测试开始前 reset 或 restore”的用法可以成立。可以用查询参数调整，都是布尔值：
 
@@ -78,6 +84,7 @@ Duration 的单位：`ns`、`us`、`ms`、`s`、`m`、`h`、`d`（24 小时）�
 | `clock` | `true` | 恢复时钟 |
 | `requests` | `true` | 清空请求日志 |
 | `snapshots` | `false` | 删除所有快照 |
+| `faults` | `true` | 删除所有故障规则 |
 
 ```
 $ curl -X POST 'http://127.0.0.1:9000/_fakes3/reset?clock=false'
@@ -114,7 +121,8 @@ $ curl -X POST localhost:9000/_fakes3/snapshots/seeded/restore
 **Restore 的语义**
 
 - 数据整体替换为快照时的样子：快照之后新建的 bucket 消失，被删除的 bucket 回来，覆盖/删除的对象恢复。
-- 不影响：时钟、请求日志、其他快照、启动配置。
+- 不影响：时钟、请求日志、故障规则、其他快照、启动配置。快照**不包含故障规则**：规则描述的是测试要模拟的环境，
+  不是数据，回滚数据时保留当前的规则；要换规则就显式删除或添加。
 - 快照和 restore 没有和正在进行的请求同步。快照是按 bucket 各自加锁复制的，所以在有请求并发写入时，每个 bucket 内部一致，
   但跨 bucket 不保证（例如跨 bucket 的 CopyObject 正在进行）。**请在测试之间、没有未完成请求时使用。**
 - 快照存在内存里，随服务进程消失，不能导出。
@@ -221,6 +229,7 @@ Lifecycle 的转换在时钟跨过 UTC 日期后的第一次访问 bucket 时执
 | `bytes_out` | 响应的 `Content-Length`，未知时为 0 |
 | `access_key` | 请求签名用的 access key；默认模式（不校验签名）下记录，未签名的请求为 `null`；`--auth` 时不记录（`null`） |
 | `request_id` | 响应头 `x-amz-request-id` 的值（16 位大写十六进制），错误响应体的 `<RequestId>` 也是它，用来把客户端日志和这条记录对上 |
+| `fault` | 被故障规则命中时为 `{"id": 规则 id, "type": "error" \| "delay" \| "truncate" \| "reset", "delayed": 是否先等待过}`，否则为 `null`（见[故障注入](#故障注入)） |
 
 `operation` 是根据请求的形状（方法、路径、查询参数、是否有 `x-amz-copy-source`）推断的，不是 s3s 报告的：s3s 只在开启签名校验时
 才把操作名交给我们，而且签名失败的请求根本到不了那一步。覆盖 fakes3 实现的全部操作和常见的 bucket 子资源；
@@ -256,6 +265,107 @@ $ curl 'localhost:9000/_fakes3/requests?op=PutObject&bucket=logs&limit=1'
 - `PUT /_fakes3/requests/config`，请求体 `{"enabled": false}`、`{"capacity": 500}` 或两者。缩小容量会丢弃最旧的记录。
   关闭只是停止记录，已有记录保留。
 
+## 故障注入
+
+真实的 S3 会限流（503 `SlowDown`）、偶尔出错（500 `InternalError`）、变慢、断开连接。故障注入让 fakes3 按规则对 S3 请求制造这些情况，
+用来测试自己代码的重试、退避和超时：最常见的“第一次 503，重试成功”是一条规则：
+
+```bash
+fakes3 ctl faults add --op PutObject --error SlowDown --times 1
+```
+
+```
+$ curl -X POST localhost:9000/_fakes3/faults -d '{"operation":"PutObject","error":"SlowDown","times":1}'
+{"id":1,"operation":["PutObject"],"bucket":null,"key_prefix":null,"probability":1.0,"seed":4630213781250379,"times":1,"skip":0,
+ "delay":null,"error":{"status":503,"code":"SlowDown","message":null},"truncate":null,"reset":false,"matched":0,"fired":0,"remaining":1}
+```
+
+### 规则
+
+`POST /_fakes3/faults`，请求体是一条规则，返回 201 和规则（带 `id`）。字段都可省略，但至少要有一种故障：
+
+| 字段 | 含义 |
+|---|---|
+| `operation` | S3 操作名（和请求日志的 `operation` 一致，不区分大小写），字符串或数组；省略则匹配所有操作 |
+| `bucket` | 精确匹配 bucket（path-style 和 virtual-host 寻址都认） |
+| `key_prefix` | key 前缀；带前缀的规则只匹配针对对象的请求，不匹配 ListObjects 等 bucket 级请求 |
+| `probability` | 0～1，命中的概率，默认 1 |
+| `seed` | 随机数种子（概率抽样和随机延迟都用它），省略时自动生成并在响应里返回 |
+| `times` | 最多命中几次，之后放行；省略为不限次数 |
+| `skip` | 先放行前几个匹配的请求，再开始命中，例如 `"skip": 2, "times": 1` 是“第三次失败” |
+| `delay` | 先等待再处理：毫秒数，或 `"500ms"`、`"2s"` 这样的字符串，或 `{"min": "100ms", "max": "1s"}` 表示在区间内均匀随机 |
+| `error` | 返回 S3 错误：错误码字符串（如 `"SlowDown"`），或 `{"status": 503, "code": "SlowDown", "message": "..."}` |
+| `truncate` | 正常处理请求，但响应体只发送前 N 个字节，然后断开连接 |
+| `reset` | `true`：不处理请求，直接以 TCP RST 断开连接 |
+
+`error`、`truncate`、`reset` 最多给一个；`delay` 可以单独用，也可以和其中一个组合（先等待，再报错 / 截断 / 断开）。
+
+**错误响应。** 和 S3 的错误一样：对应的状态码、`Content-Type: application/xml`，响应体是
+`<Error><Code>…</Code><Message>…</Message><Resource>请求路径</Resource><RequestId>…</RequestId><HostId>…</HostId></Error>`，
+响应头带 `x-amz-request-id` 和 `x-amz-id-2`，所以 SDK 会把它当成真正的 S3 错误处理（例如对 `SlowDown` 退避重试）。HEAD 请求的错误没有响应体，和 S3 一样。
+`SlowDown`、`ServiceUnavailable`（503）、`InternalError`（500）、`RequestTimeout`（400）可以只写错误码，状态码和消息取 S3 的默认值；
+只写 `"status": 503` 或 `500` 则错误码分别是 `SlowDown`、`InternalError`；其他错误码要同时给状态码（400～599）。
+被注入错误的请求**不会被执行**：例如注入了 503 的 PutObject 不会写入对象。
+
+**延迟**在请求被处理之前发生（还没读请求体），之后请求照常处理，相当于服务器首字节变慢。用来让客户端的超时触发：
+
+```bash
+fakes3 ctl faults add --op GetObject --delay 5s --times 1        # 第一次 GetObject 5 秒后才响应
+fakes3 ctl faults add --bucket logs --delay 50ms..300ms          # logs 下的所有请求随机慢 50～300 ms
+```
+
+**截断**：响应头照常发送（`Content-Length` 仍是完整长度），响应体发送前 N 个字节后服务器关闭连接。客户端读响应体时会报错
+（连接提前关闭、长度不符），用来测试“下载到一半断了”的处理。响应体不足 N 字节时完整发送。只对有响应体的请求有意义，通常配合 `"operation": "GetObject"`。
+
+**连接重置**：服务器不处理请求，直接用 TCP RST 关闭连接（设置 `SO_LINGER` 为 0 后关闭），客户端看到 `connection reset`，
+没有任何响应。SDK 一般把它当作可重试的网络错误。和错误注入一样，被重置的请求不会被执行。
+
+### 匹配顺序与计数
+
+- 每个 S3 请求按规则添加的顺序逐条检查，**第一条命中的规则生效**，后面的规则不再看这个请求。
+- 一条规则对一个请求：先看 `operation`、`bucket`、`key_prefix` 是否匹配（匹配则 `matched` 加一）；再看是否还在 `skip` 内、是否已用完 `times`；
+  最后按 `probability` 抽样。都通过才算命中（`fired` 加一）。没命中就继续检查下一条规则。
+- 用完 `times` 的规则仍然保留在列表里（`remaining` 为 0），方便断言它命中了几次，直到被删除。
+- 控制面自身的请求（`/_fakes3/*`）永远不受故障规则影响，所以即使有一条匹配所有请求的 `reset` 规则，也可以照常删除它。
+
+### 确定性
+
+概率抽样和随机延迟用每条规则自己的伪随机数序列，由 `seed` 决定：**同样的种子、同样顺序的匹配请求，得到同样的故障**，
+所以“p=0.3 的随机失败”在测试里也是可重复的。没有指定种子时服务器会生成一个，并在响应和列表里返回，测试失败时可以用它重放。
+注意“顺序”是请求到达服务器的顺序：并发发出的请求，到达顺序本身就不确定；需要严格重复时请顺序发送请求，或用 `times` / `skip` 代替概率。
+`probability` 为 1 的规则不消耗随机数。
+
+### 延迟与虚拟时钟
+
+延迟用的是**真实时间**，不跟随[虚拟时钟](#时钟)：故障延迟是为了让客户端的超时、重试退避等按真实时间计时的逻辑生效，而虚拟时钟冻结时不会走，
+跟随它会让请求永远挂起；反过来，延迟期间服务器时钟也不会因此前进。延迟是 Tokio 的定时器：在 Rust 进程内用 `Server::start` 把服务跑在测试自己的 runtime 上、
+并用 `tokio::time::pause()` 暂停了 Tokio 的时间时，延迟跟随 Tokio 的时间，可以用 `tokio::time::advance` 跳过（`start_blocking` 用的是独立的 runtime，不受影响）。
+
+### 请求日志
+
+被注入故障的请求照常记入[请求日志](#请求日志)，`fault` 字段标明命中的规则和故障类型。错误响应记录注入的状态码；截断记录原本的状态码和完整的
+`bytes_out`；连接重置没有响应，`status` 记为 `0`；`latency_us` 包含延迟。`fakes3 ctl requests list` 在这些记录后面显示 `[fault <类型> #<id>]`。
+
+### 列出与删除
+
+- `GET /_fakes3/faults` → `{"faults": [...]}`，按检查顺序。每条规则除了上面的字段，还有 `matched`（匹配的请求数）、`fired`（命中数）、
+  `remaining`（还能命中几次，不限次数时为 `null`）。返回的 `delay` 一律是毫秒数（或 `{"min": 毫秒, "max": 毫秒}`），`seed` 是实际使用的种子。
+- `GET /_fakes3/faults/{id}`：一条规则。
+- `DELETE /_fakes3/faults/{id}`：删除一条，不存在返回 404。
+- `DELETE /_fakes3/faults` → `{"cleared": 条数}`：删除所有规则。
+- `POST /_fakes3/reset` 默认也删除所有规则（`?faults=false` 保留）；快照和 restore 不涉及规则。
+
+### 开销
+
+没有规则时，每个请求只多一次原子读（判断有没有规则），没有加锁、没有分配；有规则时，每个 S3 请求要加一次规则表的锁并解析 bucket、key 和操作名。
+所以不需要故障时请把规则删掉（`reset` 默认会删）。
+
+### 不支持
+
+- 只能在请求被处理之前延迟，不能在响应发送到一半时停顿；只能“处理后截断”或“处理前断开”，不能“处理后断开但不回响应”。
+- 截断和连接重置针对 HTTP/1.1 连接（所有 S3 SDK 的默认）。在 HTTP/2 连接上，连接重置只会重置这一个流（`RST_STREAM`）。
+- 规则只看操作、bucket 和 key 前缀，不看请求头、访问账户或 HTTP 方法以外的条件。
+
 ## 统计
 
 `GET /_fakes3/stats`（`fakes3 ctl stats`）：
@@ -267,7 +377,7 @@ $ curl localhost:9000/_fakes3/stats
 ```
 
 `memory.used` 是服务器持有的对象数据字节数（含分段上传的 part，以及仍被快照或进行中的读取引用的数据），`limit` 是
-`--memory-limit` 的实际值，不限制时为 `null`。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本、时钟、`bucket_defaults`（`"legacy"` 或 `"aws"`，见 [新建 bucket 的默认值](bucket-defaults.md)）和 `auth`（认证模式：`"any-credentials"` 是默认的不校验签名，`"strict"` 是 `--auth`，见 [认证模式](auth.md)）、`users`（账户列表：`name`、`access_key`、`account_id`、`canonical_id`，没有 secret，见 [多用户](multi-user.md)），`fakes3 ctl status` 显示的就是它。
+`--memory-limit` 的实际值，不限制时为 `null`。两者都有 `faults`，是当前的故障规则条数。`GET /_fakes3`（或 `/_fakes3/`）在此之外还返回版本、时钟、`bucket_defaults`（`"legacy"` 或 `"aws"`，见 [新建 bucket 的默认值](bucket-defaults.md)）和 `auth`（认证模式：`"any-credentials"` 是默认的不校验签名，`"strict"` 是 `--auth`，见 [认证模式](auth.md)）、`users`（账户列表：`name`、`access_key`、`account_id`、`canonical_id`，没有 secret，见 [多用户](multi-user.md)），`fakes3 ctl status` 显示的就是它。
 
 **内存与重置、快照的关系。** 数据缓冲区按引用计数在最后一个引用消失时释放并归还额度，所以：
 
@@ -284,7 +394,7 @@ $ curl localhost:9000/_fakes3/stats
 - 操作名由请求形状推断；不认识的为空。
 - 请求日志只记 S3 请求；响应体的流式发送时长和错误码不在记录里。
 - 内存额度按引用计数释放：快照会让被覆盖或删除的数据继续占用 `--memory-limit` 额度（见[统计](#统计)）。
-- 尚未实现故障注入（`/_fakes3/faults`）。
+- 故障注入的延迟用真实时间，不跟随虚拟时钟；连接重置和截断只在 HTTP/1.1 上是真正的断连（见[故障注入](#故障注入)）。
 
 ## Rust API
 
@@ -295,7 +405,7 @@ let server = fakes3::Server::start(fakes3::Config::default()).await?;
 
 server.snapshot(Some("seeded"))?;                  // -> SnapshotInfo
 server.restore("seeded")?;
-server.reset();                                    // 数据 + 请求日志 + 时钟，保留快照
+server.reset();                                    // 数据 + 请求日志 + 时钟 + 故障规则，保留快照
 
 server.clock().freeze(None)?;                      // Clock: freeze / unfreeze / set / advance / reset / now
 server.clock().advance(fakes3::parse_duration("30d")?)?;
@@ -308,6 +418,17 @@ let (requests, total) = server.requests(&fakes3::RequestFilter {
 // 进程内的客户端不一定能建 bucket（OpenDAL 就没有 bucket 接口），所以 Server 上也能直接建：
 server.create_bucket("data")?;                     // 默认账户所有，和不带选项的 CreateBucket 一样套用 bucket 默认值
 server.enable_versioning("data")?;
+
+// 故障注入：FaultRule 的构造函数 error / slow_down / internal_error / delay / delay_between / truncate / reset，
+// 再用 operation / bucket / key_prefix / probability / seed / times / skip / with_delay 收窄
+use std::time::Duration;
+let rule = server.add_fault(fakes3::FaultRule::slow_down().operation("PutObject").times(1))?;   // -> FaultInfo
+server.add_fault(fakes3::FaultRule::delay_between(Duration::from_millis(50), Duration::from_millis(300)).bucket("logs"))?;
+server.add_fault(fakes3::FaultRule::internal_error().probability(0.3).seed(42))?;
+server.faults();                                   // Vec<FaultInfo>：rule、matched、fired、remaining()
+server.remove_fault(rule.id)?;
+server.clear_faults();
+// 请求日志里被命中的记录：RequestRecord::fault == Some(InjectedFault { id, kind, delayed })
 
 // 其余操作（reset 的选项、快照列表和删除、请求日志开关）在 server.control() 上：
 server.control().reset_with(fakes3::ResetOptions { snapshots: true, ..Default::default() });

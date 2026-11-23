@@ -40,6 +40,9 @@ enum Command {
         /// Also delete all snapshots.
         #[arg(long)]
         drop_snapshots: bool,
+        /// Leave the fault rules in place.
+        #[arg(long)]
+        keep_faults: bool,
     },
     /// Save and roll back the store.
     #[command(subcommand)]
@@ -50,6 +53,62 @@ enum Command {
     /// Inspect the S3 request log.
     #[command(subcommand)]
     Requests(Requests),
+    /// Inject errors, delays, truncated bodies and connection resets into S3 requests.
+    #[command(subcommand)]
+    Faults(Faults),
+}
+
+// Parsed once per process; the size of the `add` variant does not matter.
+#[allow(clippy::large_enum_variant)]
+#[derive(Subcommand)]
+enum Faults {
+    /// Add a rule. Give one of --error, --status, --truncate or --reset, and/or --delay.
+    Add {
+        /// Only this S3 operation, e.g. GetObject (repeat for several).
+        #[arg(long = "op")]
+        ops: Vec<String>,
+        #[arg(long)]
+        bucket: Option<String>,
+        /// Only keys starting with this prefix.
+        #[arg(long)]
+        key_prefix: Option<String>,
+        /// Chance from 0 to 1 that a matching request is hit (default 1).
+        #[arg(long)]
+        probability: Option<f64>,
+        /// Seed for the probability draws and random delays.
+        #[arg(long)]
+        seed: Option<u64>,
+        /// Hit at most N requests.
+        #[arg(long)]
+        times: Option<u64>,
+        /// Let the first N matching requests through.
+        #[arg(long)]
+        skip: Option<u64>,
+        /// Wait before answering: a duration such as 500ms, or a range such as 100ms..2s.
+        #[arg(long)]
+        delay: Option<String>,
+        /// Answer with this S3 error code, e.g. SlowDown or InternalError.
+        #[arg(long)]
+        error: Option<String>,
+        /// HTTP status of the error (SlowDown is 503 and InternalError 500 by default).
+        #[arg(long)]
+        status: Option<u16>,
+        /// Error message (default: S3's message for the code).
+        #[arg(long)]
+        message: Option<String>,
+        /// Send only the first N bytes of the response body, then close the connection.
+        #[arg(long)]
+        truncate: Option<u64>,
+        /// Reset the connection instead of answering.
+        #[arg(long)]
+        reset: bool,
+    },
+    /// List the rules with their counters.
+    List,
+    /// Remove one rule.
+    Delete { id: u64 },
+    /// Remove all rules.
+    Clear,
 }
 
 #[derive(Subcommand)]
@@ -151,14 +210,21 @@ async fn execute(ctl: &Ctl) -> Result<()> {
             keep_clock,
             keep_requests,
             drop_snapshots,
+            keep_faults,
         } => (
             "POST",
             format!(
-                "/_fakes3/reset?clock={}&requests={}&snapshots={drop_snapshots}",
-                !keep_clock, !keep_requests
+                "/_fakes3/reset?clock={}&requests={}&snapshots={drop_snapshots}&faults={}",
+                !keep_clock, !keep_requests, !keep_faults
             ),
             None,
         ),
+        Command::Faults(f) => match f {
+            Faults::Add { .. } => ("POST", "/_fakes3/faults".into(), Some(fault_body(f)?)),
+            Faults::List => ("GET", "/_fakes3/faults".into(), None),
+            Faults::Delete { id } => ("DELETE", format!("/_fakes3/faults/{id}"), None),
+            Faults::Clear => ("DELETE", "/_fakes3/faults".into(), None),
+        },
         Command::Snapshot(s) => match s {
             Snapshot::Create { name } => ("POST", "/_fakes3/snapshots".into(), Some(json!({ "name": name }))),
             Snapshot::List => ("GET", "/_fakes3/snapshots".into(), None),
@@ -233,6 +299,110 @@ async fn execute(ctl: &Ctl) -> Result<()> {
     Ok(())
 }
 
+/// The JSON body of `faults add`.
+fn fault_body(f: &Faults) -> Result<Value> {
+    let Faults::Add {
+        ops,
+        bucket,
+        key_prefix,
+        probability,
+        seed,
+        times,
+        skip,
+        delay,
+        error,
+        status,
+        message,
+        truncate,
+        reset,
+    } = f
+    else {
+        unreachable!("only called for faults add")
+    };
+    let mut b = serde_json::Map::new();
+    let mut put = |k: &str, v: Value| {
+        if !v.is_null() {
+            b.insert(k.into(), v);
+        }
+    };
+    put("operation", if ops.is_empty() { Value::Null } else { json!(ops) });
+    put("bucket", json!(bucket));
+    put("key_prefix", json!(key_prefix));
+    put("probability", json!(probability));
+    put("seed", json!(seed));
+    put("times", json!(times));
+    put("skip", json!(skip));
+    put(
+        "delay",
+        match delay.as_deref().map(|d| d.split_once("..")) {
+            None => Value::Null,
+            Some(Some((min, max))) => json!({ "min": min, "max": max }),
+            Some(None) => json!(delay),
+        },
+    );
+    if error.is_some() || status.is_some() || message.is_some() {
+        put("error", json!({ "code": error, "status": status, "message": message }));
+    }
+    put("truncate", json!(truncate));
+    if *reset {
+        put("reset", json!(true));
+    }
+    Ok(Value::Object(b))
+}
+
+fn print_fault(f: &Value) {
+    let mut what = Vec::new();
+    if !f["delay"].is_null() {
+        let d = &f["delay"];
+        what.push(if d.is_object() {
+            format!("delay {}..{} ms", d["min"], d["max"])
+        } else {
+            format!("delay {d} ms")
+        });
+    }
+    if !f["error"].is_null() {
+        what.push(format!("{} {}", f["error"]["status"], text(&f["error"], "code")));
+    }
+    if !f["truncate"].is_null() {
+        what.push(format!("truncate after {} bytes", f["truncate"]));
+    }
+    if f["reset"] == true {
+        what.push("reset".into());
+    }
+    let mut when = Vec::new();
+    if let Some(ops) = f["operation"].as_array() {
+        when.push(ops.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(","));
+    }
+    if let Some(b) = f["bucket"].as_str() {
+        when.push(format!("bucket={b}"));
+    }
+    if let Some(p) = f["key_prefix"].as_str() {
+        when.push(format!("key_prefix={p}"));
+    }
+    if f["probability"].as_f64().is_some_and(|p| p < 1.0) {
+        when.push(format!("p={} seed={}", f["probability"], f["seed"]));
+    }
+    if f["skip"].as_u64().is_some_and(|n| n > 0) {
+        when.push(format!("skip {}", f["skip"]));
+    }
+    let left = match f["remaining"].as_u64() {
+        Some(n) => format!(", {n} left"),
+        None => String::new(),
+    };
+    println!(
+        "{:>4}  {:<28} {:<40} matched {} fired {}{left}",
+        f["id"],
+        what.join(" + "),
+        if when.is_empty() {
+            "all requests".to_owned()
+        } else {
+            when.join(" ")
+        },
+        f["matched"],
+        f["fired"],
+    );
+}
+
 fn enc(s: &str) -> String {
     percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
 }
@@ -264,6 +434,7 @@ fn print_human(command: &Command, v: &Value) {
             }
             println!("snapshots      {}", v["snapshots"]);
             print_log_config(&v["request_log"]);
+            println!("fault rules    {}", v["faults"]);
         }
         Command::Stats => {
             print_memory(&v["memory"]);
@@ -294,8 +465,12 @@ fn print_human(command: &Command, v: &Value) {
         Command::Requests(Requests::List { count: true, .. }) => println!("{}", v["total"]),
         Command::Requests(Requests::List { .. }) => {
             for r in v["requests"].as_array().into_iter().flatten() {
+                let fault = match r["fault"]["type"].as_str() {
+                    Some(t) => format!("  [fault {} #{}]", t, r["fault"]["id"]),
+                    None => String::new(),
+                };
                 println!(
-                    "{:>6}  {}  {:<6} {:<4} {:<24} {:>8}us  in={} out={}  {}  {}",
+                    "{:>6}  {}  {:<6} {:<4} {:<24} {:>8}us  in={} out={}  {}  {}{fault}",
                     r["seq"],
                     text(r, "time"),
                     text(r, "method"),
@@ -315,6 +490,17 @@ fn print_human(command: &Command, v: &Value) {
         }
         Command::Requests(Requests::Clear) => println!("cleared"),
         Command::Requests(Requests::Config { .. }) => print_log_config(v),
+        Command::Faults(Faults::Add { .. }) => {
+            print!("added ");
+            print_fault(v);
+        }
+        Command::Faults(Faults::List) => {
+            for f in v["faults"].as_array().into_iter().flatten() {
+                print_fault(f);
+            }
+        }
+        Command::Faults(Faults::Delete { id }) => println!("deleted {id}"),
+        Command::Faults(Faults::Clear) => println!("cleared {}", v["cleared"]),
     }
 }
 

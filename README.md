@@ -28,7 +28,8 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
   59.1% of those, MinIO 52.0%. It also passes all of [Apache OpenDAL](https://opendal.apache.org)'s S3
   behavior tests without switching off a single capability ([conformance/OPENDAL.md](conformance/OPENDAL.md)).
 - **Built for tests.** Reset state between tests, snapshot and restore fixtures, move a virtual clock to
-  expire presigned URLs or run lifecycle rules, and assert on a log of the requests your code made.
+  expire presigned URLs or run lifecycle rules, assert on a log of the requests your code made, and inject
+  503s, 500s, delays, cut-off downloads and connection resets to test retries and timeouts.
 - **Runs where your tests run.** Use the Docker image (amd64 and arm64), the Node.js package in-process,
   the Rust library in-process, a native binary for Linux, macOS or Windows, or the GitHub Action.
 
@@ -250,11 +251,18 @@ fakes3 ctl snapshot create seeded             # save the current state (object d
 fakes3 ctl snapshot restore seeded            # roll back to it, as often as you like
 fakes3 ctl clock advance 31d                  # move server time; presigned URLs, lifecycle and Object Lock follow it
 fakes3 ctl requests list --op PutObject       # the request log: filter by bucket, operation, status, ...
+fakes3 ctl faults add --op PutObject --error SlowDown --times 1   # the next PutObject gets a 503; the retry succeeds
 ```
 
+Fault rules match by operation, bucket and key prefix, can fire only N times or with a seeded
+probability, and either return an S3 error (a real XML error body, so SDKs retry as they would against
+AWS), wait first, cut the response body short, or reset the connection. Requests they hit are marked in
+the request log; `reset` removes the rules. With no rules the request path pays a single atomic read.
+
 In-process, the same operations are methods on the server: `server.reset()`, `server.snapshot("seeded")`,
-`server.clock.advance("31d")` and `server.requests.list({ operation: "PutObject" })` in Node.js, and
-equivalents on `fakes3::Server` in Rust. Endpoints and semantics are covered in
+`server.clock.advance("31d")`, `server.requests.list({ operation: "PutObject" })` and
+`server.faults.add({ operation: "PutObject", error: "SlowDown", times: 1 })` in Node.js, and
+equivalents on `fakes3::Server` in Rust (`server.add_fault(FaultRule::slow_down().times(1))`). Endpoints and semantics are covered in
 [docs/control-plane.md](docs/control-plane.md).
 
 ## Configuration

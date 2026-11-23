@@ -25,7 +25,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
   fakes3 通过 85.8%，LocalStack 59.1%，MinIO 52.0%。[Apache OpenDAL](https://opendal.apache.org) 的 S3 behavior tests
   不关闭任何能力也能全部通过（[conformance/OPENDAL.md](conformance/OPENDAL.md)）。
 - **为测试设计。** 测试之间重置状态、保存和回滚测试数据、拨动虚拟时钟让预签名 URL 过期或触发 Lifecycle 规则、
-  用请求日志断言代码发了哪些请求。
+  用请求日志断言代码发了哪些请求，还能注入 503、500、延迟、下载中途断开和连接重置来测试重试和超时。
 - **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、Linux / macOS / Windows 的原生二进制，或者 GitHub Action。
 
 | | fakes3 | MinIO | LocalStack | moto | S3Mock |
@@ -231,10 +231,15 @@ fakes3 ctl snapshot create seeded             # 保存当前状态（共享对�
 fakes3 ctl snapshot restore seeded            # 回滚，可以反复回滚
 fakes3 ctl clock advance 31d                  # 推进服务器时间，预签名 URL、Lifecycle、Object Lock 都跟着走
 fakes3 ctl requests list --op PutObject       # 请求日志：按 bucket、操作、状态码等过滤
+fakes3 ctl faults add --op PutObject --error SlowDown --times 1   # 下一个 PutObject 收到 503，重试成功
 ```
 
+故障规则按操作、bucket、key 前缀匹配，可以只触发 N 次或按带种子的概率触发；故障可以是 S3 错误（合法的 XML 错误体，SDK 会像对 AWS 一样重试）、
+先等待、响应体截断或连接重置。被命中的请求在请求日志里有标记，`reset` 会删除规则。没有规则时请求路径只多一次原子读。
+
 进程内使用时是服务对象上的方法：Node.js 里是 `server.reset()`、`server.snapshot("seeded")`、`server.clock.advance("31d")`、
-`server.requests.list({ operation: "PutObject" })`，Rust 里是 `fakes3::Server` 上对应的方法。端点和语义见 [docs/control-plane.md](docs/control-plane.md)。
+`server.requests.list({ operation: "PutObject" })`、`server.faults.add({ operation: "PutObject", error: "SlowDown", times: 1 })`，
+Rust 里是 `fakes3::Server` 上对应的方法（`server.add_fault(FaultRule::slow_down().times(1))`）。端点和语义见 [docs/control-plane.md](docs/control-plane.md)。
 
 ## 配置
 

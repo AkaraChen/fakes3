@@ -15,12 +15,13 @@ import {
 
 const { start } = createRequire(import.meta.url)('../index.js')
 
-function client(server) {
+function client(server, options = {}) {
   return new S3Client({
     endpoint: server.endpoint,
     region: 'us-east-1',
     forcePathStyle: true,
     credentials: { accessKeyId: server.accessKey, secretAccessKey: server.secretKey },
+    ...options,
   })
 }
 
@@ -396,4 +397,114 @@ test('domains enables virtual-host addressing', async () => {
   } finally {
     await server.stop()
   }
+})
+
+test('faults: SlowDown once, then the SDK retry succeeds', async () => {
+  await withServer(undefined, async (server, s3) => {
+    await s3.send(new CreateBucketCommand({ Bucket: 'bucket' }))
+    const rule = server.faults.add({ operation: 'PutObject', error: 'SlowDown', times: 1 })
+    assert.equal(rule.remaining, 1)
+    assert.deepEqual(rule.error, { status: 503, code: 'SlowDown' })
+    assert.equal(typeof rule.seed, 'number')
+
+    await s3.send(new PutObjectCommand({ Bucket: 'bucket', Key: 'k', Body: 'v' }))
+    const puts = server.requests.list({ operation: 'PutObject' })
+    assert.deepEqual(puts.map((r) => r.status), [503, 200])
+    assert.deepEqual(puts[0].fault, { id: rule.id, type: 'error', delayed: false })
+    assert.equal(puts[1].fault, undefined)
+    const [info] = server.faults.list()
+    assert.deepEqual([info.matched, info.fired, info.remaining], [2, 1, 0])
+  })
+})
+
+test('faults: errors, delays, truncated bodies, resets and matching', async () => {
+  const server = await start()
+  const s3 = client(server, { maxAttempts: 1 })
+  try {
+    await s3.send(new CreateBucketCommand({ Bucket: 'bucket' }))
+    await s3.send(new PutObjectCommand({ Bucket: 'bucket', Key: 'logs/a', Body: 'x'.repeat(1000) }))
+    await s3.send(new PutObjectCommand({ Bucket: 'bucket', Key: 'data/a', Body: 'y' }))
+    const get = (Key) => s3.send(new GetObjectCommand({ Bucket: 'bucket', Key }))
+
+    // An S3 error, only for keys under the prefix.
+    server.faults.add({ operation: ['GetObject', 'HeadObject'], keyPrefix: 'logs/', error: { status: 500, code: 'InternalError' } })
+    await assert.rejects(get('logs/a'), (e) => e.name === 'InternalError' && e.$metadata.httpStatusCode === 500)
+    await get('data/a')
+    server.faults.clear()
+
+    // A delay before the answer, fixed or random.
+    server.faults.add({ operation: 'GetObject', delay: '200ms', times: 1 })
+    let t = Date.now()
+    await get('data/a')
+    assert.ok(Date.now() - t >= 190, `${Date.now() - t}ms`)
+    const delayed = server.faults.add({ bucket: 'bucket', delay: { min: 10, max: '20ms' }, error: 'SlowDown', times: 1 })
+    assert.deepEqual(delayed.delay, { min: 10, max: 20 })
+    await assert.rejects(get('data/a'), (e) => e.name === 'SlowDown')
+
+    // A body cut short.
+    server.faults.add({ operation: 'GetObject', truncate: 10, times: 1 })
+    const res = await get('logs/a')
+    assert.equal(res.ContentLength, 1000)
+    await assert.rejects(res.Body.transformToByteArray())
+
+    // A reset connection: no response at all, logged with status 0.
+    server.faults.add({ operation: 'HeadObject', reset: true, times: 1 })
+    await assert.rejects(s3.send(new HeadObjectCommand({ Bucket: 'bucket', Key: 'data/a' })))
+    const heads = server.requests.list({ operation: 'HeadObject' })
+    assert.equal(heads.at(-1).status, 0)
+    assert.equal(heads.at(-1).fault.type, 'reset')
+
+    // Rule management and validation.
+    const { id } = server.faults.add({ reset: true, bucket: 'other' })
+    server.faults.remove(id)
+    assert.throws(() => server.faults.remove(id), /no fault rule/)
+    assert.throws(() => server.faults.add({ operation: 'GetObject' }), /needs an error/)
+    assert.throws(() => server.faults.add({ reset: true, truncate: 1 }), /only one/)
+    assert.throws(() => server.faults.add({ error: 'NoSuchThing' }), /needs a status/)
+    assert.throws(() => server.faults.add({ delay: -1 }), /invalid delay/)
+    assert.throws(() => server.faults.add({ reset: true, probability: 2 }), /probability/)
+
+    // Used-up rules stay listed (with remaining 0) until removed; reset() removes all rules
+    // unless asked not to.
+    assert.ok(server.faults.list().every((f) => f.remaining === 0))
+    server.faults.clear()
+    server.faults.add({ reset: true, bucket: 'other' })
+    server.reset({ faults: false })
+    assert.equal(server.faults.list().length, 1)
+    server.reset()
+    assert.equal(server.faults.list().length, 0)
+  } finally {
+    s3.destroy()
+    await server.stop()
+  }
+})
+
+test('faults: a seeded probability rule repeats', async () => {
+  await withServer(undefined, async (server) => {
+    const s3 = client(server, { maxAttempts: 1 })
+    await s3.send(new CreateBucketCommand({ Bucket: 'bucket' }))
+    await s3.send(new PutObjectCommand({ Bucket: 'bucket', Key: 'k', Body: 'v' }))
+    const flips = async (seed) => {
+      server.faults.clear()
+      server.faults.add({ operation: 'HeadObject', error: 'InternalError', probability: 0.5, seed })
+      server.requests.clear()
+      const out = []
+      for (let i = 0; i < 20; i++) {
+        await s3.send(new HeadObjectCommand({ Bucket: 'bucket', Key: 'k' })).catch(() => {})
+      }
+      for (const r of server.requests.list()) out.push(r.status)
+      return out
+    }
+    const a = await flips(7)
+    assert.deepEqual(await flips(7), a)
+    assert.ok(a.includes(500) && a.includes(200))
+    s3.destroy()
+  })
+})
+
+test('faults fail after stop', async () => {
+  const server = await start()
+  const { faults } = server
+  await server.stop()
+  assert.throws(() => faults.list(), /stopped/)
 })
