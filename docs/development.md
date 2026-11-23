@@ -16,6 +16,8 @@ Node binding 的编译，以及 workflow 文件的 actionlint 检查。
 - **warp**：把 MinIO warp 的各个 workload 当冒烟测试跑一遍，报告哪些功能能跑通，以 MinIO 做对照（不是压测，见 [conformance/WARP.md](../conformance/WARP.md)）。
 - **bench**：对选定的服务跑启动、模拟测试套件、内存占用和 warp 压测（Docker，只能在 Linux 上跑）。
 - **bench-native**：同样的测量，但所有服务都作为本机进程运行（fakes3、MinIO、moto），在 Linux、macOS 和 Windows 的 runner 上各跑一遍。
+  其中的 `startup` job（[bench/startup](../bench/startup/)）测发布版 Node 包、Rust crate 和二进制「启动 + 一次请求 + 停止」的耗时，
+  顺序跑和同时起几百个各测一遍；`only` 填 `startup_cycle` 时只跑这个 job。
 - **ab**：在同一台 runner 上交替压测两个版本（`base` / `head`），用来判断一个改动对性能的影响。
   托管 runner 之间速度能差 2 倍，所以比较两个版本时只能用这个，不能拿两次独立的 bench 结果比。
   `runner` 可以选 macOS 或 Windows 的 runner；两个 ref 都要能在那个系统上构建。

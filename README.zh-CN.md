@@ -7,7 +7,7 @@
 
 [English](README.md) | 简体中文
 
-**一个专门给测试用的 S3 服务。** 几毫秒就绪，一个请求约 150 µs，在客户端看得到的地方尽量和 AWS S3 保持一致。
+**一个专门给测试用的 S3 服务。** 几毫秒就绪，一个请求约 140 µs，在客户端看得到的地方尽量和 AWS S3 保持一致。
 
 它放弃了测试用不到的东西（持久化、fsync、多节点、静态加密），换来启动速度和请求延迟；
 客户端能观察到的行为则紧跟 AWS：签名、错误码、ETag 规则、版本控制、条件请求、校验和、ACL 和 Bucket Policy。
@@ -19,8 +19,8 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 
 ## 为什么用 fakes3
 
-- **快到可以每个测试起一个。** 容器启动后约 1 ms 就绪，空闲内存 9 MiB。一个 6,500 个请求的测试套件跑完只要 0.93 s，
-  MinIO 要 3.4 s，LocalStack 要 7.7 s。
+- **快到可以每个测试起一个。** 在进程内启动一个服务、发一个请求、再停掉，Rust 要 0.15 ms，Node 要 0.4 ms；作为子进程是 3.4 ms。
+  容器启动后约 1 ms 就绪，空闲内存 9.5 MiB。一个 6,500 个请求的测试套件跑完只要 0.90 s，MinIO 要 3.4 s，LocalStack 要 7.9 s。
 - **行为和 AWS 一致。** 24 个 SDK 的兼容矩阵通过 99.1%；[ceph/s3-tests](https://github.com/ceph/s3-tests) 里 AWS 自己能通过的用例，
   fakes3 通过 85.8%，LocalStack 59.1%，MinIO 52.0%。[Apache OpenDAL](https://opendal.apache.org) 的 S3 behavior tests
   不关闭任何能力也能全部通过（[conformance/OPENDAL.md](conformance/OPENDAL.md)）。
@@ -30,13 +30,13 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 
 | | fakes3 | MinIO | LocalStack | moto | S3Mock |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 容器启动后到就绪 | **约 1 ms** | 243 ms | 10.9 s | 880 ms | 3.8 s |
-| 空闲内存 | **9.2 MiB** | 51 MiB | 156 MiB | 69 MiB | 233 MiB |
-| 6,500 个请求的测试套件 | **0.93 s** | 3.4 s | 7.7 s | 12.9 s | 7.1 s |
+| 容器启动后到就绪 | **约 1 ms** | 255 ms | 11.0 s | 873 ms | 3.9 s |
+| 空闲内存 | **9.5 MiB** | 51 MiB | 156 MiB | 68 MiB | 274 MiB |
+| 6,500 个请求的测试套件 | **0.90 s** | 3.4 s | 7.9 s | 13.2 s | 7.0 s |
 | SDK 兼容矩阵（24 个 SDK × 43 个场景） | **99.1%** | 96.4% | 91.4% | 87.9% | 85.4% |
 | ceph/s3-tests（AWS 能通过的 684 个用例） | **85.8%** | 52.0% | 59.1% | | |
 
-在 4 核的 GitHub 托管 runner 上测量。测量方法、吞吐数据和完整结果见 [docs/benchmarks.md](docs/benchmarks.md)。
+fakes3 0.1.4，在 4 核的 GitHub 托管 runner（Linux）上跑 3 轮取中位数。测量方法、范围、吞吐数据、Linux / macOS / Windows 上的进程内启动耗时，以及每次运行的链接见 [docs/benchmarks.md](docs/benchmarks.md)。
 
 ## 快速开始
 
