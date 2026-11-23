@@ -13,16 +13,27 @@ npm install --save-dev fakes3-sdk
 import { start } from "fakes3-sdk";
 import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
 
-const server = await start(); // 默认监听 127.0.0.1 的随机端口
-const s3 = new S3Client({
-  endpoint: server.endpoint,
-  region: "us-east-1",
-  forcePathStyle: true,
-  credentials: { accessKeyId: server.accessKey, secretAccessKey: server.secretKey },
-});
+await using server = await start(); // 默认监听 127.0.0.1 的随机端口
+const s3 = new S3Client(server.clientConfig);
 await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
 // ...
-await server.stop();
+// 离开作用域时服务自动停止
+```
+
+`await using` 在所在代码块结束时停止服务，测试抛异常也一样。Node.js 24 原生支持这个语法；Node.js 18.18、20.4
+及以上经 TypeScript 5.2+（或其他编译器）转换后也能用。用不了的地方，自己调用 `await server.stop()`，比如放在 `afterAll` 里。
+
+`server.clientConfig` 是 AWS SDK for JavaScript v3 客户端需要的配置：`endpoint`、`region`（`us-east-1`）、
+`forcePathStyle: true` 和默认账户的 `credentials`。要加自己的设置就展开它：`new S3Client({ ...server.clientConfig, maxAttempts: 1 })`。
+
+多账户时，用 `clientConfigFor` 取指定账户的配置（传账户名或 access key，不存在则抛错），客户端就以该账户身份访问：
+
+```ts
+await using server = await start({
+  users: [{ name: "alice", accessKey: "AKALICE", secretKey: "alice-secret" }],
+});
+const admin = new S3Client(server.clientConfig);               // 默认账户 fakes3
+const alice = new S3Client(server.clientConfigFor("alice"));   // 或 clientConfigFor("AKALICE")
 ```
 
 `start(options?)` 返回 `Promise<FakeS3Server>`，所有选项都可省略：
@@ -40,7 +51,7 @@ await server.stop();
 | `bucketDefaults` | `"legacy"` | 新建 bucket 的初始设置：`"legacy"` 或 `"aws"`，见[新建 bucket 的默认值](../../docs/bucket-defaults.md) |
 | `memoryLimit` | `"auto"` | 对象数据占用内存的上限：字节数，或 `"512MiB"`、`"2GiB"`、`"unlimited"`、`"auto"`；超出时写入返回 HTTP 507 |
 
-`FakeS3Server` 有只读属性 `endpoint`、`host`、`port`、`accessKey`、`secretKey`，以及方法 `memory(): { used, limit }`（当前用量和上限，字节；无上限时没有 `limit` 字段），`stop(): Promise<void>`（可重复调用，调用后端口立即释放）。
+`FakeS3Server` 有只读属性 `endpoint`、`host`、`port`、`accessKey`、`secretKey`、`clientConfig`，以及方法 `clientConfigFor(user)`、`memory(): { used, limit }`（当前用量和上限，字节；无上限时没有 `limit` 字段），`stop(): Promise<void>`（可重复调用，调用后端口立即释放）和 `[Symbol.asyncDispose]()`（等同于 `stop()`，供 `await using` 使用）。
 类型声明由 `napi build` 生成。
 
 **测试控制面**：[控制面](../../docs/control-plane.md)的操作也有对应的方法，直接在进程内调用，不走 HTTP。时间一律用 JS 的 `Date`。

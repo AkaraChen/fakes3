@@ -14,17 +14,21 @@ npm install --save-dev fakes3-sdk
 import { start } from "fakes3-sdk";
 import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
 
-const server = await start(); // 127.0.0.1, random free port
-const s3 = new S3Client({
-  endpoint: server.endpoint,
-  region: "us-east-1",
-  forcePathStyle: true,
-  credentials: { accessKeyId: server.accessKey, secretAccessKey: server.secretKey },
-});
+await using server = await start(); // 127.0.0.1, random free port
+const s3 = new S3Client(server.clientConfig);
 await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
 // ...
-await server.stop();
+// the server stops when the scope ends
 ```
+
+`await using` stops the server when the enclosing block ends, even if a test throws. It runs natively
+on Node.js 24, and on Node.js 18.18 or 20.4 and later when TypeScript 5.2+ (or another compiler)
+transforms it. Where you can't use it, call `await server.stop()` yourself, for example in an
+`afterAll` hook.
+
+`server.clientConfig` holds what an AWS SDK for JavaScript v3 client needs: `endpoint`, `region`
+(`us-east-1`), `forcePathStyle: true` and the default account's `credentials`. Spread it to add
+your own settings: `new S3Client({ ...server.clientConfig, maxAttempts: 1 })`.
 
 Every server has its own data, clock and port, so parallel tests don't interfere with each other.
 
@@ -51,12 +55,28 @@ Returns `Promise<FakeS3Server>`. Every option is optional:
 | --- | --- |
 | `endpoint`, `host`, `port` | Where the server listens. `endpoint` is `http://host:port`, ready for an S3 client |
 | `accessKey`, `secretKey`, `users` | The configured accounts |
+| `clientConfig` | S3 client settings for the default account: `new S3Client(server.clientConfig)` |
+| `clientConfigFor(user)` | The same for another account, given its name or access key. Throws if there is none |
 | `stop(): Promise<void>` | Stops the server and releases the port immediately. Safe to call more than once |
+| `[Symbol.asyncDispose]()` | Same as `stop()`; this is what makes `await using` work |
 | `memory(): { used, limit? }` | Object data held, in bytes, and the limit (omitted when unlimited) |
 | `reset(options?)` | Clears all buckets, objects and uploads, and by default the request log and clock. Pass `{ snapshots: true }` to delete snapshots too |
 | `snapshot(name?)`, `restore(name)`, `snapshots()`, `deleteSnapshot(name)` | Save the current state and roll back to it, as often as you like. Object data is shared, not copied |
 | `clock` | The server clock (below) |
 | `requests` | The request log (below) |
+
+### Multiple accounts
+
+Each account owns the buckets and objects it creates. To act as one, build its client from
+`clientConfigFor`:
+
+```ts
+await using server = await start({
+  users: [{ name: "alice", accessKey: "AKALICE", secretKey: "alice-secret" }],
+});
+const admin = new S3Client(server.clientConfig);               // the default account, "fakes3"
+const alice = new S3Client(server.clientConfigFor("alice"));   // or clientConfigFor("AKALICE")
+```
 
 ### Virtual clock
 

@@ -86,17 +86,15 @@ npm install --save-dev fakes3-sdk
 import { start } from "fakes3-sdk";
 import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
 
-const server = await start(); // 127.0.0.1, random free port
-const s3 = new S3Client({
-  endpoint: server.endpoint,
-  region: "us-east-1",
-  forcePathStyle: true,
-  credentials: { accessKeyId: server.accessKey, secretAccessKey: server.secretKey },
-});
+await using server = await start(); // 127.0.0.1, random free port
+const s3 = new S3Client(server.clientConfig);
 await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
 // ...
-await server.stop();
 ```
+
+`await using` stops the server when the block ends, even if the test throws; without it, call
+`await server.stop()`. `server.clientConfig` carries the endpoint, region, path-style addressing and
+credentials, and `server.clientConfigFor("alice")` does the same for another account.
 
 Prebuilt for Linux x64 and arm64 (glibc and musl/Alpine), macOS (Apple silicon and Intel) and Windows x64,
 with Node.js 18 or later. Every option and method is documented in the [package README](bindings/node/README.md).
