@@ -3,7 +3,7 @@
 //! This crate is a thin shell over [`fakes3::Server`]. A method on `fakes3::Server` becomes a
 //! wrapper that calls it through [`with_server`]; the TypeScript declarations are generated from
 //! the signatures. Server lifecycle and the control plane's reset/snapshot methods live here,
-//! [`control`] holds the clock and the request log.
+//! [`control`] holds the clock, the request log and fault injection.
 
 mod control;
 
@@ -158,7 +158,15 @@ impl FakeS3Server {
         control::RequestsControl::new(self.server.clone())
     }
 
-    /// Clears all buckets, objects and uploads, and by default the request log and the clock too.
+    /// Fault injection: errors, delays, truncated bodies and connection resets for matching S3
+    /// requests.
+    #[napi(getter)]
+    pub fn faults(&self) -> control::FaultsControl {
+        control::FaultsControl::new(self.server.clone())
+    }
+
+    /// Clears all buckets, objects and uploads, and by default the request log, the clock and the
+    /// fault rules too.
     /// Snapshots are kept unless `options.snapshots` is true.
     #[napi]
     pub fn reset(&self, options: Option<ResetOptions>) -> Result<()> {
@@ -169,6 +177,7 @@ impl FakeS3Server {
                 clock: o.clock.unwrap_or(defaults.clock),
                 requests: o.requests.unwrap_or(defaults.requests),
                 snapshots: o.snapshots.unwrap_or(defaults.snapshots),
+                faults: o.faults.unwrap_or(defaults.faults),
             },
         };
         with_server(&self.server, |s| s.control().reset_with(opts))
@@ -261,6 +270,8 @@ pub struct ResetOptions {
     pub requests: Option<bool>,
     /// Delete stored snapshots. Default `false`.
     pub snapshots: Option<bool>,
+    /// Remove the fault rules. Default `true`.
+    pub faults: Option<bool>,
 }
 
 /// A stored snapshot.
