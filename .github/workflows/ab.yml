@@ -15,7 +15,7 @@ on:
         description: "Interleaved rounds"
         default: "6"
       auth:
-        description: "1: both verify signatures (--auth); 0: neither does (--no-auth on A, the default on B)"
+        description: "1: both verify signatures (--auth); 0: neither does (the default; --no-auth for a ref from before --auth)"
         default: "1"
       workloads:
         description: "Comma-separated: small_get,small_get_c1,small_put,stat,list,versioned,large_get,large_get_c1,large_put"

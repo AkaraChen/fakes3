@@ -5,8 +5,10 @@
 
 <server> is a bench/servers.sh name, or `fakes3-aws`: fakes3 started with --bucket-defaults aws.
 Each case gets a freshly started server, so a case can't inherit a versioned bucket from the last
-one and a server that dies only fails the case that killed it. Results go to <out>/<server>.json;
-conformance/warp/report.py renders them.
+one and a server that dies only fails the case that killed it; a server that does not start fails
+that case and the run goes on. Results go to <out>/<server>.json, rewritten after every case so an
+interrupted run keeps what it finished; conformance/warp/report.py renders them and, with --check,
+fails on a fakes3 regression.
 
 warp exits 0 even when every request failed, so a case passes on what warp reports, never on its
 exit code: at least one request, no failed request, and no error printed outside the measured phase
@@ -171,6 +173,15 @@ def judge(returncode, out, err):
     }
 
 
+def start_failed(e):
+    """The result of a case whose server did not come up."""
+    detail = str(e)
+    if isinstance(e, subprocess.CalledProcessError):
+        tail = [line for line in ((e.stderr or "") + (e.stdout or "")).splitlines() if line.strip()][-3:]
+        detail = " / ".join(tail) or detail
+    return {"status": "fail", "requests": 0, "errors": 0, "ops": {}, "messages": [f"server did not start: {detail}"[:300]], "exit": None}
+
+
 def run_case(port, args, duration):
     # warp's default of 20 clients measures the machine, and this only needs every path to run.
     defaults = [] if "--concurrent" in args else ["--concurrent", "4"]
@@ -212,15 +223,23 @@ def main():
             group, args, what = CASES[name]
             t0 = time.monotonic()
             try:
-                port = start(server)
-                r = run_case(port, args, a.duration)
+                try:
+                    port = start(server)
+                except Exception as e:  # noqa: BLE001 - any start failure fails just this case
+                    r = start_failed(e)
+                else:
+                    r = run_case(port, args, a.duration)
             finally:
                 stop(server)
             results[name] = {"group": group, "what": what, "args": args, "seconds": round(time.monotonic() - t0, 1), **r}
             detail = f"{r['errors']}/{r['requests']}" if r["status"] == "fail" else r["requests"]
             print(f"{server} {name}: {r['status']} ({detail})", *r["messages"][:1], flush=True)
-        report = {"server": server, "duration": a.duration, "cases": results}
-        (out / f"{server}.json").write_text(json.dumps(report, indent=1) + "\n")
+            # Written after every case, so a run that is cancelled or dies keeps what it finished.
+            report = {"server": server, "duration": a.duration, "cases": results}
+            path = out / f"{server}.json"
+            tmp = path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(report, indent=1) + "\n")
+            tmp.replace(path)
 
 
 if __name__ == "__main__":

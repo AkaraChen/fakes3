@@ -11,7 +11,7 @@
   },
   {
    "id": "sse-c-part-key",
-   "category": "bug",
+   "category": "unconfirmed",
    "title": "SSE-C: CompleteMultipartUpload without the customer key succeeds, the test expects 400",
    "why": "After the UploadPart check (fixed: a part with another key is now 400 `InvalidRequest`) the three `test_copy_part_enc[…-sse-c-…]` cases still stop at their last step: `CompleteMultipartUpload` on an SSE-C upload without `x-amz-server-side-encryption-customer-*` headers must fail with 400. The CompleteMultipartUpload reference says those headers are 'required only when the object was created using a checksum algorithm', and fakes3 (like S3 today) gives every object one by default, but whether S3 refuses the call when an SDK leaves them out is unconfirmed, and enforcing it would break clients that do not repeat the key on Complete. Not changed.",
    "tests": [
@@ -32,7 +32,7 @@
   },
   {
    "id": "invalid-utf8-key",
-   "category": "bug",
+   "category": "unconfirmed",
    "title": "GET of a key with C1 control characters (valid UTF-8) returns 404, the test expects 400",
    "why": "`Key='\\xae\\x8a-'` is sent as the valid UTF-8 `%C2%AE%C2%8A-`; the test (`fails_on_rgw`, so AWS-valid) wants 400 `Couldn't parse the specified URI.` A key that is not UTF-8 after percent-decoding (`%AE%8A-`) already gets exactly that from s3s (400 `InvalidURI`), so only the C1-control case is open and the rule AWS applies is not documented. Not changed.",
    "tests": [

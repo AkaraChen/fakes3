@@ -25,7 +25,7 @@
 - Bucket Policy 的 `aws:PrincipalType`、`s3:authType` 等条件对带签名的请求按 owner 求值，presigned URL 的 `s3:authType` 是 `REST-QUERY-STRING`。
 - 带签名的 POST 表单上传（表单里有 `x-amz-signature` / `signature` 字段）仍由 s3s 校验，所以必须用配置的 access key / secret 签名（任意凭证不行）；不带签名的表单是匿名请求。
 - **从旧版本升级**：以前默认校验签名，现在不校验；要保持原样，加 `--auth`（Node：`auth: true`，库：`Config { auth: true, .. }`）。
-  `--no-auth` 以前还会跳过全部授权，现在它只是一个已弃用、不起作用的别名（默认就不校验签名），启动时会在 stderr 提示；
+  `--no-auth` 以前还会跳过全部授权，后来成了不起作用的别名，现在已删除，传它会让 fakes3 报未知参数并退出，从启动命令里去掉即可；
   依赖“未签名请求等同 owner”的测试需要改为带上任意签名（例如任何 SDK 的随机凭证）。
 - 多个账户用 `--user` 配置（见[多用户](multi-user.md)）：默认模式下按请求里的 access key 选账户、不校验 secret，`--auth` 下校验该账户自己的 secret；
   “带签名的请求是谁”的判断集中在 `src/access.rs` 的 `identify`。

@@ -3,9 +3,33 @@ name: warp
 # Runs every minio/warp workload that doesn't need another service (conformance/warp/run.py, warp
 # pinned in bench/setup-native.sh) against fakes3 and, as a reference, MinIO. This is warp as a smoke
 # test of the data path: which features work, not how fast. bench.yml measures performance.
-# The report is shown in the job summary and uploaded as an artifact, and a failing case does not
-# fail the run, as in s3-tests.yml.
+# The report is shown in the job summary and uploaded as an artifact. The job fails when fakes3
+# (fakes3 or fakes3-aws) fails an S3 case it should pass (conformance/warp/report.py --check);
+# MinIO and the other servers are references and their failures never fail it.
+# Runs on pull requests and pushes to main that touch the server or the harness (fakes3 servers
+# only, about 12 minutes), and by hand with any servers.
 on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "Dockerfile"
+      - "conformance/warp/**"
+      - "bench/servers.sh"
+      - "bench/setup-native.sh"
+      - ".github/workflows/warp.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "Dockerfile"
+      - "conformance/warp/**"
+      - "bench/servers.sh"
+      - "bench/setup-native.sh"
+      - ".github/workflows/warp.yml"
   workflow_dispatch:
     inputs:
       servers:
@@ -20,6 +44,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: warp-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   warp:
@@ -48,9 +76,9 @@ jobs:
 
       - name: Run warp
         env:
-          SERVERS: ${{ inputs.servers }}
+          SERVERS: ${{ inputs.servers || 'fakes3 fakes3-aws' }}
           CASES: ${{ inputs.cases }}
-          DURATION: ${{ inputs.duration }}
+          DURATION: ${{ inputs.duration || '3s' }}
         run: |
           # shellcheck disable=SC2086 # SERVERS is a list
           python3 conformance/warp/run.py $SERVERS --cases "$CASES" --duration "$DURATION"
@@ -65,3 +93,6 @@ jobs:
           name: warp-${{ github.run_id }}
           path: conformance/warp/results/
           if-no-files-found: warn
+
+      - name: Fail on a fakes3 regression
+        run: python3 conformance/warp/report.py --check conformance/warp/results

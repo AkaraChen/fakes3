@@ -173,6 +173,7 @@ AUTO_WHY = {
 }
 CATEGORIES = [
     ("bug", "Real fakes3 bug (wrong status / code / header / body vs AWS)"),
+    ("unconfirmed", "Differs from what the test expects; what AWS actually does is unconfirmed"),
     ("unimplemented", "Unimplemented feature"),
     ("identity", "Needs several users / tenants / IAM / STS"),
     ("s3s", "s3s limitation (verified in the s3s source)"),

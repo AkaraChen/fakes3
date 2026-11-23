@@ -2,10 +2,16 @@
 """Render the results of conformance/warp/run.py as Markdown.
 
     conformance/warp/report.py RESULTS_DIR
+    conformance/warp/report.py --check RESULTS_DIR
 
 RESULTS_DIR holds one <server>.json per server. Servers are shown fakes3 first.
+
+--check prints nothing on success and exits 1 when a fakes3 server (fakes3, fakes3-aws) failed an
+S3 case it is expected to pass. Other servers (MinIO, ...) are references and never fail the check;
+neither do the MinIO-extension cases.
 """
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -14,6 +20,26 @@ GROUPS = {
     "s3": "S3 API",
     "minio": "MinIO extensions (no AWS equivalent, not part of the S3 score)",
 }
+
+
+# Cases a fakes3 server fails on purpose (conformance/WARP.md, "What doesn't pass").
+EXPECTED_FAILURES = {
+    # New buckets block SSE-C with these defaults, as AWS's do.
+    "fakes3-aws": {"put-sse-c", "get-sse-c"},
+}
+
+
+def check(reports):
+    problems = []
+    for r in reports:
+        server = r["server"]
+        if not server.startswith("fakes3"):
+            continue
+        expected = EXPECTED_FAILURES.get(server, set())
+        for n, c in r["cases"].items():
+            if c["group"] == "s3" and c["status"] != "pass" and n not in expected:
+                problems.append(f"{server} `{n}`: {(c['messages'] or ['no message'])[0]}")
+    return problems
 
 
 def order(report):
@@ -34,9 +60,22 @@ def cell(c):
 
 
 def main():
-    reports = sorted((json.loads(p.read_text()) for p in Path(sys.argv[1]).glob("*.json")), key=order)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("results")
+    ap.add_argument("--check", action="store_true", help="exit 1 on an unexpected fakes3 S3 failure")
+    a = ap.parse_args()
+    reports = sorted((json.loads(p.read_text()) for p in Path(a.results).glob("*.json")), key=order)
     if not reports:
         sys.exit("no results")
+    if a.check:
+        if not any(r["server"].startswith("fakes3") for r in reports):
+            sys.exit("no fakes3 results")
+        problems = check(reports)
+        if problems:
+            print(f"{len(problems)} fakes3 S3 case(s) failed:")
+            print("\n".join(f"- {p}" for p in problems))
+            sys.exit(1)
+        return
     servers = [r["server"] for r in reports]
     names = list(dict.fromkeys(n for r in reports for n in r["cases"]))
     first = {n: next(r["cases"][n] for r in reports if n in r["cases"]) for n in names}

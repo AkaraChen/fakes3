@@ -17,8 +17,8 @@ minio/warp image on Docker's host network.
 Both binaries run in the same authentication mode, so the comparison is like for like even when A
 predates the `--auth` flag. AUTH=1 (default) verifies signatures: B gets `--auth`, A is started as
 is (before the flag existed, verifying was its only mode). AUTH=0 measures the mode that does not
-verify: `--no-auth` for both, which B accepts as a deprecated no-op because not verifying is its
-default.
+verify: a binary with `--auth` gets no flag, because not verifying is its default; an older one, whose
+default was to verify, gets `--no-auth`.
 """
 
 import json
@@ -79,10 +79,11 @@ def free_port():
 
 
 def auth_args(binary):
-    if not AUTH:
-        return ["--no-auth"]
     help_text = subprocess.run([binary, "--help"], capture_output=True, text=True).stdout
-    return ["--auth"] if "--auth" in help_text else []
+    has_auth = "--auth" in help_text
+    if not AUTH:
+        return [] if has_auth else ["--no-auth"]
+    return ["--auth"] if has_auth else []
 
 
 def once(binary, wl):
@@ -130,7 +131,7 @@ for rnd in range(ROUNDS):
             print(f"round {rnd} {wl} {name}: {ops:.0f} ops/s, {cpu_us:.1f} server-µs/op ({kernel:.0%} in the kernel)", flush=True)
 
 lines = [
-    f"Median of {ROUNDS} interleaved rounds, {DURATION} each, {'signatures verified' if AUTH else 'signatures not verified (--no-auth / default)'}, "
+    f"Median of {ROUNDS} interleaved rounds, {DURATION} each, {'signatures verified' if AUTH else 'signatures not verified'}, "
     f"on {HOST['cpu']}, {HOST['cores']} cores, {HOST['os']}.",
     "",
     "| workload | A ops/s | B ops/s | B/A | A server µs/op | B server µs/op | B/A |",

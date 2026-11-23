@@ -33,13 +33,20 @@ conformance/warp/report.py conformance/warp/results
 
 Servers are whatever `bench/servers.sh list` knows, plus `fakes3-aws`. A run takes about 6 minutes per server.
 
+The workflow also runs by itself, on fakes3 and fakes3-aws only, for pull requests and pushes to `main` that touch
+the server or the harness. Its last step, `conformance/warp/report.py --check`, fails the job when either fakes3
+server fails an S3 case it should pass; the expected failures (`put-sse-c` and `get-sse-c` on fakes3-aws, see
+below) are listed in `EXPECTED_FAILURES` in `report.py`. MinIO and the other servers are references and never fail
+it, and neither do the MinIO-extension cases.
+
 What the harness does, which matters when reading results:
 
 - **warp's exit code means nothing.** warp exits 0 when every request failed (`fanout`: 24809 requests, 24809
   errors, exit 0). A case passes only if warp's JSON report shows at least one request and no failed request, and
   no `<ERROR>` was printed, because failures during preparation and cleanup never reach the report.
 - **Every case gets a fresh server.** warp reuses one bucket name, so a case could otherwise inherit a versioned or
-  locked bucket from the previous one, and a crash would fail every later case.
+  locked bucket from the previous one, and a crash would fail every later case. A server that does not start fails
+  that case (`server did not start: ...`) and the run goes on; results are written after every case.
 - **fakes3 runs with `--auth`**, so warp's signatures are verified. With the wrong secret key fakes3 rejects the
   signature and the harness reports `fail`.
 - **fakes3 listens on both stacks** (`FAKES3_BIND`), because on the runners `<bucket>.localhost` resolves to `::1`.

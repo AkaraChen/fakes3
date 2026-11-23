@@ -74,13 +74,13 @@ python3 conformance/s3-tests/report.py conformance/s3-tests/results --src confor
 
 | category | failing tests | groups |
 |---|--:|--:|
-| Real fakes3 bug (wrong status / code / header / body vs AWS) | 4 | 2 |
+| Differs from what the test expects; what AWS actually does is unconfirmed | 4 | 2 |
 | Unimplemented feature | 5 | 1 |
 | s3s limitation (verified in the s3s source) | 3 | 1 |
 | Test is not AWS-compatible / RGW-specific / ineffective with boto3 (not marked by s3-tests) | 82 | 25 |
 | Marked `fails_on_aws` by s3-tests itself (excluded from the baseline) | 83 | 1 |
 
-### Real fakes3 bug (wrong status / code / header / body vs AWS): 4 tests
+### Differs from what the test expects; what AWS actually does is unconfirmed: 4 tests
 
 #### SSE-C: CompleteMultipartUpload without the customer key succeeds, the test expects 400 (3)
 
