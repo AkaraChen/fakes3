@@ -20,6 +20,7 @@ Node binding 的编译，以及 workflow 文件的 actionlint 检查。
   托管 runner 之间速度能差 2 倍，所以比较两个版本时只能用这个，不能拿两次独立的 bench 结果比。
   `runner` 可以选 macOS 或 Windows 的 runner；两个 ref 都要能在那个系统上构建。
 - **node**：构建 Node 插件并测试；推送 `v*` tag 时通过 npm 可信发布上传（见 [bindings/node/PUBLISHING.md](../bindings/node/PUBLISHING.md)）。
+- **python**：构建 5 个平台的 `fakes3-sdk` wheel，在 Linux、macOS、Windows 和 Alpine 上安装后跑 pytest；只有手动触发且 `publish: true` 时通过 PyPI 可信发布上传（见 [bindings/python/PUBLISHING.md](../bindings/python/PUBLISHING.md)）。
 - **release**：推送 `v*` tag 时发布 GHCR 镜像、二进制（静态链接的 Linux 版、macOS 和 Windows 版）和 crates.io 上的 `fakes3` crate；其余情况只打包并校验 crate（`cargo publish --dry-run`）。
 - **opendal**：测试 OpenDAL 绑定；推送 `fakes3-opendal-v*` tag 时发布 `fakes3-opendal` crate（见[下文](#fakes3-opendal)）。
 
@@ -43,6 +44,20 @@ npm test                  # 用 @aws-sdk/client-s3 跑一遍
 
 CI 在 [node workflow](../.github/workflows/node.yml) 里构建四个目标（x64 / arm64，glibc / musl）并各自跑一遍测试；
 发布到 npm 只在推送 `v*` tag 或手动触发且 `publish: true` 时发生，其余情况只做 `npm publish --dry-run`。
+
+## Python 绑定
+
+`bindings/python` 是 PyPI 包 `fakes3-sdk`：纯 Python 代码加上一个预编译的 fakes3 二进制，以子进程方式运行服务。
+wheel 由同目录的 `build_backend.py` 打包（只用标准库），它也是这个目录的 PEP 517 后端：
+
+```bash
+cd bindings/python
+python -m venv .venv && . .venv/bin/activate
+pip install . pytest boto3       # 会执行 cargo build --release，再把二进制打进 wheel
+cd tests && pytest               # 在 tests 目录里跑，导入的是装好的包
+```
+
+已经有二进制时可以跳过编译：`FAKES3_WHEEL_BINARY=../../target/debug/fakes3 pip install .`。
 
 ## OpenDAL 绑定
 

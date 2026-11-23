@@ -1,0 +1,9 @@
+# The wheel is built by build_backend.py (in this directory): the Python package plus a prebuilt
+# fakes3 binary. Package metadata lives there too.
+[build-system]
+requires = []
+build-backend = "build_backend"
+backend-path = ["."]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

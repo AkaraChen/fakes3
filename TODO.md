@@ -16,7 +16,9 @@
 - [x] GitHub Action：[setup-fakes3](https://github.com/AkaraChen/setup-fakes3)，下载 release 里的静态二进制并在后台启动
 - [x] OpenDAL 绑定：crate `fakes3-opendal`（[bindings/opendal](bindings/opendal/README.md)），返回走 OpenDAL S3 服务的 `Operator`；
       为此 `Server` 加了 `create_bucket` / `enable_versioning`
-- [ ] 其余语言的框架集成（pytest fixture 等，基于 `fakes3 ctl` 或 HTTP API）
+- [x] Python 包 `fakes3-sdk`（[bindings/python](bindings/python/README.md)）：wheel 自带预编译二进制，以子进程运行；
+      pytest fixture（每个测试一个 / 整个 session 一个），控制面封装成方法；子进程用 `--exit-on-stdin-close` 跟随父进程退出
+- [ ] 其余语言的框架集成（Go、Java / JUnit 等，基于 `fakes3 ctl` 或 HTTP API）
 - [x] 默认不校验签名（原 `--no-auth`，现在是默认行为，`--auth` 才严格校验）：任意 access key / secret 签名的请求都接受（SigV4 / SigV2 的头和 presigned URL、三种流式上传，trailer 校验和仍会校验），
       并且是 bucket 的 owner；不带签名的请求是匿名请求，照常走 ACL / Bucket Policy / Block Public Access。
       s3s 没有跳过验签的开关，所以在服务包装层去掉签名再交给 s3s（aws-chunked 自己解码），并在请求扩展里留下 `Signed { access_key, presigned }`（见 `src/noauth.rs`、`src/access.rs`）
