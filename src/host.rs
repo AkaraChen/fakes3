@@ -42,6 +42,11 @@ impl Domains {
         })
     }
 
+    /// The bucket named by a virtual-host-style `host`, if it is one.
+    pub fn host_bucket<'a>(&'a self, host: &'a str) -> Option<&'a str> {
+        self.split(host).and_then(|(_, b)| b)
+    }
+
     /// The bucket a request addresses: from the host in virtual-host style, else the first path segment.
     pub fn bucket_of<'a>(&'a self, host: Option<&'a str>, path: &'a str) -> Option<&'a str> {
         if let Some(h) = host

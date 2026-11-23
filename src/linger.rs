@@ -7,9 +7,14 @@
 //! `connection reset` instead of the S3 error. So, like nginx's `lingering_close`, closing sends FIN
 //! first and then reads and discards whatever the client still sends, until it closes its end or
 //! [`LINGER`] passes.
+//!
+//! A connection can also be aborted ([`Abort`], used by fault injection): it is then closed with a
+//! TCP reset (`SO_LINGER` 0) instead.
 
 use std::io;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll, ready};
 use std::time::Duration;
 
@@ -20,16 +25,41 @@ use tokio::time::Sleep;
 /// How long a closing connection keeps reading what the client still sends.
 const LINGER: Duration = Duration::from_secs(2);
 
+/// Makes a connection end with a reset once it is dropped. Each connection has one; requests
+/// served on it can set it.
+#[derive(Clone, Default)]
+pub struct Abort(Arc<AtomicBool>);
+
+impl Abort {
+    pub fn set(&self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+
+    fn is_set(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
 /// A client connection whose shutdown lingers; reads and writes go straight to the socket.
 pub struct Lingering {
     io: TcpStream,
     /// Set once the write half is shut down.
     deadline: Option<Pin<Box<Sleep>>>,
+    abort: Abort,
 }
 
 impl Lingering {
-    pub fn new(io: TcpStream) -> Self {
-        Self { io, deadline: None }
+    pub fn new(io: TcpStream, abort: Abort) -> Self {
+        Self { io, deadline: None, abort }
+    }
+}
+
+impl Drop for Lingering {
+    fn drop(&mut self) {
+        if self.abort.is_set() {
+            // Closing with a zero linger time sends RST instead of FIN.
+            let _ = self.io.set_zero_linger();
+        }
     }
 }
 
@@ -58,6 +88,10 @@ impl AsyncWrite for Lingering {
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
+        if this.abort.is_set() {
+            // Dropping the socket resets it; no FIN first.
+            return Poll::Ready(Ok(()));
+        }
         if this.deadline.is_none() {
             ready!(Pin::new(&mut this.io).poll_shutdown(cx))?;
             this.deadline = Some(Box::pin(tokio::time::sleep(LINGER)));

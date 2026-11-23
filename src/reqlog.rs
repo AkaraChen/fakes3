@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
 
+use crate::faults::InjectedFault;
 use crate::names;
 use crate::reqid::RequestId;
 
@@ -22,6 +23,7 @@ pub struct RequestRecord {
     pub method: http::Method,
     /// Path and query exactly as sent.
     pub uri: String,
+    /// The response status; 0 when the connection was reset by fault injection instead.
     pub status: u16,
     /// From arrival until the response head was ready; a streamed body is not included.
     pub latency: Duration,
@@ -34,6 +36,8 @@ pub struct RequestRecord {
     /// The access key the request was signed with. Only recorded when signatures are not verified
     /// (`--no-auth`), where it can be anything; otherwise it is always the configured key.
     pub access_key: Option<String>,
+    /// The fault a fault rule injected into this request, if any.
+    pub fault: Option<InjectedFault>,
     id: RequestId,
 }
 
@@ -73,7 +77,7 @@ fn has(query: &str, name: &str) -> bool {
     query.split('&').any(|p| p.split('=').next() == Some(name))
 }
 
-fn operation(method: &http::Method, bucket: bool, key: bool, query: &str, copy: bool) -> &'static str {
+pub(crate) fn operation(method: &http::Method, bucket: bool, key: bool, query: &str, copy: bool) -> &'static str {
     use http::Method as M;
     let q = |name| has(query, name);
     if !bucket {
@@ -287,6 +291,7 @@ struct Stored {
     bytes_out: u64,
     copy: bool,
     access_key: Option<AccessKey>,
+    fault: Option<InjectedFault>,
     id: RequestId,
 }
 
@@ -303,6 +308,7 @@ impl Stored {
             bytes_out: self.bytes_out,
             copy: self.copy,
             access_key: self.access_key.as_ref().map(|k| k.as_str().to_owned()),
+            fault: self.fault,
             id: self.id,
         }
     }
@@ -317,12 +323,17 @@ pub struct Pending {
     bytes_in: u64,
     copy: bool,
     access_key: Option<AccessKey>,
+    fault: Option<InjectedFault>,
     id: RequestId,
 }
 
 impl Pending {
     pub fn set_access_key(&mut self, key: &str) {
         self.access_key = Some(AccessKey::new(key));
+    }
+
+    pub fn set_fault(&mut self, fault: InjectedFault) {
+        self.fault = Some(fault);
     }
 }
 
@@ -387,6 +398,7 @@ impl RequestLog {
                 .unwrap_or(0),
             copy: present.copy_source,
             access_key: None,
+            fault: None,
             id,
         })
     }
@@ -399,6 +411,15 @@ impl RequestLog {
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
+        self.push(p, status, bytes_out);
+    }
+
+    /// Records a request that got no response (its connection was reset), with status 0.
+    pub fn finish_without_response(&self, p: Pending) {
+        self.push(p, 0, 0);
+    }
+
+    fn push(&self, p: Pending, status: u16, bytes_out: u64) {
         let latency = p.start.elapsed();
         let seq = self.next_seq.fetch_add(1, Ordering::Relaxed);
         let record = Stored {
@@ -412,6 +433,7 @@ impl RequestLog {
             bytes_out,
             copy: p.copy,
             access_key: p.access_key,
+            fault: p.fault,
             id: p.id,
         };
         let mut inner = self.inner.lock();
@@ -476,6 +498,7 @@ mod tests {
             bytes_out: 0,
             copy,
             access_key: None,
+            fault: None,
             id: RequestId::next(),
         }
     }
