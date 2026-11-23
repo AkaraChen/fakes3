@@ -181,7 +181,7 @@ fakes3 ctl --endpoint http://127.0.0.1:9000 clock advance 1d
 | `macosx_10_12_x86_64` | Intel 的 macOS |
 | `win_amd64` | Windows x64 |
 
-需要 Python 3.9 或更新版本。其他平台上，把 `FAKES3_BINARY` 设为你自己构建的 fakes3 二进制（`cargo install fakes3`）。
+需要 Python 3.10 或更新版本。其他平台上，把 `FAKES3_BINARY` 设为你自己构建的 fakes3 二进制（`cargo install fakes3`）。
 
 ## 安全提示
 

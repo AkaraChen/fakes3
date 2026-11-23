@@ -95,7 +95,7 @@ def test_upload(fakes3_server):
 
 Outside pytest, `with fakes3.start() as server:` does the same. The server never outlives your test
 process, even when it is killed. Wheels cover Linux x86_64 and aarch64 (glibc or musl), macOS (Apple
-silicon and Intel) and Windows x64, with Python 3.9 or later. Every option and method is in the
+silicon and Intel) and Windows x64, with Python 3.10 or later. Every option and method is in the
 [package README](bindings/python/README.md).
 
 ### Node.js, in-process
@@ -383,7 +383,7 @@ S3 Control. Website and notification *configuration* can be stored and read back
 | --- | --- |
 | Docker image | `linux/amd64`, `linux/arm64` (also runs under Docker Desktop on macOS and Windows) |
 | Binary | x86_64 and aarch64 Linux (static), macOS on Apple silicon and Intel, x86_64 Windows |
-| Python package | Linux x86_64 and aarch64 (glibc and musl), macOS arm64 and x86_64, Windows x64; Python ≥ 3.9 |
+| Python package | Linux x86_64 and aarch64 (glibc and musl), macOS arm64 and x86_64, Windows x64; Python ≥ 3.10 |
 | Node.js package | Linux x64 and arm64 (glibc and musl), macOS arm64 and x64, Windows x64; Node.js ≥ 18 |
 | Rust library | Linux, macOS, Windows |
 

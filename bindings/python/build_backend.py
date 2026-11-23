@@ -53,7 +53,7 @@ def metadata(ver: str) -> str:
         f"Summary: {SUMMARY}",
         "License-Expression: MIT",
         "License-File: LICENSE",
-        "Requires-Python: >=3.9",
+        "Requires-Python: >=3.10",
         "Keywords: s3,testing,pytest,mock,fake,boto3",
         "Project-URL: Homepage, https://github.com/AkaraChen/fakes3",
         "Project-URL: Source, https://github.com/AkaraChen/fakes3/tree/main/bindings/python",

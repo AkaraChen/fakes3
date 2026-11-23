@@ -87,7 +87,7 @@ def test_upload(fakes3_server):
 ```
 
 不用 pytest 时，`with fakes3.start() as server:` 效果一样。服务不会比测试进程活得久，测试进程被强行杀掉也一样。
-wheel 覆盖 Linux x86_64 和 aarch64（glibc 和 musl 都能用）、Apple silicon 和 Intel 的 macOS、x64 的 Windows，需要 Python 3.9 或更新版本。
+wheel 覆盖 Linux x86_64 和 aarch64（glibc 和 musl 都能用）、Apple silicon 和 Intel 的 macOS、x64 的 Windows，需要 Python 3.10 或更新版本。
 全部选项和方法见[包的 README](bindings/python/README.zh-CN.md)。
 
 ### Node.js（进程内）
@@ -343,7 +343,7 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认保留旧行为�
 | --- | --- |
 | Docker 镜像 | `linux/amd64`、`linux/arm64`（在 macOS 和 Windows 上可以用 Docker Desktop 运行） |
 | 二进制 | x86_64 和 aarch64 Linux（静态链接）、Apple silicon 和 Intel 的 macOS、x86_64 Windows |
-| Python 包 | Linux x86_64 和 aarch64（glibc 和 musl）、macOS arm64 和 x86_64、Windows x64，Python ≥ 3.9 |
+| Python 包 | Linux x86_64 和 aarch64（glibc 和 musl）、macOS arm64 和 x86_64、Windows x64，Python ≥ 3.10 |
 | Node.js 包 | Linux x64 和 arm64（glibc 和 musl）、macOS arm64 和 x64、Windows x64，Node.js ≥ 18 |
 | Rust 库 | Linux、macOS、Windows |
 

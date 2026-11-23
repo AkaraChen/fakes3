@@ -187,7 +187,7 @@ fakes3 ctl --endpoint http://127.0.0.1:9000 clock advance 1d
 | `macosx_10_12_x86_64` | macOS on Intel |
 | `win_amd64` | Windows x64 |
 
-Python 3.9 or later. On other platforms, set `FAKES3_BINARY` to a fakes3 binary you built
+Python 3.10 or later. On other platforms, set `FAKES3_BINARY` to a fakes3 binary you built
 (`cargo install fakes3`).
 
 ## Security

@@ -137,12 +137,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { wheel: linux-x86_64, runner: ubuntu-24.04, python: "3.9" }
+          - { wheel: linux-x86_64, runner: ubuntu-24.04, python: "3.10" }
           - { wheel: linux-x86_64, runner: ubuntu-24.04, python: "3.13" }
           - { wheel: linux-aarch64, runner: ubuntu-24.04-arm, python: "3.13" }
           - { wheel: macos-arm64, runner: macos-15, python: "3.13" }
           - { wheel: macos-x86_64, runner: macos-15-intel, python: "3.13" }
-          - { wheel: windows-x86_64, runner: windows-2025, python: "3.9" }
+          - { wheel: windows-x86_64, runner: windows-2025, python: "3.10" }
           - { wheel: windows-x86_64, runner: windows-2025, python: "3.13" }
     name: test (${{ matrix.wheel }}, python ${{ matrix.python }})
     runs-on: ${{ matrix.runner }}
