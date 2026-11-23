@@ -3,6 +3,8 @@ name: bench-native
 # Runs bench/native.py (fakes3 vs MinIO and moto, all as native processes) on Linux, macOS and
 # Windows runners, on demand. bench.yml is the Docker-based comparison with every competitor, which
 # only Linux can run. Each runner's report is shown in the job summary and uploaded as an artifact.
+# The `startup` job (bench/startup) times start + one request + stop for the published Node package,
+# the published Rust crate and the released binary; `only: startup_cycle` runs just that job.
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +15,7 @@ on:
         description: "Comma-separated servers (default: all)"
         default: "fakes3,minio,moto"
       only:
-        description: "Comma-separated measurements, e.g. startup,suite,footprint,small_get (default: all)"
+        description: "Comma-separated measurements, e.g. startup,suite,footprint,small_get,startup_cycle (default: all)"
         default: ""
       duration:
         description: "Duration of each warp workload"
@@ -32,6 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         runner: ${{ fromJSON(inputs.runners) }}
+    if: inputs.only != 'startup_cycle'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     defaults:
@@ -90,4 +93,87 @@ jobs:
           path: |
             bench/results/native.json
             bench/RESULTS.md
+          if-no-files-found: ignore
+
+  startup:
+    name: startup (${{ matrix.runner }})
+    if: inputs.only == '' || contains(inputs.only, 'startup_cycle')
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(inputs.runners) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: bench/startup
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bench/startup
+      - uses: ./.github/actions/windows-openssl
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      # The version under test is the one pinned in package.json (and in Cargo.toml).
+      - name: Download the released binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p 'require("./package.json").dependencies["fakes3-sdk"]')
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64) asset=fakes3-x86_64-unknown-linux-musl.tar.gz ;;
+            Linux-ARM64) asset=fakes3-aarch64-unknown-linux-musl.tar.gz ;;
+            macOS-ARM64) asset=fakes3-aarch64-apple-darwin.tar.gz ;;
+            macOS-X64) asset=fakes3-x86_64-apple-darwin.tar.gz ;;
+            Windows-X64) asset=fakes3-x86_64-pc-windows-msvc.zip ;;
+          esac
+          mkdir -p bin
+          gh release download "v$version" -R "$GITHUB_REPOSITORY" -p "$asset" -D bin
+          case $asset in
+            *.zip) unzip -q -o "bin/$asset" -d bin ;;
+            *) tar xzf "bin/$asset" -C bin ;;
+          esac
+          exe=$(find bin -type f \( -name fakes3 -o -name fakes3.exe \) | head -1)
+          "$exe" --version
+          cd "$(dirname "$exe")"
+          # A native path on Windows (Git Bash's `pwd -W`), the usual one elsewhere.
+          dir=$(pwd -W 2>/dev/null) || dir=$(pwd)
+          echo "FAKES3_BIN=$dir/$(basename "$exe")" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          cargo build --release
+
+      - name: Run
+        run: |
+          # Hundreds of servers at once need more descriptors than macOS's default 256.
+          ulimit -n 10240 2>/dev/null || true
+          node startup.mjs --rss 500 --out result-node-rss.json
+          node startup.mjs --out result-node.json
+          target/release/fakes3-startup-bench --bin "$FAKES3_BIN" --out result-rust.json
+
+      - name: Render report
+        if: always()
+        run: |
+          {
+            echo "## ${{ matrix.runner }}"
+            echo
+            uv run report.py result-rust.json result-node.json result-node-rss.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: startup-${{ matrix.runner }}-${{ github.run_id }}
+          path: bench/startup/result-*.json
           if-no-files-found: ignore

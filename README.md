@@ -7,7 +7,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-**An in-memory S3 server for tests.** It is ready in milliseconds, answers a request in about 150 µs,
+**An in-memory S3 server for tests.** It is ready in milliseconds, answers a request in about 140 µs,
 and behaves like AWS S3 wherever your client can tell the difference.
 
 fakes3 drops what tests never need (persistence, fsync, clustering, encryption at rest) and spends the
@@ -21,8 +21,10 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 
 ## Why fakes3
 
-- **Fast enough to start one per test.** A container is ready about 1 ms after it starts and idles at
-  9 MiB. A 6,500-request test suite runs in 0.93 s, against 3.4 s on MinIO and 7.7 s on LocalStack.
+- **Fast enough to start one per test.** In-process, starting a server, making one request and stopping
+  it takes 0.15 ms in Rust and 0.4 ms in Node; as a child process, 3.4 ms. A container is ready about 1 ms
+  after it starts and idles at 9.5 MiB. A 6,500-request test suite runs in 0.90 s, against 3.4 s on MinIO
+  and 7.9 s on LocalStack.
 - **Behaves like AWS.** It passes 99.1% of a 24-SDK compatibility matrix and 85.8% of the
   [ceph/s3-tests](https://github.com/ceph/s3-tests) cases that AWS itself passes. LocalStack passes
   59.1% of those, MinIO 52.0%. It also passes all of [Apache OpenDAL](https://opendal.apache.org)'s S3
@@ -34,13 +36,14 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 
 |                                       | fakes3      | MinIO   | LocalStack | moto    | S3Mock  |
 | ------------------------------------- | ----------: | ------: | ---------: | ------: | ------: |
-| Ready after container start           | **~1 ms**   | 243 ms  | 10.9 s     | 880 ms  | 3.8 s   |
-| Idle memory                           | **9.2 MiB** | 51 MiB  | 156 MiB    | 69 MiB  | 233 MiB |
-| 6,500-request test suite              | **0.93 s**  | 3.4 s   | 7.7 s      | 12.9 s  | 7.1 s   |
+| Ready after container start           | **~1 ms**   | 255 ms  | 11.0 s     | 873 ms  | 3.9 s   |
+| Idle memory                           | **9.5 MiB** | 51 MiB  | 156 MiB    | 68 MiB  | 274 MiB |
+| 6,500-request test suite              | **0.90 s**  | 3.4 s   | 7.9 s      | 13.2 s  | 7.0 s   |
 | SDK matrix (24 SDKs × 43 scenarios)   | **99.1%**   | 96.4%   | 91.4%      | 87.9%   | 85.4%   |
 | ceph/s3-tests (684 AWS-passing cases) | **85.8%**   | 52.0%   | 59.1%      |         |         |
 
-Measured on a 4-core GitHub-hosted runner. Methodology, throughput numbers and the full results are in
+fakes3 0.1.4; medians of three runs on 4-core GitHub-hosted runners (Linux). Methodology, ranges,
+throughput, in-process startup on Linux, macOS and Windows, and links to every run are in
 [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Quick start

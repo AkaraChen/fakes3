@@ -1,0 +1,6 @@
+/target/
+/node_modules/
+/package-lock.json
+/bun.lock
+/bin/
+/result-*.json
