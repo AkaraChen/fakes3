@@ -144,7 +144,10 @@ jobs:
           esac
           exe=$(find bin -type f \( -name fakes3 -o -name fakes3.exe \) | head -1)
           "$exe" --version
-          echo "FAKES3_BIN=$(cd "$(dirname "$exe")" && pwd -W 2>/dev/null || pwd)/$(basename "$exe")" >> "$GITHUB_ENV"
+          cd "$(dirname "$exe")"
+          # A native path on Windows (Git Bash's `pwd -W`), the usual one elsewhere.
+          dir=$(pwd -W 2>/dev/null) || dir=$(pwd)
+          echo "FAKES3_BIN=$dir/$(basename "$exe")" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
