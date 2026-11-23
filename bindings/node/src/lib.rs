@@ -129,6 +129,34 @@ impl FakeS3Server {
         self.secret_key.clone()
     }
 
+    /// Settings for an AWS SDK for JavaScript v3 client, signing as the default account:
+    /// `new S3Client(server.clientConfig)`.
+    #[napi(getter)]
+    pub fn client_config(&self) -> ClientConfig {
+        self.client_config_with(&self.access_key, &self.secret_key)
+    }
+
+    /// Settings for an AWS SDK for JavaScript v3 client that signs as the account with this name
+    /// or access key, one of `users`. Throws if there is no such account.
+    #[napi]
+    pub fn client_config_for(&self, user: String) -> Result<ClientConfig> {
+        let keys = with_server(&self.server, |s| {
+            let users = s.users();
+            let found = users
+                .iter()
+                .find(|(_, u)| u.name == user)
+                .or_else(|| users.iter().find(|(_, u)| u.access_key == user));
+            found.map(|(_, u)| (u.access_key.clone(), u.secret_key().to_owned()))
+        })?;
+        match keys {
+            Some((access_key, secret_key)) => Ok(self.client_config_with(&access_key, &secret_key)),
+            None => Err(Error::new(
+                Status::InvalidArg,
+                format!("no account named or with access key {user:?}"),
+            )),
+        }
+    }
+
     /// The accounts, the default one first.
     #[napi(getter)]
     pub fn users(&self) -> Result<Vec<UserInfo>> {
@@ -226,6 +254,63 @@ impl FakeS3Server {
             Ok(())
         })
     }
+}
+
+impl FakeS3Server {
+    fn client_config_with(&self, access_key: &str, secret_key: &str) -> ClientConfig {
+        ClientConfig {
+            endpoint: self.endpoint.clone(),
+            region: CLIENT_REGION.to_owned(),
+            force_path_style: true,
+            credentials: ClientCredentials {
+                access_key_id: access_key.to_owned(),
+                secret_access_key: secret_key.to_owned(),
+            },
+        }
+    }
+}
+
+/// The region `clientConfig` names. The server answers in every region; SDKs just need one.
+const CLIENT_REGION: &str = "us-east-1";
+
+/// Settings for an S3 client: `new S3Client(config)` with `@aws-sdk/client-s3` v3.
+#[napi(object)]
+pub struct ClientConfig {
+    /// The server's endpoint, `http://host:port`.
+    pub endpoint: String,
+    /// `us-east-1`.
+    pub region: String,
+    /// Always `true`: buckets go in the path, so no DNS is needed.
+    pub force_path_style: bool,
+    pub credentials: ClientCredentials,
+}
+
+/// An account's keys, in the shape AWS SDKs take them.
+#[napi(object)]
+pub struct ClientCredentials {
+    pub access_key_id: String,
+    pub secret_access_key: String,
+}
+
+/// Makes `await using server = await start()` stop the server when the scope ends: on runtimes that
+/// have `Symbol.asyncDispose`, `FakeS3Server.prototype[Symbol.asyncDispose]` is `stop`. Elsewhere
+/// (Node before 18.18) nothing is added and the module loads as before.
+#[napi(module_exports)]
+pub fn define_async_dispose(exports: Object, env: Env) -> Result<()> {
+    // `Symbol` and the class are functions, which the typed getters refuse as objects.
+    let symbol_ctor = env.get_global()?.get_named_property::<Unknown>("Symbol")?.coerce_to_object()?;
+    let key: Unknown = symbol_ctor.get_named_property("asyncDispose")?;
+    if key.get_type()? != ValueType::Symbol {
+        return Ok(());
+    }
+    let class = exports.get_named_property::<Unknown>("FakeS3Server")?.coerce_to_object()?;
+    let mut prototype: Object = class.get_named_property("prototype")?;
+    let stop: Unknown = prototype.get_named_property("stop")?;
+    // Like a class method: writable and configurable, not enumerable.
+    prototype.define_properties(&[Property::new()
+        .with_name(&env, key)?
+        .with_value(&stop)
+        .with_property_attributes(PropertyAttributes::Writable | PropertyAttributes::Configurable)])
 }
 
 /// The server shared with the objects handed out by `clock` and `requests`; `None` once stopped.

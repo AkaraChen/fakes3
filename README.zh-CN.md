@@ -79,17 +79,14 @@ npm install --save-dev fakes3-sdk
 import { start } from "fakes3-sdk";
 import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
 
-const server = await start(); // 127.0.0.1 的随机空闲端口
-const s3 = new S3Client({
-  endpoint: server.endpoint,
-  region: "us-east-1",
-  forcePathStyle: true,
-  credentials: { accessKeyId: server.accessKey, secretAccessKey: server.secretKey },
-});
+await using server = await start(); // 127.0.0.1 的随机空闲端口
+const s3 = new S3Client(server.clientConfig);
 await s3.send(new CreateBucketCommand({ Bucket: "demo" }));
 // ...
-await server.stop();
 ```
+
+`await using` 在代码块结束时停止服务，测试抛异常也一样；不用它就自己调用 `await server.stop()`。
+`server.clientConfig` 带好了 endpoint、region、path-style 寻址和凭证，`server.clientConfigFor("alice")` 则给出另一个账户的配置。
 
 预编译产物覆盖 Linux 的 x64 和 arm64（glibc 和 musl（Alpine）都有）、Apple silicon 和 Intel 的 macOS，以及 x64 的 Windows，需要 Node.js 18 或更新版本。
 全部选项和方法见[包的 README](bindings/node/README.zh-CN.md)。
