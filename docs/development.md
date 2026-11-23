@@ -102,3 +102,19 @@ fakes3：
 
 一次性配置和 `fakes3` 一样：第一个版本用 API token 在 `bindings/opendal` 目录里手动 `cargo publish --locked`，
 token 的 crate 填 `fakes3-opendal`；然后在 crates.io 上给 `fakes3-opendal` 添加可信发布者，Workflow filename 填 `opendal.yml`。
+
+### Go 模块
+
+Go 模块在 `bindings/go`，module path 是 `github.com/AkaraChen/fakes3/bindings/go`。子目录里的模块，Go 只认带目录前缀的 tag：
+`bindings/go/v0.2.0`，不是 `v0.2.0`。没有包仓库要上传，推送 tag 就是发布。模块版本和它下载的 fakes3 版本（`fakes3.Version`，在
+`bindings/go/fakes3.go`）保持一致：
+
+1. 先按上面的步骤发布 fakes3，等 release workflow 把二进制挂到 GitHub Release 上。
+2. 把 `bindings/go/fakes3.go` 里的 `Version` 改成新版本，提 PR。[go workflow](../.github/workflows/go.yml) 会在三个系统上
+   从空缓存下载这个版本并校验 SHA-256，所以 release 上的文件不齐时这里会失败。合入 main。
+3. 在这个提交上推送 tag：`git tag bindings/go/v0.2.0 && git push origin bindings/go/v0.2.0`。
+4. 可选：`GOPROXY=https://proxy.golang.org go list -m github.com/AkaraChen/fakes3/bindings/go@v0.2.0`，让 proxy 和
+   pkg.go.dev 马上收录，不用等第一个用户。
+
+module path 里的 `AkaraChen` 大小写要和 `go.mod` 一致。Go 模块的 tag 发出去就不能改（proxy 会缓存），打错了只能发下一个版本，
+并在 `go.mod` 里用 `retract` 撤回。

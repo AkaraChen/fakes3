@@ -30,7 +30,8 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 - **Built for tests.** Reset state between tests, snapshot and restore fixtures, move a virtual clock to
   expire presigned URLs or run lifecycle rules, and assert on a log of the requests your code made.
 - **Runs where your tests run.** Use the Docker image (amd64 and arm64), the Node.js package in-process,
-  the Rust library in-process, a native binary for Linux, macOS or Windows, or the GitHub Action.
+  the Rust library in-process, a Go module that starts it from `go test`, a native binary for Linux,
+  macOS or Windows, or the GitHub Action.
 
 |                                       | fakes3      | MinIO   | LocalStack | moto    | S3Mock  |
 | ------------------------------------- | ----------: | ------: | ---------: | ------: | ------: |
@@ -139,6 +140,36 @@ s3.operator().write("hello.txt", "hi").await?;
 let op = opendal::Operator::from_uri(s3.uri())?; // "s3://test?endpoint=…", as production config
 ```
 
+### Go
+
+The [Go module](bindings/go/README.md) starts fakes3 as a child process from your tests, with no Docker.
+Each call gives the test its own server on a free port and stops it when the test ends:
+
+```bash
+go get github.com/AkaraChen/fakes3/bindings/go
+```
+
+```go
+import fakes3 "github.com/AkaraChen/fakes3/bindings/go"
+
+func TestUpload(t *testing.T) {
+	t.Parallel()
+	srv := fakes3.Start(t)
+	client := s3.New(s3.Options{ // aws-sdk-go-v2; any S3 client works
+		BaseEndpoint: aws.String(srv.Endpoint),
+		Region:       srv.Region,
+		UsePathStyle: true,
+		Credentials:  credentials.NewStaticCredentialsProvider(srv.AccessKey, srv.SecretKey, ""),
+	})
+	// ...
+}
+```
+
+The first run downloads the release binary for your platform into the user cache directory and checks
+its SHA-256; to use a binary you already have, put `fakes3` on `PATH` or set `FAKES3_BINARY`. The module
+itself only uses the standard library and needs Go 1.24 or later. Reset, snapshots, the clock and the
+request log are methods on the server; see the [module README](bindings/go/README.md).
+
 ### Standalone binary
 
 Every [release](https://github.com/AkaraChen/fakes3/releases) ships static Linux binaries for x86_64 and
@@ -161,7 +192,7 @@ compiles OpenSSL, so it needs `perl` and `make` (see [Rust, in-process](#rust-in
 
 ## Testcontainers
 
-No dedicated module is needed: use a generic container, expose port 9000, and wait for `http://` in the
+For Go tests, the [Go module](#go) above needs no Docker at all. Otherwise no dedicated module is needed: use a generic container, expose port 9000, and wait for `http://` in the
 logs. The container starts in milliseconds, so you can give each test class, or each test, its own.
 
 ```python
@@ -253,8 +284,8 @@ fakes3 ctl requests list --op PutObject       # the request log: filter by bucke
 ```
 
 In-process, the same operations are methods on the server: `server.reset()`, `server.snapshot("seeded")`,
-`server.clock.advance("31d")` and `server.requests.list({ operation: "PutObject" })` in Node.js, and
-equivalents on `fakes3::Server` in Rust. Endpoints and semantics are covered in
+`server.clock.advance("31d")` and `server.requests.list({ operation: "PutObject" })` in Node.js,
+`srv.Clock().Advance(31 * 24 * time.Hour)` in Go, and equivalents on `fakes3::Server` in Rust. Endpoints and semantics are covered in
 [docs/control-plane.md](docs/control-plane.md).
 
 ## Configuration
@@ -359,6 +390,7 @@ S3 Control. Website and notification *configuration* can be stored and read back
 | Binary | x86_64 and aarch64 Linux (static), macOS on Apple silicon and Intel, x86_64 Windows |
 | Node.js package | Linux x64 and arm64 (glibc and musl), macOS arm64 and x64, Windows x64; Node.js ≥ 18 |
 | Rust library | Linux, macOS, Windows |
+| Go module | Wherever a binary is published; elsewhere with a binary you build. Go ≥ 1.24 |
 
 CI runs the test suites on Linux, macOS and Windows. The behaviour is the same everywhere; what differs is
 where large objects live (a `memfd` on Linux, the heap elsewhere), where the default `auto` memory limit gets
