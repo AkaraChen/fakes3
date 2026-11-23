@@ -14,9 +14,9 @@ import org.junit.jupiter.api.extension.ParameterResolver;
  * test methods of that class receive that same server.
  *
  * <pre>{@code
- * @ExtendWith(FakeS3Extension.class)
+ * &#64;ExtendWith(FakeS3Extension.class)
  * class UploadTest {
- *   @Test
+ *   &#64;Test
  *   void uploads(FakeS3 s3) { ... }
  * }
  * }</pre>
@@ -24,7 +24,7 @@ import org.junit.jupiter.api.extension.ParameterResolver;
  * <p>To configure the servers, register an instance:
  *
  * <pre>{@code
- * @RegisterExtension
+ * &#64;RegisterExtension
  * static FakeS3Extension s3 = new FakeS3Extension(FakeS3.builder().auth(true));
  * }</pre>
  */
