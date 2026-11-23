@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Start/request/stop cycle of the published fakes3-sdk; see startup.mjs",
+  "dependencies": {
+    "fakes3-sdk": "0.1.4"
+  }
+}
