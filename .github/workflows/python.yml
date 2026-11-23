@@ -108,16 +108,21 @@ jobs:
           # The oldest macOS the binary runs on, matching the wheel's tag.
           if [ -n "$DEPLOYMENT_TARGET" ]; then export MACOSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET"; fi
           cargo build --release --locked --target "$TRIPLE"
+          exe=fakes3
+          if [ "$RUNNER_OS" = Windows ]; then exe=fakes3.exe; fi
           mkdir out
-          cp target/"$TRIPLE"/release/fakes3$([ "$RUNNER_OS" = Windows ] && echo .exe || true) out/
+          cp "target/$TRIPLE/release/$exe" out/
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - name: Build the wheel
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: |
-          python bindings/python/build_backend.py --platform '${{ matrix.platform }}' --out dist \
-            --binary out/fakes3$([ "$RUNNER_OS" = Windows ] && echo .exe || true)
+          exe=fakes3
+          if [ "$RUNNER_OS" = Windows ]; then exe=fakes3.exe; fi
+          python bindings/python/build_backend.py --platform "$PLATFORM" --out dist --binary "out/$exe"
           ls -l dist
 
       - uses: actions/upload-artifact@v7
@@ -172,9 +177,9 @@ jobs:
       - name: No server left running
         run: |
           if [ "$RUNNER_OS" = Windows ]; then
-            ! tasklist //FI "IMAGENAME eq fakes3.exe" | grep -i fakes3.exe
+            if tasklist //FI "IMAGENAME eq fakes3.exe" | grep -i fakes3.exe; then exit 1; fi
           else
-            ! pgrep -l -x fakes3
+            if pgrep -l -x fakes3; then exit 1; fi
           fi
 
   # The Linux wheel on musl: pip on Alpine must accept it and the static binary must run there.
@@ -212,7 +217,7 @@ jobs:
           python-version: "3.13"
       - run: |
           ls -l dist
-          test "$(ls dist/*.whl | wc -l)" = 5
+          test "$(find dist -name '*.whl' | wc -l)" = 5
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
           for whl in dist/*.whl; do
             case "$(basename "$whl")" in
