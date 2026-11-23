@@ -30,7 +30,8 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
 - **Built for tests.** Reset state between tests, snapshot and restore fixtures, move a virtual clock to
   expire presigned URLs or run lifecycle rules, and assert on a log of the requests your code made.
 - **Runs where your tests run.** Use the Docker image (amd64 and arm64), the Node.js package in-process,
-  the Rust library in-process, a native binary for Linux, macOS or Windows, or the GitHub Action.
+  the Rust library in-process, the Java library with its JUnit 5 extension, a native binary for Linux,
+  macOS or Windows, or the GitHub Action.
 
 |                                       | fakes3      | MinIO   | LocalStack | moto    | S3Mock  |
 | ------------------------------------- | ----------: | ------: | ---------: | ------: | ------: |
@@ -159,10 +160,42 @@ curl -L https://github.com/AkaraChen/fakes3/releases/latest/download/fakes3-x86_
 To build from source, run `cargo install fakes3 --locked`, or `cargo build --release` in a checkout. The build
 compiles OpenSSL, so it needs `perl` and `make` (see [Rust, in-process](#rust-in-process) for Windows).
 
+### Java, without Docker
+
+The [Java library](bindings/java/README.md) starts fakes3 as a small child process, so a JUnit 5 test can
+have its own server without Docker. It needs Java 11 or later and nothing but the JDK. On first use it
+downloads the release binary for your system, checks its SHA-256, and caches it; or point it at a
+`fakes3` you already have.
+
+```java
+@ExtendWith(FakeS3Extension.class)
+class UploadTest {
+  @Test
+  void uploads(FakeS3 s3) {            // a fresh server for this test, stopped when it ends
+    S3Client client = S3Client.builder()
+        .endpointOverride(URI.create(s3.endpoint()))
+        .forcePathStyle(true)
+        .region(Region.US_EAST_1)
+        .credentialsProvider(StaticCredentialsProvider.create(
+            AwsBasicCredentials.create(s3.accessKey(), s3.secretKey())))
+        .build();
+    client.createBucket(b -> b.bucket("demo"));
+    // ...
+    s3.clock().advance(Duration.ofHours(2));    // expire presigned URLs
+    s3.requests().count(RequestFilter.create().operation("PutObject"));
+  }
+}
+```
+
+Outside JUnit, `FakeS3.start()` returns an `AutoCloseable` server. The library isn't on Maven Central
+yet; `mvn install` in `bindings/java` installs `io.github.akarachen:fakes3` locally. Setup, per-class
+servers and every method are in the [library's README](bindings/java/README.md).
+
 ## Testcontainers
 
 No dedicated module is needed: use a generic container, expose port 9000, and wait for `http://` in the
 logs. The container starts in milliseconds, so you can give each test class, or each test, its own.
+For Java, the [library above](#java-without-docker) does the same without Docker.
 
 ```python
 # Python: testcontainers-python
@@ -359,6 +392,7 @@ S3 Control. Website and notification *configuration* can be stored and read back
 | Binary | x86_64 and aarch64 Linux (static), macOS on Apple silicon and Intel, x86_64 Windows |
 | Node.js package | Linux x64 and arm64 (glibc and musl), macOS arm64 and x64, Windows x64; Node.js ≥ 18 |
 | Rust library | Linux, macOS, Windows |
+| Java library | Wherever the binary runs; Java ≥ 11 |
 
 CI runs the test suites on Linux, macOS and Windows. The behaviour is the same everywhere; what differs is
 where large objects live (a `memfd` on Linux, the heap elsewhere), where the default `auto` memory limit gets

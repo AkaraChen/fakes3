@@ -58,6 +58,20 @@ cargo test
 
 [opendal workflow](../.github/workflows/opendal.yml) 在绑定或库有改动时跑这三步。
 
+## Java 库
+
+`bindings/java` 用 Maven 构建（Java 11 及以上，运行时只依赖 JDK）。测试用 AWS SDK for Java v2：
+
+```bash
+cd bindings/java
+mvn verify                                        # 下载 pom.xml 里 fakes3.binaryVersion 对应的 release 二进制
+FAKES3_BINARY=../../target/release/fakes3 mvn verify   # 或者用仓库里刚编译的二进制
+```
+
+[java workflow](../.github/workflows/java.yml) 在 Linux、macOS、Windows 上用下载的 release 二进制跑测试，另有一个 job 用本次提交编译的
+二进制再跑一遍，控制面的改动如果会破坏 Java 库，在发版前就能看到。发布到 Maven Central 只能手动触发
+[java-publish workflow](../.github/workflows/java-publish.yml)，步骤和一次性配置见 [bindings/java/PUBLISHING.md](../bindings/java/PUBLISHING.md)。
+
 ## 发布
 
 1. 把根目录 `Cargo.toml` 和 `bindings/node/package.json` 的 `version` 改成新版本，合入 main。

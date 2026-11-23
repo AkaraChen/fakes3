@@ -26,7 +26,7 @@ docker run --rm -p 9000:9000 ghcr.io/akarachen/fakes3
   不关闭任何能力也能全部通过（[conformance/OPENDAL.md](conformance/OPENDAL.md)）。
 - **为测试设计。** 测试之间重置状态、保存和回滚测试数据、拨动虚拟时钟让预签名 URL 过期或触发 Lifecycle 规则、
   用请求日志断言代码发了哪些请求。
-- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、Linux / macOS / Windows 的原生二进制，或者 GitHub Action。
+- **跑在你的测试所在的地方。** Docker 镜像（amd64 和 arm64）、在 Node.js 进程内运行、在 Rust 进程内运行、带 JUnit 5 扩展的 Java 库、Linux / macOS / Windows 的原生二进制，或者 GitHub Action。
 
 | | fakes3 | MinIO | LocalStack | moto | S3Mock |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -144,9 +144,39 @@ curl -L https://github.com/AkaraChen/fakes3/releases/latest/download/fakes3-x86_
 
 从源码构建：`cargo install fakes3 --locked`，或者在仓库里 `cargo build --release`。构建时会编译 OpenSSL，需要 `perl` 和 `make`（Windows 见 [Rust（进程内）](#rust进程内)）。
 
+### Java（不用 Docker）
+
+[Java 库](bindings/java/README.zh-CN.md)把 fakes3 作为一个很小的子进程启动，JUnit 5 的测试不用 Docker 也能各有一个服务。
+需要 Java 11 及以上，除 JDK 外没有依赖。第一次使用时它会下载适合当前系统的 release 二进制，校验 SHA-256 后缓存起来；
+也可以指定一个已经装好的 `fakes3`。
+
+```java
+@ExtendWith(FakeS3Extension.class)
+class UploadTest {
+  @Test
+  void uploads(FakeS3 s3) {            // 这个测试专用的服务，测试结束时停止
+    S3Client client = S3Client.builder()
+        .endpointOverride(URI.create(s3.endpoint()))
+        .forcePathStyle(true)
+        .region(Region.US_EAST_1)
+        .credentialsProvider(StaticCredentialsProvider.create(
+            AwsBasicCredentials.create(s3.accessKey(), s3.secretKey())))
+        .build();
+    client.createBucket(b -> b.bucket("demo"));
+    // ...
+    s3.clock().advance(Duration.ofHours(2));    // 让预签名 URL 过期
+    s3.requests().count(RequestFilter.create().operation("PutObject"));
+  }
+}
+```
+
+不用 JUnit 时，`FakeS3.start()` 返回一个 `AutoCloseable` 的服务。这个库还没有发布到 Maven Central，
+在 `bindings/java` 里运行 `mvn install` 可以把 `io.github.akarachen:fakes3` 装到本地。配置、每个测试类一个服务的写法和全部方法见
+[库的 README](bindings/java/README.zh-CN.md)。
+
 ## Testcontainers
 
-不需要专门的模块：用通用容器，暴露 9000 端口，等日志里出现 `http://`。容器几毫秒就能启动，所以可以每个测试类、甚至每个测试起一个。
+不需要专门的模块：用通用容器，暴露 9000 端口，等日志里出现 `http://`。容器几毫秒就能启动，所以可以每个测试类、甚至每个测试起一个。Java 项目也可以用[上面的库](#java不用-docker)，效果一样，但不需要 Docker。
 
 ```python
 # Python：testcontainers-python
@@ -321,6 +351,7 @@ AWS 在 2023 年改了新 bucket 的默认设置。fakes3 默认保留旧行为�
 | 二进制 | x86_64 和 aarch64 Linux（静态链接）、Apple silicon 和 Intel 的 macOS、x86_64 Windows |
 | Node.js 包 | Linux x64 和 arm64（glibc 和 musl）、macOS arm64 和 x64、Windows x64，Node.js ≥ 18 |
 | Rust 库 | Linux、macOS、Windows |
+| Java 库 | 二进制支持的平台都可以；Java ≥ 11 |
 
 CI 在 Linux、macOS 和 Windows 上都跑完整的测试。各平台行为一致，区别只在大对象放在哪里（Linux 上是 `memfd`，其他系统放在堆上）、
 默认的 `auto` 内存上限从哪里读机器内存（只有 Linux 会读容器的 cgroup 限制），以及 Windows 上唤醒线程的开销更大，

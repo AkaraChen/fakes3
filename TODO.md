@@ -16,6 +16,9 @@
 - [x] GitHub Action：[setup-fakes3](https://github.com/AkaraChen/setup-fakes3)，下载 release 里的静态二进制并在后台启动
 - [x] OpenDAL 绑定：crate `fakes3-opendal`（[bindings/opendal](bindings/opendal/README.md)），返回走 OpenDAL S3 服务的 `Operator`；
       为此 `Server` 加了 `create_bucket` / `enable_versioning`
+- [x] Java 库和 JUnit 5 扩展（[bindings/java](bindings/java/README.zh-CN.md)）：起 `fakes3 --port 0` 子进程，不用 Docker；
+      二进制按 配置的路径 → PATH → 下载 GitHub Release 并校验 `.sha256` 的顺序查找；控制面封装成方法。尚未发布到 Maven Central（见 [bindings/java/PUBLISHING.md](bindings/java/PUBLISHING.md)）
+  - JVM 被强制结束（`kill -9`、Windows 上的强制结束）时 shutdown hook 不会运行，子进程会残留；要彻底解决需要服务端支持“父进程退出（stdin 关闭）时自动退出”
 - [ ] 其余语言的框架集成（pytest fixture 等，基于 `fakes3 ctl` 或 HTTP API）
 - [x] 默认不校验签名（原 `--no-auth`，现在是默认行为，`--auth` 才严格校验）：任意 access key / secret 签名的请求都接受（SigV4 / SigV2 的头和 presigned URL、三种流式上传，trailer 校验和仍会校验），
       并且是 bucket 的 owner；不带签名的请求是匿名请求，照常走 ACL / Bucket Policy / Block Public Access。
